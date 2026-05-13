@@ -45,12 +45,28 @@
       <div class="onboard-actions">
         {% if existing_brief and existing_brief.get("goal") %}
           <a href="/app/dashboard" class="onboard-skip">← back to dashboard</a>
-        {% else %}
-          <a href="/app/chat" class="onboard-skip">Skip — chat first instead →</a>
         {% endif %}
         <button type="submit" class="onboard-submit">Save profile →</button>
       </div>
     </form>
+
+    {% if not (existing_brief and existing_brief.get("goal")) %}
+      <div class="onboard-alt">
+        <div class="onboard-alt-rule"><span>or</span></div>
+        <form method="post" action="/app/onboard/skip" class="onboard-alt-form">
+          <p class="onboard-alt-text">
+            <strong>Already have ideas?</strong> Skip the guided flow
+            and paste your roster (YouTube transcript, list of niches,
+            partial business plan) straight into chat. The CEO will
+            bundle them into Lines (POD / KDP / Info / SaaS / Affiliate
+            / Agency), spawn a VP per Line, and delegate the work.
+          </p>
+          <button type="submit" class="onboard-alt-btn">
+            Skip — paste my roster into chat →
+          </button>
+        </form>
+      </div>
+    {% endif %}
 
     <div class="onboard-footer">
       The cofounder uses this profile to default skill arguments —
@@ -166,6 +182,49 @@
     cursor: pointer;
   }
   .onboard-submit:hover { filter: brightness(1.05); }
+  .onboard-alt {
+    margin-top: 28px;
+    padding-top: 22px;
+  }
+  .onboard-alt-rule {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-faint, #888);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 16px;
+  }
+  .onboard-alt-rule::before,
+  .onboard-alt-rule::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border, #2a2c33);
+  }
+  .onboard-alt-form { display: flex; flex-direction: column; gap: 12px; }
+  .onboard-alt-text {
+    color: var(--text-dim, #9aa0a6);
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .onboard-alt-text strong { color: var(--text, #f4f4f4); }
+  .onboard-alt-btn {
+    align-self: flex-start;
+    background: transparent;
+    color: var(--text, #f4f4f4);
+    border: 1px solid var(--border, #2a2c33);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .onboard-alt-btn:hover {
+    border-color: var(--accent, #e7c14b);
+    color: var(--accent, #e7c14b);
+  }
   .onboard-footer {
     color: var(--text-dim, #9aa0a6);
     font-size: 12.5px;
