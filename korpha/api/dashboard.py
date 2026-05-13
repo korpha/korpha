@@ -13,6 +13,7 @@ annotations``. FastAPI uses runtime type introspection to detect
 ``Depends`` markers; future-stringified annotations break dependency
 injection silently (same caveat as server.py).
 """
+import contextlib
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -3158,6 +3159,16 @@ def build_dashboard_router(
     # `korpha config` CLI flow as HTML forms — non-technical
     # Founders never have to open a terminal.
 
+    def _provider_error(msg: str) -> str:
+        """Render a visible HTMX-friendly error card for the provider form."""
+        from html import escape
+        return (
+            '<div class="card provider-form-card">'
+            '<div class="provider-empty" style="color:var(--red);">'
+            f'⚠ {escape(msg)}'
+            '</div></div>'
+        )
+
     @router.get("/settings/providers/list", response_class=HTMLResponse)
     def providers_list_partial() -> HTMLResponse:
         """Render the configured-providers list. Reads providers.yaml
@@ -3223,55 +3234,98 @@ def build_dashboard_router(
         return HTMLResponse(f'<div class="card">{"".join(rows)}</div>')
 
     @router.get("/settings/providers/new", response_class=HTMLResponse)
-    def provider_form_partial() -> HTMLResponse:
-        """Render the add-provider form. Provider list rendered as a
-        select with a hint per option."""
+    def provider_form_partial(preset: str = "") -> HTMLResponse:
+        """Render the add-provider form. When ``preset`` is set in the
+        query string, pre-fill the workhorse / pro / vision model
+        fields with the known good defaults for that preset — Mike
+        doesn't need to know "what's a valid model id for ollama-cloud."
+        He can still override the values; they're starting points.
+
+        The ``<select name="preset">`` re-triggers this endpoint on
+        change so the model defaults swap in live when Mike picks a
+        different provider."""
         from korpha.inference.providers.openai_compat import (
             PROVIDER_PRESETS,
             SUBSCRIPTION_PRESETS,
         )
+        from korpha.inference.env_fallback import get_preset_defaults
 
-        # Snake-case-ish ordering: subscriptions first, then API-key
-        # presets, then the open-ended 'custom'. Same order CLI uses.
         ordered = (
             list(SUBSCRIPTION_PRESETS) + sorted(PROVIDER_PRESETS) + ["custom"]
         )
+        # Default the picker to the first non-subscription preset so
+        # Mike sees real model strings on first render.
+        chosen = preset if preset in ordered else "opencode-go"
         options = "".join(
-            f'<option value="{p}">{p}</option>' for p in ordered
+            f'<option value="{p}"{" selected" if p == chosen else ""}>{p}</option>'
+            for p in ordered
         )
+
+        defaults = get_preset_defaults(chosen) or {}
+        workhorse_default = defaults.get("workhorse_model", "")
+        pro_default = defaults.get("pro_model", "")
+        vision_default = defaults.get("vision_model", "")
+        # Subscription presets don't take a key — show a "(none needed)"
+        # placeholder instead of a "paste sk-..." prompt.
+        is_subscription = chosen in SUBSCRIPTION_PRESETS
+        key_placeholder = (
+            "(none needed — uses your local CLI login)"
+            if is_subscription
+            else "paste your API key — encrypted at rest"
+        )
+        key_disabled = "disabled" if is_subscription else ""
+
+        # Suggest a sensible default label so Mike doesn't have to
+        # invent one — he can still edit before submitting.
+        default_label = f"{chosen}-primary" if chosen != "custom" else ""
+
         html = f"""
         <div class="card provider-form-card">
           <form hx-post="/app/settings/providers"
                 hx-target="#providers-panel"
                 hx-swap="innerHTML"
-                hx-on::after-request="document.getElementById('provider-form').innerHTML = ''">
+                hx-on::after-request="if (event.detail.successful) document.getElementById('provider-form').innerHTML = ''">
             <div class="provider-form-grid">
               <label class="provider-form-label" for="preset">Provider</label>
-              <select name="preset" id="preset" class="provider-form-select" required>
+              <select name="preset" id="preset" class="provider-form-select" required
+                      hx-get="/app/settings/providers/new"
+                      hx-target="#provider-form"
+                      hx-swap="innerHTML"
+                      hx-include="[name=preset]"
+                      hx-trigger="change">
                 {options}
               </select>
 
               <label class="provider-form-label" for="label">Label</label>
               <input name="label" id="label" class="provider-form-input"
+                     value="{default_label}"
                      placeholder="e.g. opencode-go-primary" required />
 
               <label class="provider-form-label" for="api_key">API key</label>
               <input name="api_key" id="api_key" class="provider-form-input"
-                     type="password" placeholder="sk-..." />
+                     type="password" placeholder="{key_placeholder}" {key_disabled} />
               <div class="provider-form-hint">
                 Leave blank for subscription-auth presets (codex-cli, claude-code-cli).
                 For custom or self-hosted, paste your provider's key.
               </div>
 
-              <label class="provider-form-label" for="pro_model">Pro model</label>
-              <input name="pro_model" id="pro_model" class="provider-form-input"
-                     placeholder="e.g. deepseek-v4-pro" />
-
               <label class="provider-form-label" for="workhorse_model">Workhorse model</label>
               <input name="workhorse_model" id="workhorse_model" class="provider-form-input"
+                     value="{workhorse_default}"
                      placeholder="e.g. deepseek-v4-flash" />
+
+              <label class="provider-form-label" for="pro_model">Pro model</label>
+              <input name="pro_model" id="pro_model" class="provider-form-input"
+                     value="{pro_default}"
+                     placeholder="e.g. deepseek-v4-pro" />
+
+              <label class="provider-form-label" for="vision_model">Vision model</label>
+              <input name="vision_model" id="vision_model" class="provider-form-input"
+                     value="{vision_default}"
+                     placeholder="(optional — leave blank if this provider doesn't host one)" />
               <div class="provider-form-hint">
-                Both optional but recommended. Leave blank to skip a tier.
+                These are sensible defaults for this provider. Override any of them
+                with a model id you prefer. Leave blank to skip that tier.
               </div>
 
               <label class="provider-form-label" for="spend_cap">Spend cap (USD/mo)</label>
@@ -3300,36 +3354,93 @@ def build_dashboard_router(
         api_key: Annotated[str, Form()] = "",
         pro_model: Annotated[str, Form()] = "",
         workhorse_model: Annotated[str, Form()] = "",
+        vision_model: Annotated[str, Form()] = "",
         spend_cap: Annotated[str, Form()] = "",
     ) -> HTMLResponse:
-        """Append a new provider entry to providers.yaml."""
-        from korpha.inference.config_writer import append_provider_entry
+        """Append a new provider entry to providers.yaml.
+
+        Validation + dedupe rules:
+        - Apply preset defaults for any blank model field so a Mike who
+          submits without overriding still gets workable model strings.
+        - Reject the POST cleanly (with a visible error) if the final
+          entry has no tiers — never silently write broken YAML.
+        - If a provider entry with the same ``label`` already exists,
+          replace it instead of appending. No duplicate accumulation
+          on retry.
+        """
+        from korpha.inference.config_writer import (
+            append_provider_entry, remove_provider_entry,
+        )
+        from korpha.inference.env_fallback import get_preset_defaults
+        from korpha.inference.providers.openai_compat import (
+            SUBSCRIPTION_PRESETS,
+        )
+
+        label = label.strip()
+        if not label:
+            return HTMLResponse(
+                _provider_error("label is required"),
+                status_code=400,
+            )
+
+        # Apply preset defaults for any blank field. Mike picks
+        # "opencode-go" → workhorse + pro auto-fill if he didn't
+        # override.
+        defaults = get_preset_defaults(preset) or {}
+        workhorse_final = (
+            workhorse_model.strip() or defaults.get("workhorse_model", "")
+        )
+        pro_final = pro_model.strip() or defaults.get("pro_model", "")
+        vision_final = vision_model.strip() or defaults.get("vision_model", "")
+
+        tiers: dict[str, str] = {}
+        if workhorse_final:
+            tiers["workhorse"] = workhorse_final
+        if pro_final:
+            tiers["pro"] = pro_final
+        if vision_final:
+            tiers["vision"] = vision_final
+
+        if not tiers:
+            return HTMLResponse(
+                _provider_error(
+                    f"No model tiers set. Pick a known preset (e.g. "
+                    f"opencode-go) or fill at least one model field "
+                    f"(workhorse / pro / vision)."
+                ),
+                status_code=400,
+            )
 
         entry: dict[str, Any] = {
             "preset": preset,
             "label": label,
+            "tiers": tiers,
         }
         if api_key.strip():
             entry["api_key"] = api_key.strip()
-        tiers: dict[str, str] = {}
-        if pro_model.strip():
-            tiers["pro"] = pro_model.strip()
-        if workhorse_model.strip():
-            tiers["workhorse"] = workhorse_model.strip()
-        if tiers:
-            entry["tiers"] = tiers
+        elif preset not in SUBSCRIPTION_PRESETS:
+            return HTMLResponse(
+                _provider_error(
+                    f"API key required for preset '{preset}'. "
+                    f"Subscription presets (codex-cli / claude-code-cli) "
+                    f"are the only ones that work without a key."
+                ),
+                status_code=400,
+            )
         if spend_cap.strip():
-            import contextlib
-
             with contextlib.suppress(ValueError):
                 entry["spend_cap_usd"] = float(spend_cap)
+
+        # Dedupe by label: drop any existing entry with the same label
+        # before appending so retries replace rather than accumulate.
+        with contextlib.suppress(Exception):
+            remove_provider_entry(label)
+
         try:
             append_provider_entry(entry)
         except Exception as exc:
             return HTMLResponse(
-                f'<div class="card"><div class="provider-empty">'
-                f'⚠ Failed to save: {str(exc)[:200]}'
-                f'</div></div>',
+                _provider_error(f"Failed to save: {str(exc)[:200]}"),
                 status_code=500,
             )
         return providers_list_partial()
