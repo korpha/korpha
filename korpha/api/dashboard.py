@@ -209,8 +209,16 @@ def _needs_onboarding(business: Business) -> bool:
     We treat "no goal recorded" as the gate rather than "brief dict is
     empty", because some legacy callers may have stuck a placeholder in
     there. The goal field is the load-bearing one downstream skills read.
+
+    Founders who skipped the brief form (POST /app/onboard/skip) carry
+    a ``skipped_intake`` marker so the dashboard gate doesn't bounce
+    them back into the form on every page load. They're free to chat
+    directly with the CEO — typical use case: pasting a roster of
+    multiple ideas the CEO bundles into Lines via hr.start_business_line.
     """
     brief = business.founder_brief or {}
+    if brief.get("skipped_intake"):
+        return False
     return not str(brief.get("goal") or "").strip()
 
 
@@ -446,6 +454,30 @@ def build_dashboard_router(
             ctx["existing_brief"] = existing
             ctx["existing_answer"] = existing.get("raw_answer", "")
             return templates.TemplateResponse(request, "onboard.html", ctx)
+        finally:
+            session.close()
+
+    @router.post("/onboard/skip", response_class=HTMLResponse, response_model=None)
+    def onboard_skip(
+        session: Annotated[Session, Depends(require_session)],
+    ) -> RedirectResponse:
+        """Skip the brief textarea + niche-discovery autoflow. Used by
+        founders who already have a roster of ideas to paste at the CEO
+        (Paperclip-style flow). Marks the business with skipped_intake
+        so the dashboard stops bouncing back here, then drops them in
+        chat where the CEO can call hr.start_business_line per Line."""
+        try:
+            _founder, business = founder_business(session)
+            current = business.founder_brief or {}
+            business.founder_brief = {
+                **current,
+                "skipped_intake": True,
+            }
+            session.add(business)
+            session.commit()
+            return RedirectResponse(
+                "/app/chat", status_code=status.HTTP_303_SEE_OTHER
+            )
         finally:
             session.close()
 
