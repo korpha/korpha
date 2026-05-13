@@ -1,6 +1,6 @@
 # Product Lifecycle — Per-Line Walkthrough
 
-**Status:** Design — proposed, not yet implemented.
+**Status:** Implemented — VP product spawn + per-Line walkthrough ship in v0.0.1.
 **Companions:** [`docs/ORG_MODEL.md`](./ORG_MODEL.md) (org structure)
 · [`docs/dev/BUSINESS_UNITS.md`](./dev/BUSINESS_UNITS.md) (engineering).
 **Audience:** Product / strategy thinking + Line Pack authors.

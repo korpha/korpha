@@ -1,6 +1,6 @@
 # Korpha Org Model — The Fractal C-Suite
 
-**Status:** Design — proposed, not yet implemented.
+**Status:** Implemented — BusinessUnit + Line Packs ship in v0.0.1.
 **Owner:** Architecture / product.
 **Companion doc:** [`docs/dev/BUSINESS_UNITS.md`](./dev/BUSINESS_UNITS.md) — the engineering counterpart.
 
