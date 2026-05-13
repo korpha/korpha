@@ -45,7 +45,6 @@ Practical how-to guides for the people running Korpha day-to-day.
 | Doc | What it covers |
 | --- | --- |
 | [**Cofounder Protocol**](COFOUNDER_PROTOCOL.md) | Full v1 spec for partner manifests. Schema, validation, install/list/uninstall flow. |
-| [**RankMyAnswer integration brief**](RANKMYANSWER_INTEGRATION.md) | Reference: the original brief sent to RankMyAnswer's dev team — example of what landing in core looks like for the first canonical Cofounder Protocol partner. |
 
 ---
 
@@ -66,7 +65,6 @@ Internal-facing docs for people working on Korpha itself.
 | --- | --- |
 | [**Architecture**](../ARCHITECTURE.md) | System design, module boundaries, data model. The "where does this code live and why" reference. |
 | [**Brief**](../BRIEF.md) | The product source-of-truth — what Korpha is, who Mike is, what shipping looks like. Read this before proposing roadmap changes. |
-| [**Prompt Audit**](PROMPT_AUDIT.md) | The prompt-pattern audit that drove the Round-2 prompt lift to 100% on the eval. Records what was lifted from Paperclip / Hermes / OpenClaw. |
 | [**Progress**](../PROGRESS.md) | Build log — what shipped, when, why. Append-only history. |
 | [**Next Steps**](../NEXT_STEPS.md) | Prioritized roadmap. Phase 2/3/4 buckets with status. |
 

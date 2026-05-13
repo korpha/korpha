@@ -1,6 +1,6 @@
 # BusinessUnit Implementation — Engineering Doc
 
-**Status:** Design — proposed, not yet implemented.
+**Status:** Implemented — see PR1–PR13 + PR-INT-1 through PR-INT-30.
 **Companion:** [`docs/ORG_MODEL.md`](../ORG_MODEL.md) (conceptual).
 **Audience:** Engineers implementing the recursive org model + shared
 resources + per-unit credentials.
