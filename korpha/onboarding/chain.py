@@ -188,6 +188,25 @@ async def run_post_pick_niche_chain(
         except (SkillError, Exception) as exc:
             logger.warning("validate.score_idea failed in chain: %s", exc)
             errors.append(f"validate: {exc}")
+            session.add(
+                Approval(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    agent_role_id=ceo.id,
+                    action_class=ActionClass.INTERNAL,
+                    proposal_summary=(
+                        f"Reality check on {name!r} — generation failed, "
+                        "click Retry to regenerate"
+                    ),
+                    action_payload={
+                        "kind": "reality_check_failed",
+                        "niche_name": name,
+                        "dispatch_error": str(exc)[:300],
+                    },
+                    status=ApprovalStatus.PENDING,
+                )
+            )
+            approvals_created += 1
 
         # 2. Landing copy. Real deliverable — Founder will skim and
         #    approve / tweak.
@@ -232,6 +251,25 @@ async def run_post_pick_niche_chain(
         except (SkillError, Exception) as exc:
             logger.warning("landing.draft_copy failed in chain: %s", exc)
             errors.append(f"landing: {exc}")
+            session.add(
+                Approval(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    agent_role_id=ceo.id,
+                    action_class=ActionClass.PUBLIC_POST,
+                    proposal_summary=(
+                        f"Landing copy for {name!r} — generation failed, "
+                        "click Retry to regenerate"
+                    ),
+                    action_payload={
+                        "kind": "landing_copy_failed",
+                        "niche_name": name,
+                        "dispatch_error": str(exc)[:300],
+                    },
+                    status=ApprovalStatus.PENDING,
+                )
+            )
+            approvals_created += 1
 
         # 3a. Stripe payment link draft. The skill itself adds an
         #     Approval (action_class=COMMERCE) — Founder approves to
@@ -259,6 +297,9 @@ async def run_post_pick_niche_chain(
         # 3. Cold-email opener variants. Founder picks one to send (or
         #    edits) — sending happens through the existing
         #    outreach.send_cold_email side-effect skill, separately gated.
+        # If the skill fails (truncated JSON, model hiccup, etc.) we
+        # still write a "needs retry" Approval so the founder sees the
+        # slot rather than silently getting 4 of 5 cards.
         try:
             r = await skills_registry.run(
                 "outreach.draft_cold_emails",
@@ -300,6 +341,40 @@ async def run_post_pick_niche_chain(
         except (SkillError, Exception) as exc:
             logger.warning("outreach.draft_cold_emails failed in chain: %s", exc)
             errors.append(f"outreach: {exc}")
+            session.add(
+                Approval(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    agent_role_id=ceo.id,
+                    action_class=ActionClass.EMAIL_OUTREACH,
+                    proposal_summary=(
+                        f"Cold-email drafts for {name!r} — generation failed, "
+                        "click Retry to regenerate"
+                    ),
+                    action_payload={
+                        "kind": "outreach_drafts_failed",
+                        "niche_name": name,
+                        "avatar": avatar,
+                        "value_prop": value_prop,
+                        "dispatch_error": str(exc)[:300],
+                    },
+                    status=ApprovalStatus.PENDING,
+                )
+            )
+            session.add(
+                Activity(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    actor_type=ActorType.AGENT,
+                    actor_id=ceo.id,
+                    event_type="onboard.outreach_failed",
+                    payload={
+                        "niche_name": name,
+                        "error": str(exc)[:200],
+                    },
+                )
+            )
+            approvals_created += 1
 
         # 4. Kickoff invite — BRIEF.md minute 4:30 promise: "calendar
         #    slot for kickoff with cofounder tomorrow". Tomorrow at
@@ -360,6 +435,25 @@ async def run_post_pick_niche_chain(
         except (SkillError, Exception) as exc:
             logger.warning("calendar.create_event failed in chain: %s", exc)
             errors.append(f"calendar: {exc}")
+            session.add(
+                Approval(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    agent_role_id=ceo.id,
+                    action_class=ActionClass.INTERNAL,
+                    proposal_summary=(
+                        f"Kickoff invite for {name!r} — generation failed, "
+                        "click Retry to regenerate"
+                    ),
+                    action_payload={
+                        "kind": "calendar_invite_failed",
+                        "niche_name": name,
+                        "dispatch_error": str(exc)[:300],
+                    },
+                    status=ApprovalStatus.PENDING,
+                )
+            )
+            approvals_created += 1
 
         session.commit()
 

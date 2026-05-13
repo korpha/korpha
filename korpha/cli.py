@@ -402,84 +402,17 @@ async def _execute_email_outreach(
     payload: dict[str, object],
     business: Business,
 ) -> None:
-    """Side-effect path for an approved EMAIL_OUTREACH approval. Sends via
-    the Resend notifier, marks the approval EXECUTED, and logs Activity.
+    """CLI wrapper around the shared email-outreach dispatcher. Keeps
+    typer echo + exit codes; pure dispatch logic lives in
+    korpha.approvals.dispatch so HTTP /approve can share it."""
+    from korpha.approvals.dispatch import dispatch_email_outreach
 
-    Caller has already verified status ∈ {APPROVED, AUTO_EXECUTED, MODIFIED}."""
-    from korpha.audit.model import Activity, ActorType
-    from korpha.db._base import utcnow
-    from korpha.notifications import (
-        Notification,
-        NotifierError,
-        ResendEmailNotifier,
-    )
-
-    to = str(payload.get("to") or "").strip()
-    subject = str(payload.get("subject") or "").strip()
-    body = str(payload.get("body") or "").strip()
-    from_addr = payload.get("from_address")
-    from_addr_str = str(from_addr).strip() if from_addr else None
-
-    if not (to and subject and body):
-        typer.echo(_yellow("approval payload missing to/subject/body — refusing"))
+    result = await dispatch_email_outreach(session, approval, payload, business)
+    if result.ok:
+        typer.echo(_green(f"✓ {result.message}"))
+    else:
+        typer.echo(_yellow(result.message))
         raise typer.Exit(code=1)
-
-    notifier = ResendEmailNotifier()
-    try:
-        await notifier.send(
-            Notification(
-                to=to,
-                subject=subject,
-                text_body=body,
-                from_address=from_addr_str,
-            )
-        )
-    except NotifierError as exc:
-        # Record the failure on the approval row itself so the dashboard
-        # shows what went wrong without spelunking through stderr.
-        approval.action_payload = {
-            **(approval.action_payload or {}),
-            "send_error": str(exc),
-        }
-        session.add(approval)
-        session.add(
-            Activity(
-                business_id=business.id,
-                actor_type=ActorType.AGENT,
-                actor_id=approval.agent_role_id,
-                event_type="email.send_failed",
-                payload={"approval_id": str(approval.id), "error": str(exc)},
-            )
-        )
-        session.commit()
-        typer.echo(_yellow(f"send failed: {exc}"))
-        raise typer.Exit(code=1) from exc
-    finally:
-        await notifier.close()
-
-    # ApprovalStatus has no terminal "executed" value — keep status at
-    # APPROVED and rely on the Activity log + payload['sent_at'] to mark
-    # the side-effect having happened.
-    approval.action_payload = {
-        **(approval.action_payload or {}),
-        "sent_at": utcnow().isoformat(),
-    }
-    session.add(approval)
-    session.add(
-        Activity(
-            business_id=business.id,
-            actor_type=ActorType.AGENT,
-            actor_id=approval.agent_role_id,
-            event_type="email.sent",
-            payload={
-                "approval_id": str(approval.id),
-                "to": to,
-                "subject": subject,
-            },
-        )
-    )
-    session.commit()
-    typer.echo(_green(f"✓ email sent to {to}"))
 
 
 async def _execute_commerce(
@@ -488,96 +421,20 @@ async def _execute_commerce(
     payload: dict[str, object],
     business: Business,
 ) -> None:
-    """Execute an approved COMMERCE approval. Today the only kind handled
-    is 'create_payment_link' — additional commerce kinds (refunds, price
-    updates) plug in via the same dispatch."""
-    from korpha.audit.model import Activity, ActorType
-    from korpha.commerce import StripeClient, StripeError
-    from korpha.db._base import utcnow
+    """CLI wrapper around the shared commerce dispatcher. See
+    korpha.approvals.dispatch.dispatch_commerce for the implementation
+    shared with the HTTP /approve handler."""
+    from korpha.approvals.dispatch import dispatch_commerce
 
-    api_key = os.getenv("STRIPE_API_KEY")
-    if not api_key:
-        typer.echo(
-            _yellow(
-                "STRIPE_API_KEY not set. Get one from https://dashboard.stripe.com "
-                "and add it to .env."
-            )
-        )
+    result = await dispatch_commerce(session, approval, payload, business)
+    if result.ok:
+        typer.echo(_green("✓ payment link created"))
+        url = result.details.get("url")
+        if url:
+            typer.echo(f"  {url}")
+    else:
+        typer.echo(_yellow(result.message))
         raise typer.Exit(code=1)
-
-    kind = str(payload.get("kind") or "create_payment_link")
-    if kind != "create_payment_link":
-        typer.echo(_yellow(f"unsupported commerce kind {kind!r}"))
-        raise typer.Exit(code=1)
-
-    name = str(payload.get("name") or "").strip()
-    raw_amount = payload.get("amount_usd") or 0
-    try:
-        amount_usd = float(raw_amount)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        amount_usd = 0.0
-    currency = str(payload.get("currency") or "usd")
-    description = payload.get("description")
-    description_str = str(description).strip() if description else None
-
-    if not name or amount_usd <= 0:
-        typer.echo(_yellow("approval payload missing name / amount — refusing"))
-        raise typer.Exit(code=1)
-
-    client = StripeClient(api_key=api_key)
-    try:
-        link = await client.create_payment_link(
-            name=name,
-            amount_usd=amount_usd,
-            currency=currency,
-            description=description_str,
-        )
-    except StripeError as exc:
-        approval.action_payload = {
-            **(approval.action_payload or {}),
-            "execute_error": str(exc),
-        }
-        session.add(approval)
-        session.add(
-            Activity(
-                business_id=business.id,
-                actor_type=ActorType.AGENT,
-                actor_id=approval.agent_role_id,
-                event_type="commerce.payment_link_failed",
-                payload={"approval_id": str(approval.id), "error": str(exc)},
-            )
-        )
-        session.commit()
-        typer.echo(_yellow(f"stripe error: {exc}"))
-        raise typer.Exit(code=1) from exc
-    finally:
-        await client.close()
-
-    approval.action_payload = {
-        **(approval.action_payload or {}),
-        "stripe_payment_link_id": link.id,
-        "stripe_payment_link_url": link.url,
-        "stripe_product_id": link.product_id,
-        "stripe_price_id": link.price_id,
-        "created_at": utcnow().isoformat(),
-    }
-    session.add(approval)
-    session.add(
-        Activity(
-            business_id=business.id,
-            actor_type=ActorType.AGENT,
-            actor_id=approval.agent_role_id,
-            event_type="commerce.payment_link_created",
-            payload={
-                "approval_id": str(approval.id),
-                "url": link.url,
-                "amount_usd": amount_usd,
-            },
-        )
-    )
-    session.commit()
-    typer.echo(_green("✓ payment link created"))
-    typer.echo(f"  {link.url}")
 
 
 def _ensure_founder_and_business(session: Session) -> tuple[Founder, Business]:
