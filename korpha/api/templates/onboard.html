@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Welcome · Korpha{% endblock %}
+{% block breadcrumbs %}Onboard{% endblock %}
+{% block body %}
+  <div class="onboard">
+    <div class="onboard-eyebrow">Day 0 — one-time setup</div>
+    <h1 class="onboard-h1">Tell your cofounder about YOU.</h1>
+    <p class="onboard-sub">
+      <strong style="color: var(--text, #f4f4f4);">This is a profile,
+      not a chat.</strong> Once your cofounder knows you, asking it
+      to do tasks ("broadcast to my Teams contacts", "draft a cold
+      email", "set up Stripe") happens in the
+      <a href="/app/chat" style="color: var(--accent, #e7c14b);">chat
+      panel</a> — not here.
+    </p>
+    <p class="onboard-sub">
+      Be concrete: your skills, goal, hours per week, savings, what
+      you've already tried. One paragraph is enough — the cofounder
+      structures the rest.
+    </p>
+
+    {% if existing_brief and existing_brief.get("goal") %}
+      <div class="onboard-existing">
+        <div class="onboard-existing-label">Current brief</div>
+        <div class="onboard-existing-summary">{{ existing_brief.get("summary") or existing_brief.get("goal") }}</div>
+        <div class="onboard-existing-note">
+          Submitting this form will replace it.
+        </div>
+      </div>
+    {% endif %}
+
+    {% if error %}
+      <div class="onboard-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/app/onboard" class="onboard-form">
+      <textarea name="answer"
+                class="onboard-textarea"
+                rows="8"
+                autofocus
+                required
+                placeholder="I'm a Python dev, want $5k/mo side income in 6 months, have ~10h/week and $2k savings. I've thought about devops tools or cron monitoring. Can't quit my job."
+      >{{ existing_answer }}</textarea>
+
+      <div class="onboard-actions">
+        {% if existing_brief and existing_brief.get("goal") %}
+          <a href="/app/dashboard" class="onboard-skip">← back to dashboard</a>
+        {% else %}
+          <a href="/app/chat" class="onboard-skip">Skip — chat first instead →</a>
+        {% endif %}
+        <button type="submit" class="onboard-submit">Save profile →</button>
+      </div>
+    </form>
+
+    <div class="onboard-footer">
+      The cofounder uses this profile to default skill arguments —
+      niche discovery, pricing, validation. You only fill this out
+      once. To ask your cofounder to do work, head to
+      <a href="/app/chat" style="color: var(--text-dim, #9aa0a6);">chat</a>.
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .onboard {
+    max-width: 720px;
+    margin: 60px auto 80px;
+    padding: 0 16px;
+  }
+  .onboard-eyebrow {
+    color: var(--accent, #e7c14b);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .onboard-h1 {
+    font-size: 32px;
+    line-height: 1.15;
+    font-weight: 600;
+    margin: 0 0 14px;
+    color: var(--text, #f4f4f4);
+  }
+  .onboard-sub {
+    color: var(--text-dim, #9aa0a6);
+    font-size: 15px;
+    line-height: 1.5;
+    margin: 0 0 28px;
+  }
+  .onboard-existing {
+    background: rgba(231, 193, 75, 0.06);
+    border: 1px solid rgba(231, 193, 75, 0.18);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin: 0 0 22px;
+  }
+  .onboard-existing-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent, #e7c14b);
+    margin-bottom: 6px;
+  }
+  .onboard-existing-summary {
+    font-size: 14px;
+    color: var(--text, #f4f4f4);
+    line-height: 1.45;
+  }
+  .onboard-existing-note {
+    font-size: 12px;
+    color: var(--text-dim, #9aa0a6);
+    margin-top: 8px;
+  }
+  .onboard-error {
+    background: rgba(220, 80, 80, 0.10);
+    border: 1px solid rgba(220, 80, 80, 0.32);
+    color: #f5b8b8;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 0 0 18px;
+    font-size: 13.5px;
+  }
+  .onboard-form { margin: 0 0 18px; }
+  .onboard-textarea {
+    width: 100%;
+    background: var(--bg-elevated, #131418);
+    color: var(--text, #f4f4f4);
+    border: 1px solid var(--border, #2a2c33);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font: inherit;
+    font-size: 15px;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 160px;
+    box-sizing: border-box;
+  }
+  .onboard-textarea:focus {
+    outline: none;
+    border-color: var(--accent, #e7c14b);
+    box-shadow: 0 0 0 3px rgba(231, 193, 75, 0.12);
+  }
+  .onboard-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 18px;
+    margin-top: 14px;
+  }
+  .onboard-skip {
+    color: var(--text-dim, #9aa0a6);
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .onboard-skip:hover { color: var(--text, #f4f4f4); }
+  .onboard-submit {
+    background: var(--accent, #e7c14b);
+    color: #15161a;
+    border: 0;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .onboard-submit:hover { filter: brightness(1.05); }
+  .onboard-footer {
+    color: var(--text-dim, #9aa0a6);
+    font-size: 12.5px;
+    line-height: 1.5;
+    border-top: 1px solid var(--border, #2a2c33);
+    padding-top: 14px;
+  }
+</style>
+{% endblock %}

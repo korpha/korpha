@@ -1,0 +1,33 @@
+# Korpha MCP server config.
+#
+# Copy this to ~/.korpha/mcp.yaml (or set KORPHA_MCP_FILE) so Korpha
+# can discover MCP-compatible tool servers and surface them to skills.
+#
+# Run `korpha mcp-list` to verify each server starts and what tools it
+# exposes. Tokens / secrets should NEVER be committed — keep them in env
+# vars and reference them via ${VAR} below.
+
+servers:
+  # Filesystem server — read/write files in a sandboxed root.
+  # Install: comes with @modelcontextprotocol/server-filesystem on npm.
+  - name: filesystem
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/me/korpha-workspace"]
+    enabled: true
+
+  # GitHub server — issues, PRs, repos. Requires a fine-grained PAT.
+  # - name: github
+  #   command: ["npx", "-y", "@modelcontextprotocol/server-github"]
+  #   env:
+  #     GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
+  #   enabled: true
+
+  # Postgres server — read-only by default.
+  # - name: postgres
+  #   command: ["npx", "-y", "@modelcontextprotocol/server-postgres", "${POSTGRES_URL}"]
+  #   enabled: false
+
+  # Custom local server — point at your own MCP implementation.
+  # - name: my-server
+  #   command: ["python", "/path/to/my_mcp_server.py"]
+  #   cwd: "/path/to/my_mcp_server_workdir"
+  #   request_timeout_seconds: 60

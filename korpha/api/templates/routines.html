@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Routines · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Routines{% endblock %}
+{% block body %}
+  <div class="page-intro">
+    <h1>Routines</h1>
+    <p class="page-intro-sub">Recurring work the cofounder team runs without you. Daily digest, weekly P&L review, content cadence checks.</p>
+  </div>
+
+  {% if routines %}
+    <div class="routine-list">
+      {% for r in routines %}
+        <div class="routine-row">
+          <span class="pill pill-{{ 'active' if r.enabled else 'done' }}">{{ 'on' if r.enabled else 'off' }}</span>
+          <div class="routine-meta">
+            <div class="routine-name">{{ r.name }}</div>
+            <div class="routine-detail">{{ r.kind }} · every {{ r.schedule_value }}s · last fired {{ r.last_fired_label }}</div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">↻</div>
+      <h2>No routines yet</h2>
+      <p><code>korpha routine-add "morning digest" --kind ceo.daily_digest --every-seconds 86400</code></p>
+    </div>
+  {% endif %}
+{% endblock %}
+{% block scripts %}
+<style>
+.page-intro { margin-bottom: 22px; }
+.page-intro h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+.page-intro-sub { color: var(--text-dim); margin: 0; font-size: 13px; }
+.routine-list { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.routine-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--bg-elev); }
+.routine-row + .routine-row { border-top: 1px solid var(--border); }
+.routine-name { font-size: 13.5px; color: var(--text); }
+.routine-detail { font-size: 12px; color: var(--text-dim); }
+code { font-family: ui-monospace, Menlo, monospace; background: var(--bg-elev); padding: 2px 6px; border-radius: 4px; }
+</style>
+{% endblock %}

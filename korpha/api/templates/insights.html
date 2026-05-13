@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Insights · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Insights{% endblock %}
+{% block body %}
+  <div class="insights-shell">
+    <div class="insights-window-picker">
+      <span class="insights-window-label">Window:</span>
+      {% for d in window_choices %}
+        <a href="?days={{ d }}"
+           class="insights-window-pill{% if d == selected_days %} insights-window-active{% endif %}">{{ d }}d</a>
+      {% endfor %}
+    </div>
+
+    <div class="insights-headline">{{ insights.headline() }}</div>
+
+    {% if insights.inference_calls == 0 and insights.skills_run == 0 %}
+      <div class="empty-state">
+        <div class="empty-icon">📊</div>
+        <h2>No activity in the last {{ insights.window_days }}d</h2>
+        <p>Open the chat and ask the cofounder to do something — niche scan, draft a cold email, plan the week. Numbers populate from there.</p>
+        <a href="/app/chat" class="empty-cta">Open chat →</a>
+      </div>
+    {% else %}
+      <div class="insights-grid">
+        <div class="insights-card">
+          <div class="insights-card-label">Active days</div>
+          <div class="insights-card-value">{{ insights.active_days }}<span class="insights-card-suffix">/{{ insights.window_days }}</span></div>
+        </div>
+        <div class="insights-card">
+          <div class="insights-card-label">Total cost</div>
+          <div class="insights-card-value">${{ "%.4f"|format(insights.total_cost_usd) }}</div>
+          <div class="insights-card-detail">${{ "%.4f"|format(insights.cost_per_day()) }}/day avg</div>
+        </div>
+        <div class="insights-card">
+          <div class="insights-card-label">Inference calls</div>
+          <div class="insights-card-value">{{ insights.inference_calls }}</div>
+        </div>
+        <div class="insights-card">
+          <div class="insights-card-label">Skills run</div>
+          <div class="insights-card-value">{{ insights.skills_run }}</div>
+        </div>
+        <div class="insights-card">
+          <div class="insights-card-label">Hours saved (est.)</div>
+          <div class="insights-card-value">{{ "%.1f"|format(insights.estimated_hours_saved) }}<span class="insights-card-suffix">h</span></div>
+          <div class="insights-card-detail">conservative — adjust via env if needed</div>
+        </div>
+        <div class="insights-card">
+          <div class="insights-card-label">Tokens</div>
+          <div class="insights-card-value">{{ "{:,}".format(insights.total_input_tokens) }}<span class="insights-card-suffix">in</span></div>
+          <div class="insights-card-detail">{{ "{:,}".format(insights.total_output_tokens) }} out{% if insights.total_cached_tokens %} · {{ "{:,}".format(insights.total_cached_tokens) }} cached{% endif %}</div>
+        </div>
+      </div>
+
+      {% if insights.by_provider %}
+        <h2 class="insights-section-h2">Spend by provider</h2>
+        <table class="insights-table">
+          <thead>
+            <tr>
+              <th>Provider / Model</th>
+              <th>Tier</th>
+              <th class="insights-num">Calls</th>
+              <th class="insights-num">In</th>
+              <th class="insights-num">Out</th>
+              <th class="insights-num">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in insights.by_provider %}
+              <tr>
+                <td>{{ b.provider }}/{{ b.model }}</td>
+                <td>{{ b.tier }}</td>
+                <td class="insights-num">{{ b.calls }}</td>
+                <td class="insights-num">{{ "{:,}".format(b.input_tokens) }}</td>
+                <td class="insights-num">{{ "{:,}".format(b.output_tokens) }}</td>
+                <td class="insights-num">${{ "%.4f"|format(b.cost_usd) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+
+      {% if insights.top_skills %}
+        <h2 class="insights-section-h2">Top skills</h2>
+        <table class="insights-table">
+          <thead>
+            <tr>
+              <th>Skill</th>
+              <th>Director</th>
+              <th class="insights-num">Calls</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in insights.top_skills %}
+              <tr>
+                <td><code>{{ s.skill_name }}</code></td>
+                <td>{{ s.role }}</td>
+                <td class="insights-num">{{ s.calls }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .insights-shell { display: flex; flex-direction: column; gap: 22px; max-width: 920px; }
+  .insights-window-picker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-faint);
+  }
+  .insights-window-label { margin-right: 4px; }
+  .insights-window-pill {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 12px;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .insights-window-pill:hover { background: var(--bg-hover); }
+  .insights-window-active {
+    background: var(--accent, #e7c14b);
+    color: var(--bg);
+    border-color: var(--accent, #e7c14b);
+  }
+  .insights-headline {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+    padding: 16px 18px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .insights-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .insights-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .insights-card-label {
+    font-size: 12px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .insights-card-value {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .insights-card-suffix {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--text-faint);
+    margin-left: 2px;
+  }
+  .insights-card-detail {
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+  .insights-section-h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 8px;
+    margin-bottom: -4px;
+  }
+  .insights-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .insights-table th {
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--bg);
+    color: var(--text-faint);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+  }
+  .insights-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  .insights-table tbody tr:last-child td { border-bottom: none; }
+  .insights-table .insights-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .insights-table code { font-size: 12px; }
+</style>
+{% endblock %}

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Inference cascade · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Inference{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">Inference cascade</h1>
+      <p class="tm-blurb">
+        Lower priority = tried first. Within a priority group Korpha
+        load-balances across all healthy accounts. On a transient error
+        the same account is retried <em>retries_before_swap</em> times
+        before falling through to the next priority. Free-tier accounts
+        treat 429 as "daily quota consumed" and wait for the reset
+        boundary instead of obeying retry_after.
+      </p>
+    </div>
+  </div>
+
+  {% if request.query_params.get('flash') %}
+    <div class="tm-flash">✓ {{ request.query_params.get('flash') }}</div>
+  {% endif %}
+  {% if request.query_params.get('error') %}
+    <div class="tm-flash tm-flash-warn">{{ request.query_params.get('error') }}</div>
+  {% endif %}
+
+  <p class="tm-muted">Source: <code>{{ source }}</code></p>
+
+  {% if not accounts %}
+    <p class="tm-blurb">
+      No inference accounts configured. Run
+      <code>korpha config</code> or set provider env vars (e.g.
+      <code>OPENROUTER_API_KEY</code>).
+    </p>
+  {% else %}
+    {% for a in accounts %}
+      <section class="tm-section">
+        <h2 class="tm-section-title">
+          {{ a.label or a.provider_name }}
+          <span class="tm-muted">— {{ a.provider_name }}</span>
+        </h2>
+        <form method="post" action="/app/inference/update" class="tm-cred-form">
+          <input type="hidden" name="label" value="{{ a.label or a.provider_name }}" />
+          <div class="tm-cred-row">
+            <label>Priority
+              <input type="number" name="priority" min="1" value="{{ a.priority }}" />
+            </label>
+            <label>Retries before swap
+              <input type="number" name="retries_before_swap" min="0" value="{{ a.retries_before_swap }}" />
+            </label>
+            <label>Free-tier window
+              <select name="free_tier_window">
+                {% set ft = a.free_tier_quota or {} %}
+                <option value="" {{ 'selected' if not ft else '' }}>(not free-tier)</option>
+                <option value="none" {{ 'selected' if ft and ft.get('window_kind') == None else '' }}>none (clear)</option>
+                <option value="daily" {{ 'selected' if ft.get('window_kind') == 'daily' else '' }}>daily</option>
+                <option value="hourly" {{ 'selected' if ft.get('window_kind') == 'hourly' else '' }}>hourly</option>
+                <option value="monthly" {{ 'selected' if ft.get('window_kind') == 'monthly' else '' }}>monthly</option>
+              </select>
+            </label>
+            <label>Reset UTC
+              <input type="text" name="free_tier_reset_utc" value="{{ (a.free_tier_quota or {}).get('reset_utc') or '00:00' }}" placeholder="HH:MM" />
+            </label>
+            <button type="submit" class="tm-hire-btn">Save</button>
+          </div>
+          <p class="tm-muted" style="margin-top:8px;">
+            Tiers served:
+            {% for tier_enum, model in a.tier_models.items() %}
+              <code>{{ tier_enum.value }}</code> → <code>{{ model }}</code>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </p>
+        </form>
+      </section>
+    {% endfor %}
+  {% endif %}
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Probe accounts</h2>
+    <p class="tm-blurb">
+      To probe every account with a 1-token request and see which
+      free-tier keys are exhausted right now, run from a terminal:
+      <br/>
+      <code>korpha inference probe</code>
+    </p>
+  </section>
+</div>
+{% endblock %}

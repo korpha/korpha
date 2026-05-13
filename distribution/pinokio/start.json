@@ -1,0 +1,29 @@
+{
+  "version": "3.0",
+  "run": [
+    {
+      "id": "server",
+      "method": "shell.run",
+      "params": {
+        "message": [
+          "echo Starting Korpha dashboard at http://localhost:8765 ...",
+          "{{cwd}}/.uv-bin/uv tool run korpha server"
+        ],
+        "on": [
+          {
+            "event": "/Uvicorn running on (.*)8765/",
+            "done": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "open",
+      "method": "browser.open",
+      "params": {
+        "uri": "http://localhost:8765",
+        "fullscreen": true
+      }
+    }
+  ]
+}

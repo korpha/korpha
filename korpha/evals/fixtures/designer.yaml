@@ -1,0 +1,93 @@
+# Designer Worker eval fixtures.
+#
+# The Designer is a sub-agent under CMO/CTO. Produces ship-ready specs
+# (markdown layouts, color tokens, type scales) — not abstract design
+# talk. Lenses: Gestalt, Hick's Law, Fitts's Law, WCAG POUR.
+
+tasks:
+  - id: designer.landing_page_layout
+    role: designer
+    ask: |
+      Sketch a landing-page layout (markdown) for a deploy-automation
+      tool aimed at indie hackers. One primary CTA: "Join the waitlist".
+      Mobile-first. Above-the-fold = headline + sub + CTA + 1 social
+      proof line.
+    notes: |
+      Must produce concrete spec, not "modern, clean, professional"
+      fluff. Should reference accessibility, primary CTA, layout zones.
+    assertions:
+      - kind: not_contains
+        values:
+          - "modern, clean"
+          - "sleek and modern"
+          - "clean and minimal"
+          - "professional and modern"
+        case_insensitive: true
+        description: "No 'modern clean professional' fluff"
+      - kind: contains_any
+        values: ["above the fold", "above-the-fold", "hero", "header"]
+        case_insensitive: true
+        description: "References layout zone vocabulary"
+      - kind: contains_any
+        values: ["waitlist", "CTA", "primary cta", "join"]
+        case_insensitive: true
+        description: "Mentions the primary CTA target"
+      - kind: contains_any
+        values: ["mobile", "responsive", "viewport", "thumb", "44px", "tap target"]
+        case_insensitive: true
+        description: "Addresses mobile-first / accessibility"
+
+  - id: designer.button_color_choice
+    role: designer
+    ask: |
+      Pick a primary button color for a SaaS landing page where the
+      brand has no fixed palette yet. Background is white. Justify the
+      pick in ≤ 50 words.
+    notes: |
+      Must give a concrete color (hex / token) + a reason rooted in
+      contrast / accessibility, not vibes.
+    assertions:
+      - kind: regex_match
+        pattern: "(#[0-9a-fA-F]{3,8}|rgb\\(|hsl\\(|blue|indigo|green|orange|black)"
+        description: "Names a concrete color (hex, rgb, or color name)"
+      - kind: contains_any
+        values:
+          - "contrast"
+          - "WCAG"
+          - "4.5:1"
+          - "3:1"
+          - "accessible"
+          - "accessibility"
+        case_insensitive: true
+        description: "Justifies via contrast / accessibility, not vibes"
+      - kind: max_words
+        max: 120
+        description: "Brevity — under 120 words including any caveats"
+
+  - id: designer.error_state_spec
+    role: designer
+    ask: |
+      Spec the error state for the signup form when the email is
+      already taken. Constraints: must not rely on color alone;
+      visible in <400ms; one clear next action.
+    notes: |
+      Tests three explicit lenses: WCAG (color-not-alone), Doherty
+      threshold (<400ms), single primary action.
+    assertions:
+      - kind: contains_any
+        values: ["icon", "text label", "border", "message", "label"]
+        case_insensitive: true
+        description: "Adds a non-color signal (icon/text/border)"
+      - kind: contains_any
+        values:
+          - "color alone"
+          - "not just color"
+          - "accessible"
+          - "WCAG"
+          - "color blind"
+        case_insensitive: true
+        description: "Calls out the color-alone constraint explicitly"
+      - kind: regex_match
+        pattern: "(sign in|log in|reset|already.+account|use a different)"
+        case_insensitive: true
+        description: "Names the next action (sign in / reset / different email)"

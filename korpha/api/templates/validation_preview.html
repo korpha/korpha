@@ -1,0 +1,164 @@
+{# Validation report rendered as a glanceable card-stack so the Founder
+can read the verdict + reasoning without parsing JSON. Standalone like
+landing_preview.html — not under base.html. #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Validation: {{ niche_name }} · {{ business_name }}</title>
+  <style>
+    :root {
+      --fg: #15161a;
+      --fg-dim: #9aa0a6;
+      --bg: #0e0f12;
+      --card: #131418;
+      --border: #2a2c33;
+      --accent: #e7c14b;
+      --go: #4ade80;
+      --improve: #fbbf24;
+      --kill: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: #f4f4f4;
+      background: var(--bg);
+      line-height: 1.5;
+    }
+    .preview-strip {
+      background: #15161a;
+      color: #e7c14b;
+      padding: 8px 16px;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+    .preview-strip a { color: #fff; text-decoration: underline; margin-left: 8px; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 50px 24px 80px; }
+    h1 { font-size: 14px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 8px; }
+    .niche { font-size: 28px; font-weight: 600; margin: 0 0 28px; color: #f4f4f4; }
+    .verdict-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 22px;
+    }
+    .verdict-pill {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 8px 16px;
+      border-radius: 999px;
+    }
+    .verdict-go { background: rgba(74, 222, 128, 0.12); color: var(--go); border: 1px solid rgba(74, 222, 128, 0.3); }
+    .verdict-improve { background: rgba(251, 191, 36, 0.12); color: var(--improve); border: 1px solid rgba(251, 191, 36, 0.3); }
+    .verdict-kill { background: rgba(248, 113, 113, 0.12); color: var(--kill); border: 1px solid rgba(248, 113, 113, 0.3); }
+    .overall { font-size: 36px; font-weight: 700; color: #f4f4f4; }
+    .overall .sub { font-size: 13px; color: var(--fg-dim); font-weight: 400; margin-left: 4px; }
+    .scores {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 22px;
+      margin-bottom: 14px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .score-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+    .score-key { color: var(--fg-dim); text-transform: capitalize; }
+    .score-value { font-weight: 600; color: #f4f4f4; }
+    .score-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; flex: 1; margin: 0 12px; }
+    .score-bar-fill { height: 100%; background: var(--accent); }
+    .lists {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 22px;
+      margin-bottom: 14px;
+    }
+    .lists-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-dim); margin: 0 0 8px; }
+    .lists ul { list-style: none; margin: 0; padding: 0; }
+    .lists li { padding: 6px 0; font-size: 14px; line-height: 1.5; border-top: 1px solid var(--border); }
+    .lists li:first-child { border-top: 0; }
+    .pos li::before { content: "✓ "; color: var(--go); font-weight: 700; margin-right: 4px; }
+    .neg li::before { content: "× "; color: var(--kill); font-weight: 700; margin-right: 4px; }
+    .kt {
+      background: rgba(231, 193, 75, 0.04);
+      border: 1px solid rgba(231, 193, 75, 0.18);
+      border-radius: 10px;
+      padding: 18px 22px;
+      margin-top: 14px;
+    }
+    .kt-h { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin: 0 0 6px; }
+    .kt-body { font-size: 15px; line-height: 1.55; color: #f4f4f4; }
+    @media (max-width: 600px) {
+      .scores { grid-template-columns: 1fr; }
+      .verdict-card { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-strip">
+    Validation report
+    <a href="/app/approvals">← back to approvals</a>
+  </div>
+  <div class="wrap">
+    <h1>Niche</h1>
+    <p class="niche">{{ niche_name or "(unknown niche)" }}</p>
+
+    <div class="verdict-card">
+      <span class="verdict-pill verdict-{{ verdict }}">{{ verdict|upper }}</span>
+      <span class="overall">{{ overall }}<span class="sub">/ 10 overall</span></span>
+    </div>
+
+    {% if scores %}
+      <div class="scores">
+        {% for key, val in scores.items() %}
+          <div class="score-row">
+            <span class="score-key">{{ key|replace('_', ' ') }}</span>
+            <div class="score-bar"><div class="score-bar-fill" style="width: {{ (val|int) * 10 }}%;"></div></div>
+            <span class="score-value">{{ val }}/10</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if strengths %}
+      <div class="lists pos">
+        <div class="lists-h">Strengths</div>
+        <ul>{% for s in strengths %}<li>{{ s }}</li>{% endfor %}</ul>
+      </div>
+    {% endif %}
+
+    {% if concerns %}
+      <div class="lists neg">
+        <div class="lists-h">Concerns</div>
+        <ul>{% for c in concerns %}<li>{{ c }}</li>{% endfor %}</ul>
+      </div>
+    {% endif %}
+
+    {% if kill_test %}
+      <div class="kt">
+        <div class="kt-h">Kill test (run this first)</div>
+        <div class="kt-body">{{ kill_test }}</div>
+      </div>
+    {% endif %}
+
+    {% if improvement_path %}
+      <div class="kt">
+        <div class="kt-h">If verdict is "improve"</div>
+        <div class="kt-body">{{ improvement_path }}</div>
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>

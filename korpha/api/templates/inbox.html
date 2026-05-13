@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Inbox · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Inbox{% endblock %}
+{% block body %}
+  <div class="empty-state">
+    <div class="empty-icon">▦</div>
+    <h2>Inbox is quiet</h2>
+    <p>New issues, blockers needing your call, and approvals will land here.</p>
+  </div>
+{% endblock %}

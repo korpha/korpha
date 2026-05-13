@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same PR / branch when a newer push lands.
+# Saves runner minutes on rapid-fire commits.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: pytest + mypy + ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv (Astral's Python toolchain)
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: latest
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies (incl. dev extras)
+        run: uv sync --extra dev
+
+      - name: Run ruff
+        run: uv run ruff check korpha/ tests/
+
+      - name: Run mypy --strict
+        run: uv run mypy --strict korpha/
+
+      - name: Run pytest (excluding integration)
+        run: uv run pytest tests/ --ignore=tests/integration -q
+
+  install-matrix:
+    name: install.sh on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Run install.sh against THIS branch (not main) so install
+      # regressions are caught at PR time, not after merge.
+      - name: Run install.sh from this checkout
+        env:
+          KORPHA_REPO: ${{ format('https://github.com/{0}', github.repository) }}
+          KORPHA_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          bash install.sh
+          export PATH="$HOME/.local/bin:$PATH"
+          korpha --help
+
+      - name: Smoke-check doctor on a fresh install
+        env:
+          KORPHA_PROVIDERS_FILE: /tmp/nope.yaml
+          KORPHA_DATA_DIR: /tmp/korpha-fresh-${{ matrix.os }}
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          mkdir -p "$KORPHA_DATA_DIR"
+          # Should report "Inference provider: not configured" without errors
+          korpha doctor

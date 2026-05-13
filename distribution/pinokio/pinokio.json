@@ -1,0 +1,64 @@
+{
+  "version": "3.0",
+  "title": "Korpha",
+  "description": "AI cofounder for solopreneurs — agents, skills, approvals, dashboard. MIT-licensed open-source.",
+  "icon": "icon.png",
+  "menu": [
+    {
+      "icon": "fa-solid fa-rocket",
+      "text": "Install",
+      "href": "install.json",
+      "params": {
+        "fullscreen": true
+      },
+      "when": "{{!installed}}"
+    },
+    {
+      "icon": "fa-solid fa-circle-play",
+      "text": "Start dashboard",
+      "href": "start.json",
+      "params": {
+        "fullscreen": true
+      },
+      "when": "{{installed}}"
+    },
+    {
+      "icon": "fa-solid fa-gear",
+      "text": "Configure provider",
+      "href": "configure.json",
+      "params": {
+        "fullscreen": true
+      },
+      "when": "{{installed}}"
+    },
+    {
+      "icon": "fa-solid fa-stethoscope",
+      "text": "Doctor (health check)",
+      "href": "doctor.json",
+      "when": "{{installed}}"
+    },
+    {
+      "icon": "fa-solid fa-trash",
+      "text": "Uninstall",
+      "href": "uninstall.json",
+      "params": {
+        "fullscreen": true
+      },
+      "when": "{{installed}}"
+    }
+  ],
+  "links": [
+    {
+      "title": "Documentation",
+      "url": "https://github.com/korpha/korpha/blob/main/docs/README.md"
+    },
+    {
+      "title": "Skool community",
+      "url": "https://www.korpha.com"
+    },
+    {
+      "title": "GitHub",
+      "url": "https://github.com/korpha/korpha"
+    }
+  ]
+}

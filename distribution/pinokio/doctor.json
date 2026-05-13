@@ -1,0 +1,15 @@
+{
+  "version": "3.0",
+  "run": [
+    {
+      "id": "doctor",
+      "method": "shell.run",
+      "params": {
+        "message": [
+          "echo Running Korpha doctor — health check across providers, integrations, delegation:",
+          "{{cwd}}/.uv-bin/uv tool run korpha doctor"
+        ]
+      }
+    }
+  ]
+}

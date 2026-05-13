@@ -1,0 +1,102 @@
+# Copywriter Worker eval fixtures.
+#
+# The Copywriter is a sub-agent under the CMO. It produces tight,
+# specific copy — no marketing fluff. Lenses: AIDA, PAS, 4 U's,
+# specificity-over-cleverness. The "what NOT to write" list is
+# explicit in the prompt and asserted here.
+
+tasks:
+  - id: copywriter.cold_email_opener
+    role: copywriter
+    ask: |
+      Write a single cold-email opener (≤ 80 words) for indie hackers
+      shipping B2B SaaS side projects. Pain point: deploys break at
+      2am, founder loses sleep. Goal: get them to click a waitlist link.
+    notes: |
+      Must reference the specific pain (2am, sleep, deploys) and call
+      out the waitlist. No 'I hope this finds you well' or 'happy to
+      help'. Stay under 80 words.
+    assertions:
+      - kind: not_contains
+        values:
+          - "I hope this finds you well"
+          - "happy to help"
+          - "revolutioniz"
+          - "transform your"
+          - "next-generation"
+          - "cutting-edge"
+          - "world-class"
+          - "synergy"
+        case_insensitive: true
+        description: "No fluff phrases the prompt explicitly forbids"
+      - kind: regex_match
+        pattern: "(2am|2 a\\.m\\.|midnight|sleep|deploy|broken|outage|3am)"
+        case_insensitive: true
+        description: "References the specific pain"
+      - kind: regex_match
+        pattern: "(waitlist|sign up|early access|join the list)"
+        case_insensitive: true
+        description: "Mentions the waitlist (the actual ask)"
+      - kind: max_words
+        max: 120
+        description: "Stays under cap (some headroom over the 80w brief)"
+      - kind: max_count
+        value: "!"
+        max: 1
+        description: "Sparing with exclamation"
+
+  - id: copywriter.headline_subhead
+    role: copywriter
+    ask: |
+      Write a landing-page headline + subhead for the niche
+      "Deployment automation for solo Python devs". Audience: indie
+      hackers. The product: 1-click deploy + auto-rollback.
+    notes: |
+      Pure specificity test. Headline ≤ 12w, subhead ≤ 25w. References
+      a concrete benefit, not abstract value props.
+    assertions:
+      - kind: not_contains
+        values:
+          - "revolutioniz"
+          - "transform your"
+          - "next-generation"
+          - "cutting-edge"
+          - "world-class"
+          - "synergy"
+          - "best-in-class"
+        case_insensitive: true
+        description: "No marketing fluff"
+      - kind: regex_match
+        pattern: "(deploy|ship|push|rollback|1-click|one click|click)"
+        case_insensitive: true
+        description: "Headline references the actual product action"
+      - kind: max_words
+        max: 80
+        description: "Headline + subhead stays under combined cap"
+
+  - id: copywriter.tweet_announcement
+    role: copywriter
+    ask: |
+      Write a Twitter post (≤ 240 chars) announcing the waitlist for
+      the deploy-automation product. Tone: indie-hacker peer, not
+      marketer.
+    notes: |
+      Channel constraint (≤ 240 chars), tone constraint (peer not
+      marketer), call to action (waitlist).
+    assertions:
+      - kind: not_contains
+        values:
+          - "we're excited to announce"
+          - "thrilled to share"
+          - "introducing"
+          - "🚀"
+          - "🎉"
+        case_insensitive: true
+        description: "No corporate launch-tweet clichés"
+      - kind: max_words
+        max: 60
+        description: "Stays in tweet-length territory"
+      - kind: regex_match
+        pattern: "(waitlist|sign up|early access|join|first 100)"
+        case_insensitive: true
+        description: "Includes the call to action"

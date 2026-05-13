@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Chat history · {{ business.name }} · Korpha{% endblock %}
+{% block breadcrumbs %}Chat history{% endblock %}
+{% block body %}
+<div class="history-shell">
+  <div class="history-header">
+    <h1 class="history-title">Past conversations</h1>
+    <form method="post" action="/app/chat/new" class="history-new-form">
+      <button type="submit" class="history-new">+ New chat</button>
+    </form>
+  </div>
+
+  {% if not thread_previews %}
+    <div class="history-empty">
+      No conversations yet. Start one from the
+      <a href="/app/chat">chat panel</a>.
+    </div>
+  {% else %}
+    <ul class="history-list">
+      {% for t in thread_previews %}
+        <li class="history-row {{ 'is-active' if t.is_active else '' }}">
+          <a class="history-link" href="/app/chat/{{ t.id }}">
+            <div class="history-row-head">
+              <span class="history-row-topic">{{ t.topic }}</span>
+              {% if t.is_active %}
+                <span class="history-row-badge history-row-badge-active">active</span>
+              {% else %}
+                <span class="history-row-badge history-row-badge-archived">archived</span>
+              {% endif %}
+              <span class="history-row-meta">
+                {{ t.msg_count }} message{{ 's' if t.msg_count != 1 else '' }}
+                · {{ t.last_message_at.strftime('%b %d, %H:%M') if t.last_message_at else 'never' }}
+              </span>
+            </div>
+            <div class="history-row-preview">{{ t.preview }}</div>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>
+
+<style>
+  .history-shell { max-width: 880px; margin: 0 auto; padding: 0 4px 24px; }
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 4px 0 18px;
+  }
+  .history-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+  }
+  .history-new {
+    background: var(--accent);
+    color: var(--bg);
+    border: 0;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  .history-empty {
+    color: var(--text-dim);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+  }
+  .history-empty a { color: var(--accent); text-decoration: none; }
+  .history-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .history-row {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    transition: border-color 80ms ease;
+  }
+  .history-row:hover { border-color: var(--border-strong); }
+  .history-row.is-active { border-color: var(--accent); }
+  .history-link {
+    display: block;
+    padding: 12px 14px;
+    text-decoration: none;
+    color: inherit;
+  }
+  .history-row-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .history-row-topic { color: var(--text); font-weight: 600; font-size: 14px; }
+  .history-row-badge {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .history-row-badge-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .history-row-badge-archived {
+    background: var(--bg-active);
+    color: var(--text-dim);
+  }
+  .history-row-meta {
+    color: var(--text-faint);
+    font-size: 12px;
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .history-row-preview {
+    color: var(--text-dim);
+    font-size: 13.5px;
+    line-height: 1.45;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+</style>
+{% endblock %}

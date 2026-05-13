@@ -1,0 +1,81 @@
+# CMO eval fixtures — specific over clever, no corporate warm-up.
+
+tasks:
+  - id: cmo.draft_3_cold_email_variants
+    role: cmo
+    ask: |
+      Draft 3 cold-email opener variants for indie hackers building B2B
+      SaaS side projects. Niche: deployment automation. Channel: email.
+      Pick distinct angles for each variant.
+    notes: |
+      Specifically asked for 3 variants — must produce 3, with distinct
+      angles (not three rewrites of the same line).
+    assertions:
+      - kind: regex_match
+        pattern: "(Variant|Opener|Angle|Subject)\\s*[:#]?\\s*[1-3]"
+        case_insensitive: true
+        description: "Numbers/labels the 3 variants explicitly"
+      - kind: min_count
+        value: "Subject"
+        min: 3
+        description: "Three subject lines (one per variant)"
+      - kind: not_contains
+        values: ["I hope this finds you well", "happy to help"]
+        case_insensitive: true
+        description: "No corporate warm-up phrases"
+      - kind: max_count
+        value: "!"
+        max: 3
+        description: "Sparing with exclamation points"
+
+  - id: cmo.specific_headline
+    role: cmo
+    ask: |
+      Write a landing-page headline + subhead for the niche
+      "Deployment automation for solo Python devs". Audience:
+      indie hackers shipping side SaaS.
+    notes: |
+      The "specific > clever" rule. Should not produce
+      "Revolutionizing your DevOps for the modern era".
+    assertions:
+      - kind: not_contains
+        values:
+          - "revolutioniz"
+          - "transform your"
+          - "next-generation"
+          - "cutting-edge"
+          - "world-class"
+          - "synergy"
+        case_insensitive: true
+        description: "No marketing fluff phrases"
+      - kind: regex_match
+        pattern: "(deploy|ship|push|2am|2 a\\.m\\.|midnight|outage|broken|fix)"
+        case_insensitive: true
+        description: "Headline references concrete pain"
+      - kind: max_words
+        max: 200
+        description: "Doesn't pad — headline + subhead + maybe a line"
+
+  - id: cmo.no_open_questions
+    role: cmo
+    ask: |
+      We need a Twitter post announcing the waitlist. Make it work.
+    notes: |
+      MUST NOT bounce open questions back. CMO picks tone + ships
+      something the Founder can edit.
+    assertions:
+      - kind: not_contains
+        values:
+          - "what tone"
+          - "what voice"
+          - "let me know what"
+          - "should I"
+        case_insensitive: true
+        description: "Doesn't bounce open questions back"
+      - kind: starts_like_recommendation
+        min_words: 2
+        description: "Leads with the draft / label, not preamble"
+      - kind: regex_match
+        pattern: "(waitlist|sign up|early access|join)"
+        case_insensitive: true
+        description: "Mentions the actual ask (waitlist)"

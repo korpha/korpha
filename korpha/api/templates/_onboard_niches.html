@@ -1,0 +1,52 @@
+{# HTMX fragment swapped into #niche-results on /app/onboard/done. #}
+{% if error %}
+  <div class="niche-error">
+    {{ error }}
+    <div style="margin-top:10px; font-size:12px;">
+      <a href="/app/onboard/done">Try again</a> ·
+      <a href="/app/dashboard">Skip to dashboard</a>
+    </div>
+  </div>
+{% elif not candidates %}
+  <div class="niche-empty">
+    The niche skill returned no candidates. <a href="/app/onboard">Edit your brief</a> and try again.
+  </div>
+{% else %}
+  {% if rationale %}
+    <div class="niche-rationale">{{ rationale }}</div>
+  {% endif %}
+  {% for c in candidates %}
+    {% set is_rec = (loop.index0 == recommended_index) %}
+    <div class="niche-card {{ 'is-recommended' if is_rec }}">
+      <div class="niche-card-head">
+        <div class="niche-card-name">
+          {{ c.get("name") or "Unnamed niche" }}
+          {% if is_rec %}<span class="niche-card-recommended-tag">recommended</span>{% endif %}
+        </div>
+        <div class="niche-card-fit">fit {{ c.get("fit_score") or "?" }}/10</div>
+      </div>
+      {% if c.get("value_prop") %}
+        <div class="niche-card-row"><strong>Value:</strong>{{ c.get("value_prop") }}</div>
+      {% endif %}
+      {% if c.get("target_avatar") %}
+        <div class="niche-card-row"><strong>For:</strong>{{ c.get("target_avatar") }}</div>
+      {% endif %}
+      {% if c.get("price_band") %}
+        <div class="niche-card-row"><strong>Price:</strong>{{ c.get("price_band") }}</div>
+      {% endif %}
+      {% if c.get("validation_experiment") %}
+        <div class="niche-card-row"><strong>This week:</strong>{{ c.get("validation_experiment") }}</div>
+      {% endif %}
+      <form method="post" action="/app/onboard/pick-niche" class="niche-card-actions">
+        <input type="hidden" name="name" value="{{ c.get('name') or '' }}" />
+        <input type="hidden" name="value_prop" value="{{ c.get('value_prop') or '' }}" />
+        <input type="hidden" name="validation_experiment" value="{{ c.get('validation_experiment') or '' }}" />
+        <input type="hidden" name="target_avatar" value="{{ c.get('target_avatar') or '' }}" />
+        <input type="hidden" name="price_band" value="{{ c.get('price_band') or '' }}" />
+        <button type="submit" class="niche-card-pick {{ '' if is_rec else 'is-secondary' }}">
+          {% if is_rec %}Go with this →{% else %}Pick this{% endif %}
+        </button>
+      </form>
+    </div>
+  {% endfor %}
+{% endif %}

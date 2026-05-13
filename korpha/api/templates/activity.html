@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Activity · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Activity{% endblock %}
+{% block body %}
+  {% if events %}
+    <div class="activity-list">
+      {% for e in events %}
+        <div class="activity-row">
+          <span class="activity-actor">{{ e.actor_label }}</span>
+          <span class="activity-event">
+            {{ e.event_label }}
+            {% if e.count and e.count > 1 %}
+              <span class="event-count" title="{{ e.count }} consecutive events of this type">×{{ e.count }}</span>
+            {% endif %}
+          </span>
+          <span class="activity-time">{{ e.time_label }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">⏱</div>
+      <h2>No activity yet</h2>
+      <p>Every agent action lands here as a tidy timeline. Talk to your CEO in Telegram or web to see the first events appear.</p>
+    </div>
+  {% endif %}
+{% endblock %}
+{% block scripts %}
+<style>
+.activity-list { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.activity-row { display: flex; align-items: center; gap: 14px; padding: 8px 14px; background: var(--bg-elev); }
+.activity-row + .activity-row { border-top: 1px solid var(--border); }
+.activity-actor { color: var(--text); font-weight: 500; min-width: 80px; font-size: 13px; }
+.activity-event { flex: 1; color: var(--text-dim); font-size: 13px; }
+.event-count { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 11px; background: var(--bg-active); color: var(--text-dim); border-radius: 999px; }
+.activity-time { color: var(--text-faint); font-size: 12px; }
+</style>
+{% endblock %}

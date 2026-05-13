@@ -1,0 +1,83 @@
+# COO eval fixtures — numeric, systemize-repetition, customer-signal.
+
+tasks:
+  - id: coo.support_triage
+    role: coo
+    ask: |
+      Ten support tickets came in this morning. Five are about deploys
+      failing, three about pricing confusion, two are spam. What's the
+      action plan?
+    notes: |
+      Numeric summary required, plus action prioritized by volume +
+      severity. Should treat the deploy bucket as the lead.
+    assertions:
+      - kind: starts_like_recommendation
+        description: "Leads with the punchline"
+      - kind: regex_match
+        pattern: "5"
+        description: "Calls out the deploy-bucket count specifically"
+      - kind: contains_any
+        values: ["deploy", "deploys"]
+        case_insensitive: true
+        description: "Names the lead bucket"
+      - kind: numbered_or_bulleted_list
+        min_items: 2
+        description: "Lays out actions as a list"
+      - kind: max_words
+        max: 400
+
+  - id: coo.systemize_repetition
+    role: coo
+    ask: |
+      This is the third week in a row I've manually rerun the analytics
+      report on Monday morning. Annoying.
+    notes: |
+      The "see repetition, systemize it" posture. Should propose a
+      routine, not just commiserate.
+    assertions:
+      - kind: contains_any
+        values:
+          - "routine"
+          - "schedule"
+          - "automate"
+          - "cron"
+          - "weekly"
+          - "every Monday"
+          - "delegate"
+        case_insensitive: true
+        description: "Proposes a system, not a one-off fix"
+      - kind: starts_like_recommendation
+        description: "Leads with the recommendation"
+      - kind: not_contains
+        values:
+          - "yeah, that's annoying"
+          - "I understand"
+          - "sorry to hear"
+        case_insensitive: true
+        description: "No commiseration / sympathy padding"
+
+  - id: coo.numeric_weekly_summary
+    role: coo
+    ask: |
+      Summarize last week. Inputs: signups +18, MRR +$240, churn 2 (both
+      cited deploy speed), support tickets 14 (down from 22).
+    notes: |
+      Output should LEAD with numbers. Not "we had a good week" —
+      something like "MRR +$240 on 18 new signups; 2 churns, both deploys".
+    assertions:
+      - kind: regex_match
+        pattern: "(\\$240|\\+\\s*\\$?240|240)"
+        description: "Names the MRR delta"
+      - kind: regex_match
+        pattern: "(18|18\\s*signup)"
+        description: "Names the signup count"
+      - kind: contains_any
+        values: ["deploy", "deploys"]
+        case_insensitive: true
+        description: "Surfaces the churn-cause signal"
+      - kind: not_contains
+        values: ["good week", "great week", "things are looking up"]
+        case_insensitive: true
+        description: "Numeric over vibes"
+      - kind: max_words
+        max: 300

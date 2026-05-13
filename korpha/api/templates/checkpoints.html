@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Checkpoints · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Checkpoints{% endblock %}
+{% block body %}
+  <div class="checkpoints-shell">
+    {% if request.query_params.get('restored') %}
+      <div class="checkpoint-flash">
+        ✓ Restored snapshot <code>{{ request.query_params.get('restored') }}</code>.
+        {% if request.query_params.get('pre') %}
+          To undo: restore <code>{{ request.query_params.get('pre') }}</code>.
+        {% endif %}
+      </div>
+    {% endif %}
+    {% if error %}
+      <div class="checkpoint-error">{{ error }}</div>
+    {% endif %}
+
+    <p class="checkpoints-blurb">
+      Snapshots taken automatically before each Codex run that mutates files.
+      Click <strong>Restore</strong> to extract a snapshot back over the workspace —
+      a pre-restore snapshot is taken first so you can redo if needed.
+    </p>
+
+    {% if not sections %}
+      <div class="empty-state">
+        <div class="empty-icon">📸</div>
+        <h2>No repos to checkpoint yet</h2>
+        <p>The cofounder snapshots a workspace before each Codex run. Add a repo via the CLI to start tracking.</p>
+        <pre class="empty-code">korpha repo add &lt;path&gt;</pre>
+      </div>
+    {% else %}
+      {% for section in sections %}
+        <div class="checkpoint-section">
+          <h2 class="checkpoint-section-h2">
+            <span class="checkpoint-repo-name">{{ section.repo.name }}</span>
+            <span class="checkpoint-repo-path">{{ section.repo.local_path }}</span>
+          </h2>
+          {% if not section.checkpoints %}
+            <div class="checkpoint-empty-row">
+              No checkpoints yet for this repo. They'll appear here after the
+              first Codex run mutates files.
+            </div>
+          {% else %}
+            <table class="checkpoint-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Created</th>
+                  <th>Label</th>
+                  <th class="checkpoint-num">Files</th>
+                  <th class="checkpoint-num">Size</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cp in section.checkpoints %}
+                  <tr>
+                    <td><code>{{ cp.id }}</code></td>
+                    <td>{{ cp.created_at }}</td>
+                    <td>{{ cp.label or '(no label)' }}</td>
+                    <td class="checkpoint-num">{{ cp.file_count }}</td>
+                    <td class="checkpoint-num">
+                      {% set kb = cp.size_bytes / 1024 %}
+                      {% if kb >= 1024 %}{{ "%.1f"|format(kb / 1024) }} MB
+                      {% else %}{{ "%.1f"|format(kb) }} KB{% endif %}
+                    </td>
+                    <td>
+                      <form method="post"
+                            action="/app/checkpoints/{{ section.repo.id }}/{{ cp.id }}/restore"
+                            onsubmit="return confirm('Restore {{ cp.id }}? This overwrites current files in {{ section.repo.local_path }} (pre-restore snapshot will be taken automatically).');">
+                        <button type="submit" class="checkpoint-restore-btn">Restore</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .checkpoints-shell { display: flex; flex-direction: column; gap: 22px; max-width: 1100px; }
+  .checkpoints-blurb { color: var(--text-faint); font-size: 13px; max-width: 720px; }
+  .checkpoint-flash {
+    background: var(--bg-elev);
+    border: 1px solid var(--accent, #e7c14b);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .checkpoint-error {
+    background: var(--bg-elev);
+    border: 1px solid #c25;
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .checkpoint-section { display: flex; flex-direction: column; gap: 8px; }
+  .checkpoint-section-h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .checkpoint-repo-name { text-transform: uppercase; letter-spacing: 0.04em; }
+  .checkpoint-repo-path { color: var(--text-faint); font-weight: 400; font-size: 12px; font-family: ui-monospace, monospace; }
+  .checkpoint-empty-row {
+    color: var(--text-faint);
+    font-size: 13px;
+    padding: 14px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
+  }
+  .checkpoint-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .checkpoint-table th {
+    text-align: left;
+    padding: 9px 12px;
+    background: var(--bg);
+    color: var(--text-faint);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+  }
+  .checkpoint-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .checkpoint-table tbody tr:last-child td { border-bottom: none; }
+  .checkpoint-table .checkpoint-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .checkpoint-table code { font-size: 12px; }
+  .checkpoint-restore-btn {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .checkpoint-restore-btn:hover { background: var(--bg-hover); border-color: var(--accent, #e7c14b); }
+  .empty-code {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text);
+    display: inline-block;
+  }
+</style>
+{% endblock %}

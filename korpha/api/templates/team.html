@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Team · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Team{% endblock %}
+{% block body %}
+  <div class="tm-shell">
+    {% if request.query_params.get('hired') %}
+      <div class="tm-flash">
+        ✓ Hired <code>{{ request.query_params.get('hired') }}</code>.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('fired') %}
+      <div class="tm-flash">
+        ✗ Fired <code>{{ request.query_params.get('fired') }}</code>.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+      <div class="tm-flash tm-flash-warn">
+        {{ request.query_params.get('error') }}
+      </div>
+    {% endif %}
+
+    <div class="tm-header">
+      <div>
+        <h1 class="tm-title">Your team</h1>
+        <p class="tm-blurb">
+          C-suite (CEO/CTO/CMO/COO) is auto-hired the first time
+          you talk to Korpha — you can't fire them from here.
+          Specialty workers are explicit hires when there's a
+          recurring task that's eating C-suite cycles.
+        </p>
+      </div>
+      <form method="post" action="/app/team/hire" class="tm-hire-form">
+        <input type="text" name="specialty" placeholder="specialty (e.g. copywriter)"
+               class="tm-hire-input" required pattern="[a-z][a-z0-9_-]*"
+               title="lowercase, hyphens, no spaces" />
+        <button type="submit" class="tm-hire-btn">+ Hire worker</button>
+      </form>
+    </div>
+
+    <section class="tm-section">
+      <h2 class="tm-section-title">C-suite ({{ c_suite|length }})</h2>
+      <table class="tm-table">
+        <thead>
+          <tr><th>Role</th><th>Title</th><th>Hired</th></tr>
+        </thead>
+        <tbody>
+          {% for r in c_suite %}
+            <tr>
+              <td><code>{{ r.role_type.value.upper() }}</code></td>
+              <td>{{ r.title }}</td>
+              <td class="tm-faint">
+                {{ r.hired_at.strftime("%Y-%m-%d") }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="tm-section">
+      <h2 class="tm-section-title">
+        Workers ({{ workers|length }})
+      </h2>
+      {% if workers %}
+        <table class="tm-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Title</th>
+              <th>Specialty</th>
+              <th>Hired</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in workers %}
+              <tr>
+                <td><code>{{ r.id|string|truncate(8, true, '') }}</code></td>
+                <td>{{ r.title }}</td>
+                <td><code>{{ r.specialty }}</code></td>
+                <td class="tm-faint">
+                  {{ r.hired_at.strftime("%Y-%m-%d") }}
+                </td>
+                <td>
+                  <form method="post"
+                        action="/app/team/{{ r.id }}/fire"
+                        onsubmit="return confirm('Fire {{ r.title|e }}?');">
+                    <button type="submit" class="tm-btn tm-btn-danger">
+                      ✗ fire
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="tm-empty">
+          No specialty workers hired. The C-suite handles
+          everything until a recurring task starts dominating
+          their time — then hire a worker for it.
+        </p>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .tm-shell { display: flex; flex-direction: column; gap: 18px; max-width: 980px; }
+  .tm-header { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .tm-title { font-size: 22px; font-weight: 500; margin: 0 0 4px; }
+  .tm-blurb { color: var(--text-faint); font-size: 13px; max-width: 720px; margin: 0; }
+  .tm-hire-form { display: flex; gap: 6px; }
+  .tm-hire-input {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px;
+    border-radius: var(--radius-md); font-size: 13px; min-width: 220px;
+  }
+  .tm-hire-btn {
+    background: var(--accent, #e7c14b); color: var(--bg);
+    padding: 6px 14px; border: none; border-radius: var(--radius-md);
+    font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+
+  .tm-flash {
+    background: var(--bg-elev); border: 1px solid var(--accent, #e7c14b);
+    padding: 10px 14px; border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .tm-flash-warn { border-color: #c25; }
+
+  .tm-section {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 14px 16px;
+  }
+  .tm-section-title {
+    font-size: 13px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text); margin: 0 0 10px;
+  }
+  .tm-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .tm-table th {
+    text-align: left; padding: 6px 10px;
+    color: var(--text-faint); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+  }
+  .tm-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tm-table code {
+    background: var(--bg); padding: 1px 6px;
+    border-radius: 4px; font-size: 11px;
+  }
+  .tm-faint { color: var(--text-faint); }
+  .tm-btn {
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text-faint); padding: 3px 8px;
+    border-radius: 4px; font-size: 11px; cursor: pointer;
+  }
+  .tm-btn-danger:hover { color: #c25; border-color: #c25; }
+  .tm-empty { color: var(--text-faint); font-size: 13px; margin: 0; }
+</style>
+{% endblock %}

@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Disk · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Disk{% endblock %}
+{% block body %}
+  <div class="disk-shell">
+    {% if request.query_params.get('vacuumed') %}
+      <div class="disk-flash">
+        ✓ Vacuumed.
+        Reclaimed <strong>{{ request.query_params.get('reclaimed') }}</strong>
+        ({{ request.query_params.get('blobs') }} orphan blobs,
+        {{ request.query_params.get('tmp') }} tmp files,
+        DB shrank by <strong>{{ request.query_params.get('db_reclaimed') }}</strong>).
+      </div>
+    {% endif %}
+
+    <div class="disk-header">
+      <p class="disk-blurb">
+        Korpha stores its DB, agent-authored skills, cron scripts,
+        background-job logs, and (the big one) workspace checkpoint
+        blobs under <code>~/.korpha</code>. Checkpoint blobs are
+        content-addressed + deduped across snapshots — 20 snapshots
+        of the same project share blobs for files that didn't change.
+      </p>
+      <form method="post" action="/app/disk/vacuum"
+            onsubmit="return confirm('Run vacuum? Reclaims orphan blobs + sqlite slack.');">
+        <button type="submit" class="disk-vacuum-btn">
+          ↻ Vacuum now
+        </button>
+      </form>
+    </div>
+
+    <div class="disk-total">
+      <span class="disk-total-label">Total on disk</span>
+      <span class="disk-total-value">{{ total_human }}</span>
+    </div>
+
+    {% if rows %}
+      <table class="disk-table">
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th class="disk-num">Size</th>
+            <th>Location</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for label, size_human, loc, pct in rows %}
+            <tr>
+              <td>{{ label }}</td>
+              <td class="disk-num">
+                <span class="disk-bar"
+                      style="width: {{ pct }}%"></span>
+                <span class="disk-num-text">{{ size_human }}</span>
+              </td>
+              <td><code>{{ loc }}</code></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">💾</div>
+        <h2>No Korpha data on disk yet</h2>
+        <p>
+          Stores get created the first time you run a Codex job or
+          author a skill.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .disk-shell { display: flex; flex-direction: column; gap: 14px; max-width: 1100px; }
+  .disk-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .disk-blurb { color: var(--text-faint); font-size: 13px; max-width: 720px; }
+  .disk-blurb code { background: var(--bg-elev); padding: 1px 6px; border-radius: 4px; }
+  .disk-vacuum-btn {
+    background: var(--accent, #e7c14b);
+    color: var(--bg);
+    padding: 8px 16px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .disk-vacuum-btn:hover { filter: brightness(1.1); }
+  .disk-flash {
+    background: var(--bg-elev);
+    border: 1px solid var(--accent, #e7c14b);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .disk-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 10px 14px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .disk-total-label {
+    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: 0.05em;
+  }
+  .disk-total-value {
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .disk-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .disk-table th {
+    text-align: left;
+    padding: 9px 12px;
+    background: var(--bg);
+    color: var(--text-faint);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+  }
+  .disk-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .disk-num { position: relative; min-width: 220px; font-variant-numeric: tabular-nums; }
+  .disk-bar {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    background: rgba(231, 193, 75, 0.13);
+    border-right: 1px solid rgba(231, 193, 75, 0.4);
+    pointer-events: none;
+  }
+  .disk-num-text { position: relative; padding: 0 6px; }
+  .disk-table code {
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--text-faint);
+    font-size: 11px;
+  }
+</style>
+{% endblock %}

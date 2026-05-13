@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}Backups · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Backups{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">Backups</h1>
+      <p class="tm-blurb">
+        Your business never disappears. Hourly local snapshots are
+        on automatically. Add off-disk push below so a dead disk
+        doesn't take everything with it.
+      </p>
+    </div>
+    <form method="post" action="/app/backups/snapshot" class="tm-hire-form">
+      <button type="submit" name="full" value="0" class="tm-hire-btn">
+        + Snapshot now
+      </button>
+      <button type="submit" name="full" value="1" class="tm-hire-btn">
+        + Full bundle now
+      </button>
+    </form>
+  </div>
+
+  {% if request.query_params.get('flash') %}
+    <div class="tm-flash">✓ {{ request.query_params.get('flash') }}</div>
+  {% endif %}
+  {% if request.query_params.get('error') %}
+    <div class="tm-flash tm-flash-warn">{{ request.query_params.get('error') }}</div>
+  {% endif %}
+
+  {# ------------------ Off-disk status panel ------------------ #}
+  <section class="tm-section">
+    <h2 class="tm-section-title">Off-disk backup</h2>
+    {% if offdisk_status %}
+      <div class="tm-blurb" style="display:flex; align-items:center; gap:12px;">
+        {% if replicator.running %}
+          <span class="tm-pill tm-pill-active">ACTIVE</span>
+        {% else %}
+          <span class="tm-pill tm-pill-paused">STOPPED</span>
+        {% endif %}
+        <strong>{{ offdisk_status.provider_label }}</strong>
+        <span class="tm-muted">→ {{ offdisk_status.bucket }}</span>
+      </div>
+      <table class="tm-table" style="margin-top:8px;">
+        <tbody>
+          <tr><th>Provider</th><td>{{ offdisk_status.provider_label }}</td></tr>
+          <tr><th>Bucket</th><td><code>{{ offdisk_status.bucket }}</code></td></tr>
+          {% if offdisk_status.endpoint %}
+          <tr><th>Endpoint</th><td><code>{{ offdisk_status.endpoint }}</code></td></tr>
+          {% endif %}
+          <tr><th>Region</th><td><code>{{ offdisk_status.region }}</code></td></tr>
+          <tr><th>Replicator pid</th><td><code>{{ replicator.pid or '—' }}</code></td></tr>
+        </tbody>
+      </table>
+      <form method="post" action="/app/backups/offdisk/toggle" style="display:inline; margin-top:8px;">
+        {% if replicator.running %}
+          <input type="hidden" name="action" value="stop" />
+          <button type="submit" class="tm-hire-btn">Stop replicator</button>
+        {% else %}
+          <input type="hidden" name="action" value="start" />
+          <button type="submit" class="tm-hire-btn">Start replicator</button>
+        {% endif %}
+      </form>
+      <form method="post" action="/app/backups/offdisk/disconnect" style="display:inline; margin-top:8px;"
+            onsubmit="return confirm('Disconnect off-disk push? Local snapshots keep running.')">
+        <button type="submit" class="tm-hire-btn">Disconnect</button>
+      </form>
+    {% else %}
+      <p class="tm-blurb">
+        Not configured yet. Pick a provider below — takes about
+        2 minutes. Your credentials are encrypted with the local
+        master key before being saved; even someone with read
+        access to the disk can't read them.
+      </p>
+
+      <form method="post" action="/app/backups/offdisk/configure"
+            id="offdisk-form"
+            x-data="{provider: ''}" class="tm-cred-form">
+        <div class="tm-cred-row">
+          <label>Provider
+            <select name="provider" required x-model="provider">
+              <option value="">— pick one —</option>
+              {% for key, p in providers.items() %}
+                <option value="{{ key }}">{{ p.label }} — {{ p.cost_note }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+
+        <div class="tm-cred-row" x-show="provider">
+          <label>Bucket name
+            <input type="text" name="bucket" required
+                   placeholder="e.g. marketro-backups" />
+          </label>
+          <label x-show="['cloudflare_r2'].includes(provider)">
+            Cloudflare account ID
+            <input type="text" name="account_id"
+                   placeholder="e.g. a1b2c3d4e5f6g7h8" />
+          </label>
+          <label x-show="['backblaze_b2', 'aws_s3', 'minio'].includes(provider)">
+            Region
+            <input type="text" name="region"
+                   placeholder="e.g. us-west-002" />
+          </label>
+        </div>
+
+        <div class="tm-cred-row" x-show="provider">
+          <label>Access key ID
+            <input type="text" name="access_key_id" required autocomplete="off"
+                   placeholder="paste here — encrypted before saving" />
+          </label>
+          <label>Secret access key
+            <input type="password" name="secret_access_key" required autocomplete="off"
+                   placeholder="paste here — encrypted before saving" />
+          </label>
+        </div>
+
+        <div class="tm-cred-row" x-show="provider === 'minio'">
+          <label>Endpoint URL (MinIO only)
+            <input type="text" name="endpoint_override"
+                   placeholder="https://minio.your-host.com" />
+          </label>
+        </div>
+
+        <div class="tm-cred-row" x-show="provider">
+          <label style="flex: 0 0 auto;">
+            <input type="checkbox" name="verify" value="1" checked />
+            Verify creds against the bucket before saving (recommended)
+          </label>
+          <button type="submit" class="tm-hire-btn">
+            Save + activate
+          </button>
+        </div>
+
+        <p class="tm-blurb" x-show="provider" style="margin-top:8px;">
+          Need to create the bucket + key first?
+          <span x-show="provider === 'cloudflare_r2'">
+            <a href="https://developers.cloudflare.com/r2/buckets/create-buckets/" target="_blank">
+              Cloudflare R2 setup
+            </a>
+          </span>
+          <span x-show="provider === 'backblaze_b2'">
+            <a href="https://www.backblaze.com/b2/cloud-storage.html" target="_blank">
+              Backblaze B2 setup
+            </a>
+          </span>
+          <span x-show="provider === 'aws_s3'">
+            <a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/creating-bucket.html" target="_blank">
+              AWS S3 setup
+            </a>
+          </span>
+          — opens in a new tab. Make a bucket + an application/access
+          key scoped only to that bucket, then paste the credentials here.
+        </p>
+      </form>
+    {% endif %}
+  </section>
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">
+      DB snapshots ({{ snapshots|length }})
+      <span class="tm-muted">— point-in-time copies of your data</span>
+    </h2>
+    {% if not snapshots %}
+      <p class="tm-blurb">
+        No snapshots yet. Click <strong>+ Snapshot now</strong> above,
+        or set up the hourly cron with <code>korpha cron add-backup-snapshot</code>.
+      </p>
+    {% else %}
+      <table class="tm-table">
+        <thead>
+          <tr>
+            <th>Filename</th><th>Size</th><th>Age</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in snapshots %}
+            <tr>
+              <td><code>{{ b.filename }}</code></td>
+              <td class="tm-muted">{{ '{:,}'.format(b.size_bytes) }} bytes</td>
+              <td class="tm-muted">
+                {% set h = (b.age.total_seconds() / 3600)|int %}
+                {% if h < 1 %}&lt; 1h ago
+                {% elif h < 48 %}{{ h }}h ago
+                {% else %}{{ (h // 24) }}d ago
+                {% endif %}
+              </td>
+              <td>
+                <form method="post" action="/app/backups/restore"
+                      onsubmit="return confirm('Replace live data with {{ b.filename }}? A safety copy of the current data is saved automatically.')"
+                      style="display:inline">
+                  <input type="hidden" name="snapshot" value="{{ b.filename }}" />
+                  <button type="submit" class="tm-hire-btn">Restore</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">
+      Full bundles ({{ bundles|length }})
+      <span class="tm-muted">— everything (data + secrets vault + skills)</span>
+    </h2>
+    {% if not bundles %}
+      <p class="tm-blurb">
+        No full bundles yet. These are what you'd extract on a new
+        machine if your laptop died.
+      </p>
+    {% else %}
+      <table class="tm-table">
+        <thead>
+          <tr>
+            <th>Filename</th><th>Size</th><th>Age</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in bundles %}
+            <tr>
+              <td><code>{{ b.filename }}</code></td>
+              <td class="tm-muted">{{ '{:,}'.format(b.size_bytes) }} bytes</td>
+              <td class="tm-muted">
+                {% set h = (b.age.total_seconds() / 3600)|int %}
+                {% if h < 24 %}{{ h }}h ago
+                {% else %}{{ (h // 24) }}d ago
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

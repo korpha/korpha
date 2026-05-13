@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Costs · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Costs{% endblock %}
+{% block body %}
+  <div class="page-intro">
+    <h1>Costs</h1>
+    <p class="page-intro-sub">Inference spend, broken down by tier and provider. Hidden by default — you came here on purpose.</p>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="card">
+      <div class="card-title">Today</div>
+      <div class="kpi-amount">${{ "%.4f"|format(spend.today) }}</div>
+      <div class="card-sub">{{ spend.today_calls }} calls</div>
+    </div>
+    <div class="card">
+      <div class="card-title">This month</div>
+      <div class="kpi-amount">${{ "%.4f"|format(spend.month) }}</div>
+      <div class="card-sub">{{ spend.month_calls }} calls</div>
+    </div>
+    <div class="card">
+      <div class="card-title">All time</div>
+      <div class="kpi-amount">${{ "%.4f"|format(spend.total) }}</div>
+      <div class="card-sub">{{ spend.total_calls }} calls</div>
+    </div>
+    <div class="card card-savings">
+      <div class="card-title">Saved vs Sonnet</div>
+      <div class="kpi-amount">${{ "%.2f"|format(spend.saved_vs_sonnet) }}</div>
+      <div class="card-sub">DeepSeek V4 Pro/Flash baseline</div>
+    </div>
+  </div>
+
+  <div class="card cost-table">
+    <div class="card-title">By tier</div>
+    <table>
+      <thead>
+        <tr><th>Tier</th><th>Calls</th><th>Input tokens</th><th>Output tokens</th><th>Spend</th></tr>
+      </thead>
+      <tbody>
+        {% for row in by_tier %}
+          <tr>
+            <td><code>{{ row.tier }}</code></td>
+            <td>{{ row.calls }}</td>
+            <td>{{ row.input_tokens }}</td>
+            <td>{{ row.output_tokens }}</td>
+            <td>${{ "%.4f"|format(row.cost) }}</td>
+          </tr>
+        {% endfor %}
+        {% if not by_tier %}
+          <tr><td colspan="5" class="empty-cell">No spend recorded yet.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+.page-intro { margin-bottom: 22px; }
+.page-intro h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+.page-intro-sub { color: var(--text-dim); margin: 0; font-size: 13px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.kpi-amount { font-size: 22px; font-weight: 600; color: var(--text); margin-top: 4px; }
+.card-savings { border-color: var(--green-soft); }
+.card-savings .kpi-amount { color: var(--green); }
+.cost-table table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+.cost-table th, .cost-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+.cost-table th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.cost-table td { color: var(--text); }
+.empty-cell { color: var(--text-faint); font-style: italic; text-align: center; }
+</style>
+{% endblock %}

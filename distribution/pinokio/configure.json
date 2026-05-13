@@ -1,0 +1,15 @@
+{
+  "version": "3.0",
+  "run": [
+    {
+      "id": "config",
+      "method": "shell.run",
+      "params": {
+        "message": [
+          "echo Running interactive provider wizard. Pick a provider, paste your API key, set models per tier.",
+          "{{cwd}}/.uv-bin/uv tool run korpha config"
+        ]
+      }
+    }
+  ]
+}

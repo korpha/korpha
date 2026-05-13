@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Skills · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Skills{% endblock %}
+{% block body %}
+  <div class="sk-shell">
+    <div class="sk-header">
+      <div>
+        <h1 class="sk-title">Skill marketplace</h1>
+        <p class="sk-blurb">
+          Reusable, parameterized capabilities the cofounder calls
+          to do real work. Built-in skills ship pre-approved.
+          User-authored YAML lives in <code>~/.korpha/skills/</code>.
+          Agent-authored skills go through approval before landing
+          in <code>~/.korpha/skills/agent_created/</code>.
+        </p>
+      </div>
+      <form method="get" action="/app/skills" class="sk-search-form">
+        <input type="search" name="q" value="{{ query }}"
+               placeholder="search name + description…"
+               class="sk-search-input" />
+        <button type="submit" class="sk-search-btn">Search</button>
+      </form>
+    </div>
+
+    <div class="sk-stat">
+      {% if query %}
+        <strong>{{ total }}</strong> skill{{ '' if total == 1 else 's' }}
+        match {{ query|tojson }}.
+        {% if total %}
+          <a href="/app/skills" class="sk-clear">clear</a>
+        {% endif %}
+      {% else %}
+        <strong>{{ total }}</strong> skill{{ '' if total == 1 else 's' }}
+        loaded.
+      {% endif %}
+    </div>
+
+    {% if buckets %}
+      {% for bucket in buckets %}
+        <section class="sk-bucket">
+          <div class="sk-bucket-head">
+            <h2 class="sk-bucket-title">
+              {{ bucket.label }}
+              <span class="sk-bucket-count">
+                {{ bucket.skills|length }}
+              </span>
+            </h2>
+            {% if bucket.blurb %}
+              <p class="sk-bucket-blurb">{{ bucket.blurb }}</p>
+            {% endif %}
+          </div>
+          <div class="sk-grid">
+            {% for s in bucket.skills %}
+              <div class="sk-card">
+                <div class="sk-card-head">
+                  <code class="sk-card-name">{{ s.name }}</code>
+                  <span class="sk-card-tier sk-tier-{{ s.tier }}">
+                    {{ s.tier }}
+                  </span>
+                </div>
+                <p class="sk-card-desc">{{ s.description }}</p>
+                <div class="sk-card-meta">
+                  <span>domain: <code>{{ s.domain }}</code></span>
+                  <span>params: {{ s.param_count }}</span>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">⬢</div>
+        <h2>
+          {% if query %}
+            No skills match {{ query|tojson }}.
+          {% else %}
+            No skills loaded.
+          {% endif %}
+        </h2>
+        {% if query %}
+          <p>
+            <a href="/app/skills">Clear the search</a> to see
+            everything that's installed.
+          </p>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .sk-shell { display: flex; flex-direction: column; gap: 18px; max-width: 1100px; }
+  .sk-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .sk-title { font-size: 22px; font-weight: 500; margin: 0 0 6px; }
+  .sk-blurb { color: var(--text-faint); font-size: 13px; max-width: 720px; margin: 0; }
+  .sk-blurb code {
+    background: var(--bg-elev); padding: 1px 6px; border-radius: 4px;
+    font-size: 12px;
+  }
+
+  .sk-search-form { display: flex; gap: 6px; }
+  .sk-search-input {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    min-width: 240px;
+  }
+  .sk-search-btn {
+    background: var(--accent, #e7c14b);
+    color: var(--bg);
+    border: none;
+    padding: 6px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .sk-clear {
+    color: var(--text-faint);
+    margin-left: 8px;
+    font-size: 12px;
+  }
+
+  .sk-stat {
+    color: var(--text-faint);
+    font-size: 13px;
+  }
+  .sk-stat strong { color: var(--text); }
+
+  .sk-bucket {
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .sk-bucket-head { margin-bottom: 12px; }
+  .sk-bucket-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sk-bucket-count {
+    background: var(--bg);
+    color: var(--text-faint);
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 400;
+  }
+  .sk-bucket-blurb {
+    color: var(--text-faint);
+    font-size: 12px;
+    margin: 0;
+    max-width: 720px;
+  }
+
+  .sk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 8px;
+  }
+  .sk-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .sk-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .sk-card-name {
+    font-size: 12px;
+    color: var(--text);
+    background: transparent;
+    padding: 0;
+  }
+  .sk-card-tier {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+  .sk-tier-workhorse {
+    background: rgba(160, 220, 120, 0.18);
+    color: #9ec46a;
+  }
+  .sk-tier-pro {
+    background: rgba(231, 193, 75, 0.2);
+    color: #e7c14b;
+  }
+  .sk-tier-consultant {
+    background: rgba(204, 51, 102, 0.2);
+    color: #c25;
+  }
+  .sk-tier-vision {
+    background: rgba(80, 140, 220, 0.2);
+    color: #5cf;
+  }
+  .sk-card-desc {
+    color: var(--text-faint);
+    font-size: 12px;
+    margin: 4px 0 6px;
+    line-height: 1.4;
+  }
+  .sk-card-meta {
+    display: flex;
+    gap: 12px;
+    color: var(--text-faint);
+    font-size: 11px;
+  }
+  .sk-card-meta code {
+    background: var(--bg-elev);
+    padding: 0 4px;
+    border-radius: 3px;
+  }
+</style>
+{% endblock %}

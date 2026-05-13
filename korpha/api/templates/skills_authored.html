@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Authored skills · {{ business.name }} · Korpha{% endblock %}
+{% block breadcrumbs %}Authored skills{% endblock %}
+{% block body %}
+<div class="authored-shell">
+  <div class="authored-header">
+    <div>
+      <h1 class="authored-title">Skills your agent has authored</h1>
+      <p class="authored-sub">
+        Each row is a skill the cofounder drafted on your request and
+        you approved. They live at
+        <code>~/.korpha/skills/agent_created/</code>. Reviewing or
+        deleting one doesn't remove the original approval — it just
+        unloads the runtime + clears the files. The next request that
+        needs the same capability will draft a fresh one.
+      </p>
+    </div>
+    <a href="/app/skills" class="authored-back">← All skills</a>
+  </div>
+
+  {% if not authored_skills %}
+    <div class="authored-empty">
+      <strong>No authored skills yet.</strong>
+      Ask your cofounder for a capability that doesn't exist
+      (<a href="/app/chat">in chat</a>) — it'll propose one and once
+      you approve, it'll show up here.
+    </div>
+  {% else %}
+    <ul class="authored-list">
+      {% for s in authored_skills %}
+        <li class="authored-row">
+          <div class="authored-row-head">
+            <span class="authored-row-name">{{ s.name }}</span>
+            <span class="authored-row-kind authored-row-kind-{{ s.kind }}">
+              {{ s.kind }}
+            </span>
+            <span class="authored-row-meta">
+              {{ (s.size_bytes / 1024) | round(1) }} KB ·
+              {{ s.mtime.strftime('%b %d, %H:%M UTC') }}
+            </span>
+          </div>
+          <div class="authored-row-desc">{{ s.description }}</div>
+          <div class="authored-row-actions">
+            <a href="/app/skills/authored/{{ s.kind }}/{{ s.slug }}/source"
+               class="authored-action authored-action-view">
+              View source
+            </a>
+            <form method="post"
+                  action="/app/skills/authored/{{ s.kind }}/{{ s.slug }}/delete"
+                  onsubmit="return confirm('Delete authored skill {{ s.name }}? The files are removed and the runtime drops it.');"
+                  class="authored-action-form">
+              <button type="submit"
+                      class="authored-action authored-action-delete">
+                Delete
+              </button>
+            </form>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>
+
+<style>
+  .authored-shell { max-width: 880px; margin: 0 auto; padding: 0 4px 24px; }
+  .authored-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 24px; margin: 4px 0 22px;
+  }
+  .authored-title {
+    font-size: 22px; font-weight: 600; color: var(--text); margin: 0 0 6px;
+  }
+  .authored-sub {
+    color: var(--text-dim); font-size: 13.5px; line-height: 1.55; margin: 0;
+    max-width: 720px;
+  }
+  .authored-sub code {
+    background: var(--bg-elev); padding: 2px 6px; border-radius: 4px;
+    font-size: 12.5px;
+  }
+  .authored-back {
+    color: var(--text-dim); text-decoration: none; font-size: 13px;
+    white-space: nowrap;
+  }
+  .authored-back:hover { color: var(--text); }
+  .authored-empty {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 8px; padding: 28px; text-align: center;
+    color: var(--text-dim); font-size: 14px; line-height: 1.55;
+  }
+  .authored-empty strong { color: var(--text); display: block; margin-bottom: 6px; }
+  .authored-empty a { color: var(--accent); text-decoration: none; }
+  .authored-list {
+    list-style: none; padding: 0; margin: 0;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .authored-row {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .authored-row-head {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .authored-row-name {
+    color: var(--text); font-weight: 600; font-size: 14.5px;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .authored-row-kind {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 8px; border-radius: 999px; font-weight: 700;
+  }
+  .authored-row-kind-yaml {
+    background: rgba(94, 158, 255, 0.16); color: #5e9eff;
+  }
+  .authored-row-kind-python {
+    background: rgba(231, 193, 75, 0.16); color: #e7c14b;
+  }
+  .authored-row-meta {
+    color: var(--text-faint); font-size: 12px; margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .authored-row-desc {
+    color: var(--text-dim); font-size: 13.5px; line-height: 1.5;
+    margin-bottom: 10px;
+  }
+  .authored-row-actions {
+    display: flex; gap: 10px; align-items: center;
+  }
+  .authored-action-form { margin: 0; padding: 0; }
+  .authored-action {
+    display: inline-block; padding: 6px 12px; border-radius: 6px;
+    font-size: 12.5px; font-weight: 600; text-decoration: none;
+    cursor: pointer; border: 1px solid var(--border); background: transparent;
+  }
+  .authored-action-view { color: var(--text); }
+  .authored-action-view:hover { border-color: var(--border-strong); }
+  .authored-action-delete {
+    color: #f5a8a8; border-color: rgba(245, 168, 168, 0.32);
+  }
+  .authored-action-delete:hover {
+    background: rgba(245, 168, 168, 0.08);
+  }
+</style>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Lines · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Lines{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  {% if request.query_params.get('error') %}
+    <div class="tm-flash tm-flash-warn">{{ request.query_params.get('error') }}</div>
+  {% endif %}
+  {% if request.query_params.get('started') %}
+    <div class="tm-flash">
+      ✓ Started business line <code>{{ request.query_params.get('started') }}</code>.
+    </div>
+  {% endif %}
+
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">Business lines</h1>
+      <p class="tm-blurb">
+        Each line is an independent business unit with its own VP,
+        scoped memory, credentials, and kanban. The CEO routes work
+        to the right line. Cooperation between lines is explicit
+        (the ask_about phone-call API + CooperationProposal).
+      </p>
+    </div>
+    <form method="post" action="/app/units/start" class="tm-hire-form">
+      <select name="kind" class="tm-hire-input" required>
+        <option value="">— start a line —</option>
+        {% for k in line_kinds %}
+          <option value="{{ k.value }}">{{ k.label }}</option>
+        {% endfor %}
+      </select>
+      <input type="text" name="name" placeholder="line name (optional)"
+             class="tm-hire-input" />
+      <button type="submit" class="tm-hire-btn">+ Start line</button>
+    </form>
+  </div>
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">All units ({{ units|length }})</h2>
+    {% if not units %}
+      <p class="tm-blurb">
+        No units yet. Click "Start line" above to spawn your first
+        business line. The CEO will hire its VP automatically.
+      </p>
+    {% else %}
+      <table class="tm-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Kind</th><th>Parent</th>
+            <th>Status</th><th>Owner VP</th><th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in units %}
+            <tr>
+              <td><strong>{{ u.name }}</strong>
+                  <div class="tm-muted">
+                    <code>{{ u.id.hex[:8] }}</code>
+                  </div></td>
+              <td><code>{{ u.kind.value }}</code></td>
+              <td>
+                {% if u.parent_id %}
+                  <code>{{ parent_names.get(u.parent_id, '—') }}</code>
+                {% else %}
+                  <span class="tm-muted">root</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="tm-pill tm-pill-{{ u.status.value }}">
+                  {{ u.status.value }}
+                </span>
+              </td>
+              <td>
+                {% if u.owner_agent_role_id %}
+                  {{ vp_titles.get(u.owner_agent_role_id, '—') }}
+                {% else %}
+                  <span class="tm-muted">unowned</span>
+                {% endif %}
+              </td>
+              <td class="tm-muted">{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,105 @@
+# CTO eval fixtures — defaults to ACTION + boring/proven/smallest.
+
+tasks:
+  - id: cto.scope_landing_in_2_days
+    role: cto
+    ask: |
+      Founder picked the niche "Deployment automation for solo Python devs".
+      Need a landing page live in 2 days with a waitlist signup.
+      Plan it.
+    notes: |
+      CTO should pick the boring smallest thing (Carrd / static HTML),
+      not propose Next.js + Vercel + analytics dashboard.
+    assertions:
+      - kind: starts_like_recommendation
+        description: "Leads with the recommendation"
+      - kind: contains_any
+        values:
+          - "carrd"
+          - "static"
+          - "single page"
+          - "html"
+          - "framer"
+          - "smallest"
+          - "v1"
+        case_insensitive: true
+        description: "Picks boring/proven/smallest tech"
+      - kind: contains_any
+        values: ["day 1", "day 2", "by tomorrow", "today", "this week"]
+        case_insensitive: true
+        description: "Concrete timeline within the 2-day budget"
+      - kind: max_count
+        value: "!"
+        max: 1
+
+  - id: cto.delegate_typo_fix
+    role: cto
+    ask: |
+      There's a typo in the README — "Stripe" is spelled "Stripee" on line 14.
+      Fix it.
+    notes: |
+      Even tiny work goes to a Worker — copywriter would be the natural
+      assignee. CTO shouldn't show the diff itself.
+    assertions:
+      - kind: not_contains
+        values:
+          - "diff"
+          - "```"
+          - "let me write"
+          - "I'll edit"
+        case_insensitive: true
+        description: "Doesn't write the fix inline"
+      - kind: contains_any
+        values:
+          - "worker"
+          - "copywriter"
+          - "delegate"
+          - "assign"
+          - "route to"
+          - "send to"
+          - "hand off"
+          - "task"
+        case_insensitive: true
+        description: "Mentions delegating, even for trivial work"
+      - kind: max_words
+        max: 200
+        description: "Brief response for trivial task"
+
+  - id: cto.options_when_blocked
+    role: cto
+    ask: |
+      Need to pick a hosting target for the MVP. Founder didn't say
+      what they want.
+    notes: |
+      CTO is missing input. MUST give options + a recommendation, never
+      just punt back to the Founder.
+    assertions:
+      - kind: starts_like_recommendation
+        description: "Leads with the recommendation"
+      - kind: numbered_or_bulleted_list
+        min_items: 2
+        description: "Lists ≥2 options"
+      - kind: contains_any
+        values:
+          - "recommend"
+          - "I'd pick"
+          - "I'd go"
+          - "I'd choose"
+          - "go with"
+          - "suggest"
+          - "default to"
+          - "lean toward"
+          - "I'd lean"
+          - "my pick"
+          - "my call"
+          - "winner is"
+          - "best fit"
+        case_insensitive: true
+        description: "Names a concrete preference, not just options"
+      - kind: not_contains
+        values:
+          - "what do you want"
+          - "let me know which"
+          - "your call"
+        case_insensitive: true
+        description: "Doesn't punt the decision back"

@@ -1,0 +1,118 @@
+# CEO eval fixtures.
+#
+# Each task is a founder-ask we expect the CEO to handle. Assertions
+# encode the patterns from docs/PROMPT_AUDIT.md — leads with
+# recommendation, delegates, doesn't ask "what do you want", no
+# corporate warm-ups, etc.
+
+tasks:
+  - id: ceo.first_plan
+    role: ceo
+    ask: |
+      I have $2k savings, ~10h/week, and I want $5k/mo side income in 6 months.
+      I know Python, B2B SaaS, indie marketing. Plan it.
+    notes: |
+      Founder asks for a plan from scratch. CEO should propose, not bounce
+      the question back, and tag at least one Director for delegation.
+    assertions:
+      - kind: starts_like_recommendation
+        min_words: 6
+        description: "Leads with the call, not preamble"
+      - kind: not_contains
+        values:
+          - "what do you want"
+          - "what would you like"
+          - "as an ai"
+          - "I hope this finds you well"
+        case_insensitive: true
+        description: "No bouncing-back / no corporate warm-up"
+      - kind: contains_any
+        values: ["[CTO]", "[CMO]", "[COO]"]
+        description: "Tags at least one Director for delegation"
+      - kind: max_count
+        value: "!"
+        max: 2
+        description: "No exclamation spam"
+      - kind: numbered_or_bulleted_list
+        min_items: 3
+        max_items: 12
+        description: "Has 3-12 reasons / steps as a list"
+      - kind: regex_match
+        pattern: "(this week|next week|next 7 days|first week)"
+        case_insensitive: true
+        description: "Names a single concrete next-week action"
+
+  - id: ceo.delegate_dont_diy
+    role: ceo
+    ask: |
+      The signup flow has a bug — users can't complete the form.
+      Can you fix it?
+    notes: |
+      The MUST-NOT-write-code rule: CEO should delegate to CTO, not
+      offer to look at the code itself.
+    assertions:
+      - kind: contains_any
+        values: ["[CTO]", "delegate", "CTO will", "I'll have the CTO"]
+        case_insensitive: true
+        description: "Routes to CTO"
+      - kind: not_contains
+        values:
+          - "let me look at the code"
+          - "I'll fix"
+          - "I'll dig into"
+          - "I'll write"
+        case_insensitive: true
+        description: "Doesn't roll up sleeves itself"
+      - kind: starts_like_recommendation
+        description: "Leads with the call (delegating IS the call)"
+
+  - id: ceo.pushback_with_better_path
+    role: ceo
+    ask: |
+      Let's blow $3k on Twitter ads to drive traffic to the landing page.
+    notes: |
+      Founder proposes something dumb. CEO must push back with a *better*
+      path, not just say "no" or "sure, let's go".
+    assertions:
+      - kind: not_contains
+        values:
+          - "Sure, let's"
+          - "Great idea"
+          - "Sounds good"
+        case_insensitive: true
+        description: "Doesn't rubber-stamp"
+      - kind: contains_any
+        values:
+          - "instead"
+          - "alternative"
+          - "before"
+          - "test"
+          - "try"
+          - "smaller"
+        case_insensitive: true
+        description: "Proposes a counter — better path"
+      - kind: starts_like_recommendation
+        description: "Leads with the recommendation"
+      - kind: not_contains
+        values: ["I cannot", "I won't", "no."]
+        case_insensitive: true
+        description: "Doesn't dead-end with 'no'"
+
+  - id: ceo.brevity_on_simple_yes_no
+    role: ceo
+    ask: |
+      Quick check: should we ship this landing page if the headline
+      is still TBD, or wait?
+    notes: |
+      Match-intensity-to-stakes rule. Short question = short answer.
+    assertions:
+      - kind: max_words
+        max: 200
+        description: "Stays brief — under 200 words"
+      - kind: starts_like_recommendation
+        min_words: 2
+        description: "Leads with the call (ship or wait — terse is correct)"
+      - kind: not_contains
+        values: ["I hope this", "great question", "happy to help"]
+        case_insensitive: true
+        description: "No filler"

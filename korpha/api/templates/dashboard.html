@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Dashboard{% endblock %}
+{% block body %}
+  {# First-day banner: when the chain just produced 3-4 approvals and
+     the Founder hasn't acted on any of them yet, make sure they
+     notice. Disappears as soon as anything is approved/rejected. #}
+  {% if first_day_chain_count and first_day_chain_count > 0 %}
+    <section class="first-day-banner">
+      <div class="first-day-eyebrow">Your cofounder shipped {{ first_day_chain_count }} drafts</div>
+      <div class="first-day-body">
+        Validation report, landing copy{% if first_day_has_stripe %}, Stripe payment link{% endif %},
+        and cold-email opener variants are queued for your review.
+      </div>
+      <a class="first-day-cta" href="/app/approvals">Review queue →</a>
+    </section>
+  {% endif %}
+
+  <section class="dash-section">
+    <div class="dash-section-title">Agents</div>
+    {% if all_agents %}
+      <div class="agent-row">
+        {% for a in all_agents %}
+          <a class="agent-card" href="/app/agents/{{ a.id }}">
+            <div class="agent-head">
+              <span class="agent-avatar">{{ a.title[0] }}</span>
+              <div class="agent-head-text">
+                <div class="agent-name">{{ a.title }}</div>
+                <div class="agent-role">{{ a.role_type }}</div>
+              </div>
+              <span class="pill pill-{{ a.status_class }}">{{ a.status_label }}</span>
+            </div>
+            {% if a.current_task_title %}
+              <div class="agent-task">
+                <span class="agent-task-ref">{{ a.current_task_ref }}</span>
+                <span class="agent-task-title">{{ a.current_task_title }}</span>
+              </div>
+            {% else %}
+              <div class="agent-task agent-task-idle">No active task</div>
+            {% endif %}
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">●</div>
+        <h2>No agents yet</h2>
+        <p>Talk to the cofounder via chat or Telegram to hire your first one.</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="kpi-grid">
+    <div class="card">
+      <div class="card-title">Agents enabled</div>
+      <div class="kpi-amount">{{ kpis.agents_enabled }}</div>
+      <div class="card-sub">{{ kpis.agents_paused }} paused</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Tasks in progress</div>
+      <div class="kpi-amount">{{ kpis.tasks_in_progress }}</div>
+      <div class="card-sub">{{ kpis.tasks_blocked }} blocked</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Spend this month</div>
+      <div class="kpi-amount">${{ "%.4f"|format(kpis.spend_month) }}</div>
+      <div class="card-sub">unlimited budget</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pending approvals</div>
+      <div class="kpi-amount">{{ kpis.approvals_pending }}</div>
+      <div class="card-sub">awaiting your call</div>
+    </div>
+  </section>
+
+  <section class="charts-grid">
+    <div class="card">
+      <div class="chart-title">Run activity <span class="chart-sub">last 14 days</span></div>
+      {% set _max = charts.run_activity|map(attribute='value')|max %}
+      <svg class="bar-chart" viewBox="0 0 280 60" preserveAspectRatio="none">
+        {% for row in charts.run_activity %}
+          {% set h = (row.value / _max * 50)|round|int if _max else 0 %}
+          <rect x="{{ loop.index0 * 20 + 2 }}" y="{{ 55 - h }}" width="16" height="{{ h or 1 }}"
+                fill="var(--accent)" opacity="0.85" />
+        {% endfor %}
+      </svg>
+      <div class="chart-foot">
+        <span>{{ charts.run_activity[0].label }}</span>
+        <span>{{ charts.run_activity|map(attribute='value')|sum }} runs</span>
+        <span>{{ charts.run_activity[-1].label }}</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="chart-title">Issues by status</div>
+      {% if charts.issues_by_status %}
+        <div class="status-chart">
+          {% for row in charts.issues_by_status %}
+            <div class="status-row">
+              <span class="status-label pill pill-{{ row.key|replace('cancelled', 'done') }}">{{ row.label }}</span>
+              <span class="status-bar" style="width: {{ (row.value / charts.issues_by_status[0].value * 100)|round|int if charts.issues_by_status[0].value else 0 }}%"></span>
+              <span class="status-count">{{ row.value }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="chart-empty">No issues yet</div>
+      {% endif %}
+    </div>
+    <div class="card">
+      <div class="chart-title">Spend <span class="chart-sub">last 14 days</span></div>
+      {% set spend_max = charts.spend|map(attribute='value')|max %}
+      <svg class="bar-chart" viewBox="0 0 280 60" preserveAspectRatio="none">
+        {% for row in charts.spend %}
+          {% set h = (row.value / spend_max * 50)|round|int if spend_max else 0 %}
+          <rect x="{{ loop.index0 * 20 + 2 }}" y="{{ 55 - h }}" width="16" height="{{ h or 1 }}"
+                fill="var(--green)" opacity="0.85" />
+        {% endfor %}
+      </svg>
+      <div class="chart-foot">
+        <span>{{ charts.spend[0].label }}</span>
+        <span>${{ "%.4f"|format(charts.spend|map(attribute='value')|sum) }} total</span>
+        <span>{{ charts.spend[-1].label }}</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="bottom-grid">
+    <div>
+      <div class="dash-section-title">Recent activity</div>
+      {% if recent_events %}
+        <div class="activity-list">
+          {% for e in recent_events %}
+            <div class="activity-row">
+              <span class="activity-actor">{{ e.actor_label }}</span>
+              <span class="activity-event">{{ e.event_label }}</span>
+              <span class="activity-time">{{ e.time_label }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-line">Quiet so far.</p>
+      {% endif %}
+    </div>
+    <div>
+      <div class="dash-section-title">Recent tasks</div>
+      {% if recent_tasks %}
+        <div class="activity-list">
+          {% for t in recent_tasks %}
+            <a class="activity-row" href="/app/issues/{{ t.ref }}">
+              <span class="activity-actor"><code>{{ t.ref }}</code></span>
+              <span class="pill pill-{{ t.status_class }}">{{ t.status_label }}</span>
+              <span class="activity-event">{{ t.title }}</span>
+              <span class="activity-time">{{ t.created_label }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="empty-line">No tasks yet.</p>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}
+{% block scripts %}
+<style>
+.first-day-banner {
+  background: linear-gradient(135deg, rgba(231, 193, 75, 0.12), rgba(231, 193, 75, 0.04));
+  border: 1px solid rgba(231, 193, 75, 0.3);
+  border-radius: var(--radius-md);
+  padding: 18px 22px;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.first-day-eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent, #e7c14b); font-weight: 600; }
+.first-day-body { color: var(--text); font-size: 14px; flex: 1; line-height: 1.5; min-width: 220px; }
+.first-day-cta { background: var(--accent, #e7c14b); color: #15161a; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 13px; text-decoration: none; }
+.first-day-cta:hover { filter: brightness(1.05); }
+
+.dash-section { margin-bottom: 22px; }
+.dash-section-title { font-size: 11px; font-weight: 600; color: var(--text-faint); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+.agent-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.agent-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; transition: border-color 80ms; }
+.agent-card:hover { border-color: var(--border-strong); }
+.agent-head { display: flex; align-items: center; gap: 10px; }
+.agent-head-text { flex: 1; min-width: 0; }
+.agent-avatar { width: 28px; height: 28px; border-radius: 7px; background: var(--bg-active); display: inline-flex; align-items: center; justify-content: center; font-weight: 600; }
+.agent-name { font-size: 13.5px; font-weight: 500; color: var(--text); }
+.agent-role { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.agent-task { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-top: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12.5px; }
+.agent-task-ref { font-family: ui-monospace, Menlo, monospace; color: var(--text-faint); font-size: 11.5px; }
+.agent-task-title { color: var(--text); }
+.agent-task-idle { color: var(--text-faint); font-style: italic; justify-content: center; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 22px; }
+.kpi-amount { font-size: 22px; font-weight: 600; color: var(--text); margin-top: 4px; }
+
+.charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; margin-bottom: 22px; }
+.chart-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.chart-sub { font-size: 11.5px; color: var(--text-faint); font-weight: 400; margin-left: 6px; }
+.chart-empty { color: var(--text-faint); font-style: italic; padding: 16px 0; text-align: center; font-size: 12.5px; }
+.chart-foot { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); margin-top: 4px; }
+
+.bar-chart { width: 100%; height: 60px; display: block; margin-top: 4px; }
+
+.status-chart { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+.status-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.status-label { min-width: 96px; text-align: center; }
+.status-bar { height: 6px; background: var(--accent-soft); border-radius: 3px; min-width: 4px; }
+.status-count { color: var(--text); font-weight: 500; min-width: 20px; text-align: right; }
+
+.bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.activity-list { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.activity-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--bg-elev); }
+.activity-row + .activity-row { border-top: 1px solid var(--border); }
+.activity-row:hover { background: var(--bg-hover); }
+.activity-actor { color: var(--text); font-weight: 500; min-width: 70px; font-size: 13px; }
+.activity-event { flex: 1; color: var(--text-dim); font-size: 13px; }
+.activity-time { color: var(--text-faint); font-size: 12px; }
+code { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--text-faint); }
+
+.empty-line { color: var(--text-faint); font-size: 13px; padding: 8px 0; }
+
+@media (max-width: 800px) {
+  .bottom-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}

@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}New cron · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}<a href="/app/cron">Cron</a> / New{% endblock %}
+{% block body %}
+  <div class="cron-new-shell">
+    <p class="cron-blurb">
+      Create an agentless cron job. Runs on schedule, pings a
+      channel with stdout. <strong>$0 token cost per tick.</strong>
+      Empty stdout = silent (watchdog pattern). Failure = ❌ alert.
+    </p>
+
+    {% if error %}
+      <div class="cron-flash cron-flash-warn">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/app/cron/new" class="cron-form">
+      <div class="cron-field">
+        <label for="name">Name</label>
+        <input type="text" name="name" id="name" required
+               value="{{ form.name }}"
+               placeholder="memory-watchdog"
+               pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,59}" />
+        <div class="cron-field-hint">
+          Short slug. Letters / digits / <code>._-</code> only,
+          1–60 chars, must start with alphanumeric.
+        </div>
+      </div>
+
+      <div class="cron-field-row">
+        <div class="cron-field">
+          <label for="cadence">Cadence</label>
+          <input type="text" name="cadence" id="cadence" required
+                 value="{{ form.cadence }}" placeholder="every 12h" />
+          <div class="cron-field-hint">
+            <code>every 5m</code> / <code>every 12h</code> / <code>every 7d</code>
+          </div>
+        </div>
+        <div class="cron-field">
+          <label for="extension">Extension</label>
+          <select name="extension" id="extension">
+            <option value=".sh" {% if form.extension == '.sh' %}selected{% endif %}>.sh — bash</option>
+            <option value=".bash" {% if form.extension == '.bash' %}selected{% endif %}>.bash</option>
+            <option value=".py" {% if form.extension == '.py' %}selected{% endif %}>.py — python</option>
+          </select>
+          <div class="cron-field-hint">
+            Drives the interpreter. No need for a shebang in the script.
+          </div>
+        </div>
+      </div>
+
+      <div class="cron-field">
+        <label for="script_content">Script body</label>
+        <textarea name="script_content" id="script_content" required
+                  rows="14" spellcheck="false"
+                  placeholder="# bash example: alert when RAM > 80%
+free -m | awk 'NR==2 { used=$3; total=$2; pct=used/total*100; if (pct > 80) printf &quot;memory at %.0f%%\n&quot;, pct }'">{{ form.script_content }}</textarea>
+        <div class="cron-field-hint">
+          Print to stdout to ping the channel. Print nothing to
+          stay silent. Exit non-zero to alert the founder.
+        </div>
+      </div>
+
+      <div class="cron-field-row">
+        <div class="cron-field">
+          <label for="deliver">Delivery channel</label>
+          <select name="deliver" id="deliver">
+            <option value="" {% if not form.deliver %}selected{% endif %}>none — log-only</option>
+            <option value="email" {% if form.deliver == 'email' %}selected{% endif %}>email</option>
+            <option value="telegram" {% if form.deliver == 'telegram' %}selected{% endif %}>telegram</option>
+          </select>
+          <div class="cron-field-hint">
+            Where stdout goes when the script ships output.
+          </div>
+        </div>
+        <div class="cron-field">
+          <label for="recipient">Recipient</label>
+          <input type="text" name="recipient" id="recipient"
+                 value="{{ form.recipient }}"
+                 placeholder="mike@example.com or chat_id" />
+          <div class="cron-field-hint">
+            Email address for email; <code>chat_id</code> for telegram.
+            Required if a delivery channel is set.
+          </div>
+        </div>
+      </div>
+
+      <div class="cron-form-actions">
+        <a href="/app/cron" class="cron-cancel">cancel</a>
+        <button type="submit" class="cron-submit">Create cron</button>
+      </div>
+    </form>
+
+    <p class="cron-blurb cron-blurb-dim">
+      Jobs run when <code>korpha tick --watch</code> (or a system
+      cron line) is running. Once created, you'll see it in
+      <a href="/app/cron">/app/cron</a>.
+    </p>
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .cron-new-shell { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+  .cron-blurb { color: var(--text-faint); font-size: 13px; max-width: 720px; }
+  .cron-blurb-dim { color: var(--text-faint); font-size: 12px; }
+  .cron-blurb code { background: var(--bg-elev); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .cron-flash {
+    background: var(--bg-elev);
+    border: 1px solid var(--accent, #e7c14b);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .cron-flash-warn { border-color: #c25; }
+  .cron-form { display: flex; flex-direction: column; gap: 14px; }
+  .cron-field { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+  .cron-field label { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+  .cron-field-row { display: flex; gap: 12px; }
+  .cron-field input,
+  .cron-field select,
+  .cron-field textarea {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 9px 12px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .cron-field textarea {
+    font-family: ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .cron-field input:focus,
+  .cron-field select:focus,
+  .cron-field textarea:focus {
+    outline: 2px solid var(--accent, #e7c14b);
+    outline-offset: -1px;
+  }
+  .cron-field-hint { color: var(--text-faint); font-size: 11px; }
+  .cron-field-hint code { background: var(--bg-elev); padding: 1px 4px; border-radius: 3px; }
+  .cron-form-actions { display: flex; gap: 12px; justify-content: flex-end; }
+  .cron-cancel {
+    color: var(--text-faint);
+    padding: 9px 16px;
+    text-decoration: none;
+    align-self: center;
+  }
+  .cron-cancel:hover { color: var(--text); }
+  .cron-submit {
+    background: var(--accent, #e7c14b);
+    color: var(--bg);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .cron-submit:hover { filter: brightness(1.1); }
+</style>
+{% endblock %}

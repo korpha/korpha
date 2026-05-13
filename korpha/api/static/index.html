@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Korpha</title>
+<style>
+  :root {
+    --bg: #0e0f12;
+    --panel: #16181d;
+    --panel-2: #1d2128;
+    --line: #262a33;
+    --text: #d8d9dd;
+    --muted: #8a8d96;
+    --accent: #ffd166;
+    --accent-2: #6acba8;
+    --warn: #f17763;
+    --user: #6ec3f4;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, -apple-system, "SF Pro Text", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    height: 100%;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: 280px 1fr 320px;
+    grid-template-rows: 56px 1fr;
+    height: 100vh;
+    grid-template-areas:
+      "header header header"
+      "sidebar main aside";
+  }
+  header.top {
+    grid-area: header;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  header.top .brand { font-weight: 700; letter-spacing: 0.3px; color: var(--accent); }
+  header.top .brand span { color: var(--text); font-weight: 400; }
+  header.top .stat { font-size: 12px; color: var(--muted); }
+  aside.sidebar {
+    grid-area: sidebar;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  aside.right {
+    grid-area: aside;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  main {
+    grid-area: main;
+    display: flex; flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .panel-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    margin: 0 0 8px 0;
+  }
+  .business-card {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  .business-card .name { font-weight: 600; }
+  .business-card .desc { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .business-card .status { color: var(--accent-2); font-size: 11px; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .approval, .blocker {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .blocker { border-left-color: var(--warn); }
+  .blocker.urgent { border-left-color: var(--warn); background: #2b1818; }
+  .approval .meta, .blocker .meta {
+    color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.4px;
+    margin-bottom: 4px;
+  }
+  .approval .actions { display: flex; gap: 6px; margin-top: 8px; }
+  button {
+    background: var(--accent); color: #1b1606; border: none;
+    padding: 6px 10px; border-radius: 4px;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(1.1); }
+  button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  button.danger { background: var(--warn); color: #1b1606; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .empty { color: var(--muted); font-size: 12px; padding: 12px 0; }
+  .messages {
+    flex: 1; overflow-y: auto;
+    padding: 24px;
+  }
+  .msg {
+    max-width: 700px;
+    margin: 0 auto 16px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .msg.user {
+    background: var(--panel-2);
+    border-left: 2px solid var(--user);
+  }
+  .msg.ceo {
+    border-left: 2px solid var(--accent);
+  }
+  .msg .who {
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .msg.user .who { color: var(--user); }
+  .msg.ceo .who { color: var(--accent); }
+  .msg .badge {
+    display: inline-block;
+    font-size: 10px;
+    background: var(--accent-2);
+    color: #0e1c17;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 8px;
+    font-weight: 600;
+  }
+  .composer {
+    border-top: 1px solid var(--line);
+    padding: 16px 24px;
+    background: var(--panel);
+    display: flex;
+    gap: 8px;
+  }
+  textarea {
+    flex: 1;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 56px;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .composer .actions { display: flex; flex-direction: column; gap: 6px; }
+  .typing {
+    color: var(--muted); font-size: 12px; font-style: italic;
+    padding: 4px 16px;
+  }
+  .live-cursor::after {
+    content: "▍";
+    color: var(--accent);
+    animation: blink 1s steps(2, end) infinite;
+    margin-left: 2px;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  .approval-bar {
+    margin-top: 12px; padding-top: 10px;
+    border-top: 1px dashed var(--line);
+    display: flex; gap: 8px; flex-wrap: wrap;
+    align-items: center;
+  }
+  .approval-bar .label {
+    font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-right: 4px;
+  }
+  .approval-bar button {
+    font-size: 12px;
+  }
+  .approval-bar .approve { background: var(--accent-2); color: #0e1c17; }
+  .approval-bar .deny    { background: var(--warn); color: #1b1606; }
+  .approval-bar .discuss { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  .digest {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  a { color: var(--accent-2); text-decoration: none; }
+
+  /* ---- mobile (≤ 768px wide): stack columns, hide right panel behind toggle ---- */
+  @media (max-width: 768px) {
+    html, body { overflow-x: hidden; }
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 56px 1fr;
+      grid-template-areas:
+        "header"
+        "main";
+      width: 100vw;
+      max-width: 100vw;
+    }
+    main { min-width: 0; max-width: 100vw; overflow-x: hidden; }
+    aside.sidebar { display: none; }
+    aside.right {
+      display: none;
+      position: fixed;
+      top: 56px; right: 0; bottom: 0;
+      width: 85vw; max-width: 360px;
+      z-index: 50;
+      box-shadow: -8px 0 24px rgba(0,0,0,0.5);
+    }
+    aside.right.open { display: block; }
+    header.top {
+      padding: 0 12px;
+    }
+    header.top .brand { font-size: 13px; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    header.top .brand span { display: none; }  /* hide tagline on phones */
+    header.top .stat { display: none; }  /* hide founder stat on phones to save space */
+    header.top button.menu {
+      background: transparent; color: var(--accent);
+      border: 1px solid var(--line); border-radius: 6px;
+      padding: 6px 12px; font-size: 18px; flex-shrink: 0;
+    }
+    .messages { padding: 12px; }
+    .msg { padding: 10px 12px; max-width: 100%; }
+    .composer {
+      padding: 8px;
+      flex-direction: column;
+      gap: 8px;
+      box-sizing: border-box;
+      width: 100%;
+    }
+    .composer textarea {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .composer .actions {
+      flex-direction: row;
+      width: 100%;
+      gap: 8px;
+      box-sizing: border-box;
+    }
+    .composer .actions button {
+      flex: 1 1 0;
+      min-width: 0;  /* let the flex children actually shrink */
+    }
+    textarea {
+      min-height: 56px;
+      font-size: 16px; /* prevents iOS zoom-on-focus */
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button { padding: 10px 14px; font-size: 14px; min-height: 44px; /* tap target */ }
+    .approval-bar { gap: 6px; }
+    .approval-bar button { padding: 10px 12px; flex: 1; min-width: 0; }
+  }
+  /* desktop hides the menu button */
+  @media (min-width: 769px) {
+    header.top button.menu { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">Korpha <span>· your AI cofounder</span></div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div class="stat" id="stats">loading…</div>
+      <button class="menu" id="menu-toggle" title="Toggle right panel">☰</button>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="business-card">
+      <div class="name" id="biz-name">—</div>
+      <div class="desc" id="biz-desc"></div>
+      <div class="status" id="biz-status"></div>
+    </div>
+
+    <p class="panel-title">Pending Approvals</p>
+    <div id="approvals">
+      <div class="empty">no pending approvals</div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="messages" id="messages">
+      <div class="msg ceo">
+        <div class="who">CEO</div>
+        Hey. Ask me anything, or say <em>"propose this week's plan"</em> and I'll draft one for your approval.
+      </div>
+    </div>
+    <div id="typing" class="typing" style="display: none;">CEO is thinking…</div>
+    <form class="composer" id="composer">
+      <textarea id="prompt" placeholder="What's on your mind?" required></textarea>
+      <div class="actions">
+        <button type="submit" id="send">Send</button>
+        <button type="button" class="secondary" id="propose">Propose plan</button>
+      </div>
+    </form>
+  </main>
+
+  <aside class="right">
+    <p class="panel-title">Open Blockers (CoS digest)</p>
+    <div id="digest" class="digest">no blockers</div>
+    <div id="blockers"></div>
+
+    <p class="panel-title" style="margin-top: 24px;">Run a Skill</p>
+    <select id="skill-select" style="width:100%; background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:6px; font-size:13px;">
+      <option value="">— pick a skill —</option>
+    </select>
+    <div id="skill-args" style="margin-top:8px;"></div>
+    <button id="skill-run" style="width:100%; margin-top:8px;" disabled>Run</button>
+    <div id="skill-output" style="margin-top:12px; font-size:12px;"></div>
+  </aside>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const messages = $("messages");
+const typing = $("typing");
+
+async function api(path, init) {
+  const r = await fetch(path, init);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: r.statusText }));
+    throw new Error(err.detail || r.statusText);
+  }
+  return r.json();
+}
+
+function addMessage(role, text, badge) {
+  const el = document.createElement("div");
+  el.className = "msg " + role;
+  const who = document.createElement("div");
+  who.className = "who";
+  who.textContent = role === "user" ? "you" : "ceo";
+  if (badge) {
+    const b = document.createElement("span");
+    b.className = "badge";
+    b.textContent = badge;
+    who.appendChild(b);
+  }
+  el.appendChild(who);
+  const body = document.createElement("div");
+  body.textContent = text;
+  el.appendChild(body);
+  messages.appendChild(el);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+async function refreshStats() {
+  try {
+    const me = await api("/me");
+    $("biz-name").textContent = me.business_name;
+    $("biz-desc").textContent = me.founder_email;
+    $("biz-status").textContent = me.business_status;
+    $("stats").textContent = `${me.founder_name || me.founder_email} · spent $${me.total_spend_usd.toFixed(4)}`;
+  } catch (e) {
+    $("stats").textContent = "not initialized — run `korpha init`";
+  }
+}
+
+async function refreshApprovals() {
+  try {
+    const items = await api("/approvals/pending");
+    const box = $("approvals");
+    if (!items.length) {
+      box.innerHTML = '<div class="empty">no pending approvals</div>';
+      return;
+    }
+    box.innerHTML = "";
+    for (const a of items) {
+      const el = document.createElement("div");
+      el.className = "approval";
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = a.action_class + (a.platform ? ` · ${a.platform}` : "");
+      const body = document.createElement("div");
+      body.textContent = a.proposal_summary;
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      const approve = document.createElement("button");
+      approve.textContent = "Approve";
+      approve.onclick = async () => {
+        approve.disabled = true;
+        try {
+          await api(`/approvals/${a.id}/approve`, { method: "POST" });
+          await refreshApprovals();
+          addMessage("ceo", `[approved: ${a.proposal_summary}]`);
+        } catch (e) { alert(String(e)); approve.disabled = false; }
+      };
+      const reject = document.createElement("button");
+      reject.className = "danger";
+      reject.textContent = "Reject";
+      reject.onclick = async () => {
+        reject.disabled = true;
+        try {
+          await api(`/approvals/${a.id}/reject`, { method: "POST" });
+          await refreshApprovals();
+        } catch (e) { alert(String(e)); reject.disabled = false; }
+      };
+      const exec = document.createElement("button");
+      exec.className = "secondary";
+      exec.textContent = "Execute";
+      exec.onclick = async () => {
+        exec.disabled = true;
+        addMessage("ceo", "Dispatching to the team…");
+        try {
+          const r = await api(`/approvals/${a.id}/execute`, { method: "POST" });
+          addMessage("ceo", `Workforce: ${r.headline}`);
+          await refreshApprovals();
+          await refreshBlockers();
+        } catch (e) { alert(String(e)); }
+        exec.disabled = false;
+      };
+      actions.appendChild(approve);
+      actions.appendChild(reject);
+      actions.appendChild(exec);
+      el.appendChild(meta);
+      el.appendChild(body);
+      el.appendChild(actions);
+      box.appendChild(el);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function refreshBlockers() {
+  try {
+    const r = await api("/blockers");
+    $("digest").textContent = r.digest_text || "no blockers";
+    const box = $("blockers");
+    box.innerHTML = "";
+    for (const b of r.items) {
+      const el = document.createElement("div");
+      el.className = "blocker" + (b.urgency === "urgent" ? " urgent" : "");
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = `${b.urgency} · ${b.kind}`;
+      const body = document.createElement("div");
+      body.textContent = b.title;
+      el.appendChild(meta);
+      el.appendChild(body);
+      box.appendChild(el);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// ---- approval-request detection ----
+
+// Heuristic: scan the last few sentences for explicit approval-asks. Server
+// could emit a structured marker later; for now this is good enough.
+const APPROVAL_PATTERNS = [
+  /\bapprove\s+(this|that|the\s|my\s|it)/i,
+  /\bapprove\?/i,
+  /\bapprove\s+and\s+i'?ll/i,
+  /\bshall\s+i\b/i,
+  /\bshould\s+i\s+(go|move|run|ship|send|post|draft|start|build)/i,
+  /\bwant\s+me\s+to\b/i,
+  /\bsound\s+good\??/i,
+  /\bgreen[- ]?light\??/i,
+  /\bgive\s+me\s+the\s+go/i,
+  /\bready\s+to\s+(go|ship|launch|send|run)/i,
+  /\byour\s+call\b/i,
+  /\b(yes|no)\??\s*$/im,
+  /\bproceed\??/i,
+  /\bif\s+yes,?\s+i'?ll\b/i,
+];
+
+function detectApprovalRequest(text) {
+  if (!text) return false;
+  // Look in the last 400 chars (approximately the closing of the message)
+  const tail = text.slice(-400);
+  // Must have at least one approval pattern AND end in a question mark OR
+  // an explicit close like "Approve..." within the tail.
+  const matched = APPROVAL_PATTERNS.some((p) => p.test(tail));
+  if (!matched) return false;
+  // Filter out cases where CEO is just describing approvals abstractly
+  // (e.g. "approval is required for..."). Require a question mark or
+  // direct "Approve" in the tail.
+  const hasAsk = /\?\s*$/.test(text.trim()) ||
+                 /\bapprove\b/i.test(tail) ||
+                 /\bsound\s+good/i.test(tail) ||
+                 /\bproceed/i.test(tail);
+  return hasAsk;
+}
+
+function renderApprovalBar(parentEl, originalReply) {
+  // Don't double-render if already there.
+  if (parentEl.querySelector(".approval-bar")) return;
+  const bar = document.createElement("div");
+  bar.className = "approval-bar";
+  const label = document.createElement("span");
+  label.className = "label";
+  label.textContent = "your call";
+  bar.appendChild(label);
+
+  const approve = document.createElement("button");
+  approve.className = "approve";
+  approve.textContent = "✓ Approve";
+  approve.title = "Tell CEO to proceed";
+  approve.onclick = () => {
+    bar.remove();
+    submitMessage("Approve. Go ahead.");
+  };
+
+  const deny = document.createElement("button");
+  deny.className = "deny";
+  deny.textContent = "✗ Deny";
+  deny.title = "Tell CEO to drop this and propose something else";
+  deny.onclick = () => {
+    bar.remove();
+    submitMessage("Don't do that. What's a better path?");
+  };
+
+  const discuss = document.createElement("button");
+  discuss.className = "discuss";
+  discuss.textContent = "💬 Discuss";
+  discuss.title = "Probe further before deciding (drops the cursor in the textarea)";
+  discuss.onclick = () => {
+    // Don't auto-send — give the user the floor to type.
+    $("prompt").value = "Before I approve: ";
+    $("prompt").focus();
+    // Move the cursor to the end.
+    const len = $("prompt").value.length;
+    $("prompt").setSelectionRange(len, len);
+    bar.remove();
+  };
+
+  bar.appendChild(approve);
+  bar.appendChild(deny);
+  bar.appendChild(discuss);
+  parentEl.appendChild(bar);
+}
+
+function submitMessage(text) {
+  $("prompt").value = text;
+  send();
+}
+
+async function send() {
+  const text = $("prompt").value.trim();
+  if (!text) return;
+  addMessage("user", text);
+  $("prompt").value = "";
+  typing.style.display = "block";
+  typing.textContent = "CEO is thinking…";
+  // Set up the live response bubble that we'll fill from the stream.
+  const liveEl = document.createElement("div");
+  liveEl.className = "msg ceo";
+  const liveWho = document.createElement("div");
+  liveWho.className = "who";
+  liveWho.textContent = "ceo";
+  liveEl.appendChild(liveWho);
+  const liveBody = document.createElement("div");
+  liveBody.className = "live-cursor";  // pulsing cursor while streaming
+  liveEl.appendChild(liveBody);
+  messages.appendChild(liveEl);
+  messages.scrollTop = messages.scrollHeight;
+
+  let skillsUsed = [];
+  let aborted = false;
+
+  try {
+    const r = await fetch("/ask/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text })
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // SSE frames are separated by \n\n.
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 2);
+        if (!frame.startsWith("data:")) continue;
+        const payload = frame.slice(5).trim();
+        let ev;
+        try { ev = JSON.parse(payload); } catch (e) { continue; }
+        if (ev.type === "phase") {
+          if (ev.phase === "skill") {
+            typing.textContent = `→ running ${ev.skill_name}…`;
+          } else if (ev.phase === "synth") {
+            typing.textContent = "CEO is writing…";
+          } else if (ev.phase === "router") {
+            typing.textContent = "CEO is choosing…";
+          }
+        } else if (ev.type === "content") {
+          liveBody.textContent += ev.text;
+          messages.scrollTop = messages.scrollHeight;
+        } else if (ev.type === "reasoning") {
+          // hide reasoning by default; nothing visible
+        } else if (ev.type === "done") {
+          skillsUsed = ev.skills_used || [];
+          if (skillsUsed.length) {
+            const badge = document.createElement("span");
+            badge.className = "badge";
+            badge.textContent = skillsUsed.join(", ");
+            liveWho.appendChild(badge);
+          }
+          // Replace empty body with the final content if streaming yielded nothing.
+          if (!liveBody.textContent && ev.content) {
+            liveBody.textContent = ev.content;
+          }
+          liveBody.classList.remove("live-cursor");  // stop the cursor
+          // If CEO ended on an approval-request, surface 3 buttons inline.
+          const finalText = liveBody.textContent || (ev.content || "");
+          if (detectApprovalRequest(finalText)) {
+            renderApprovalBar(liveEl, finalText);
+          }
+        } else if (ev.type === "error") {
+          liveBody.textContent += "\n[error: " + (ev.message || "unknown") + "]";
+          liveBody.classList.remove("live-cursor");
+        }
+      }
+    }
+  } catch (e) {
+    aborted = true;
+    liveBody.textContent += "\n[error: " + String(e) + "]";
+    liveBody.classList.remove("live-cursor");
+  }
+  typing.style.display = "none";
+  if (!aborted) {
+    await refreshStats();
+    await refreshApprovals();
+    await refreshBlockers();
+  }
+}
+
+async function propose() {
+  const text = $("prompt").value.trim() || "What should we focus on this week?";
+  $("prompt").value = "";
+  addMessage("user", "[propose] " + text);
+  typing.style.display = "block";
+  try {
+    const r = await api("/propose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: text })
+    });
+    let body = `Plan: ${r.summary}\n\nWhy:\n` + r.rationale.map(x => `  • ${x}`).join("\n");
+    if (r.next_action) body += `\n\nNext action: ${r.next_action}`;
+    if (r.tasks && r.tasks.length) {
+      body += `\n\nParallel tasks (${r.tasks.length}):\n` +
+        r.tasks.map((t, i) => `  ${i+1}. ${t}`).join("\n");
+    }
+    if (r.estimated_hours != null) body += `\n\nTime: ~${r.estimated_hours}h`;
+    if (r.expected_impact) body += `\nImpact: ${r.expected_impact}`;
+    addMessage("ceo", body);
+    await refreshApprovals();
+  } catch (e) {
+    addMessage("ceo", "[error: " + String(e) + "]");
+  }
+  typing.style.display = "none";
+}
+
+$("composer").onsubmit = (e) => { e.preventDefault(); send(); };
+$("propose").onclick = propose;
+$("prompt").onkeydown = (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+};
+
+// Mobile: toggle right panel visibility
+const menuToggle = $("menu-toggle");
+if (menuToggle) {
+  menuToggle.onclick = () => {
+    const right = document.querySelector("aside.right");
+    if (right) right.classList.toggle("open");
+  };
+}
+
+// ---- skills runner ----
+
+let SKILL_SPECS = [];
+
+async function loadSkills() {
+  try {
+    SKILL_SPECS = await api("/skills");
+    const sel = $("skill-select");
+    for (const s of SKILL_SPECS) {
+      const opt = document.createElement("option");
+      opt.value = s.name;
+      opt.textContent = s.name;
+      sel.appendChild(opt);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+$("skill-select").onchange = (e) => {
+  const name = e.target.value;
+  const argsBox = $("skill-args");
+  argsBox.innerHTML = "";
+  $("skill-run").disabled = !name;
+  if (!name) return;
+  const spec = SKILL_SPECS.find(s => s.name === name);
+  if (!spec) return;
+  for (const [pname, pdesc] of Object.entries(spec.parameters)) {
+    const wrapper = document.createElement("div");
+    wrapper.style.marginBottom = "6px";
+    const label = document.createElement("label");
+    label.style.cssText = "display:block; font-size:11px; color:var(--muted); margin-bottom:2px;";
+    label.textContent = pname;
+    label.title = pdesc;
+    const input = document.createElement("input");
+    input.dataset.param = pname;
+    input.placeholder = pdesc;
+    input.style.cssText = "width:100%; background:var(--panel-2); color:var(--text); border:1px solid var(--line); border-radius:4px; padding:6px; font-size:13px;";
+    wrapper.appendChild(label);
+    wrapper.appendChild(input);
+    argsBox.appendChild(wrapper);
+  }
+};
+
+$("skill-run").onclick = async () => {
+  const name = $("skill-select").value;
+  if (!name) return;
+  const argsBox = $("skill-args");
+  const args = {};
+  for (const inp of argsBox.querySelectorAll("input")) {
+    if (inp.value.trim()) args[inp.dataset.param] = inp.value.trim();
+  }
+  $("skill-run").disabled = true;
+  $("skill-output").textContent = "running…";
+  try {
+    const r = await api(`/skills/${name}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ args })
+    });
+    $("skill-output").innerHTML =
+      `<div style="color:var(--accent);font-weight:600;margin-bottom:6px;">${r.summary}</div>` +
+      `<pre style="background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:8px;overflow-x:auto;font-size:11px;">${
+        JSON.stringify(r.payload, null, 2).replace(/[<>]/g, c => c === "<" ? "&lt;" : "&gt;")
+      }</pre>`;
+    addMessage("ceo", `[ran ${name}] ${r.summary}`);
+    await refreshStats();
+  } catch (e) {
+    $("skill-output").textContent = "error: " + String(e);
+  }
+  $("skill-run").disabled = false;
+};
+
+refreshStats();
+refreshApprovals();
+refreshBlockers();
+loadSkills();
+</script>
+</body>
+</html>
