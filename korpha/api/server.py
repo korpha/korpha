@@ -491,8 +491,19 @@ def build_app() -> FastAPI:
             list_configured_provider_names,
         )
 
-        configured = list_configured_provider_names()
-        has_any = bool(configured)
+        # Match the init wizard's definition: an env-var preset OR a
+        # providers.yaml entry counts. Without this, /healthz reports
+        # has_provider=false even right after the wizard wrote a working
+        # yaml-only provider, confusing both Mike and any external
+        # uptime monitor.
+        has_any = bool(list_configured_provider_names())
+        if not has_any:
+            try:
+                from korpha.inference.config import load_from_yaml
+                loaded = load_from_yaml()
+                has_any = bool(loaded and loaded.accounts)
+            except Exception:  # noqa: BLE001
+                pass
 
         # DB ping. A 1-row SELECT through the engine catches every
         # common failure mode (connection refused, auth, missing

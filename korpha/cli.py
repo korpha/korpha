@@ -35,6 +35,7 @@ from korpha.approvals.gate import (
 from korpha.audit.model import Activity, Cost, InferenceTier
 from korpha.blockers.queue import BlockerQueue
 from korpha.business.model import Business, BusinessStatus
+from korpha.business_units.model import BusinessUnit, BusinessUnitKind
 from korpha.cofounder.ceo import CEO, Plan
 from korpha.cofounder.chief_of_staff import ChiefOfStaff
 from korpha.cofounder.hiring import HiringService
@@ -661,6 +662,32 @@ def init(
             session.refresh(biz)
         else:
             biz = existing_business
+
+        # Founder must point at the active business — downstream
+        # routing (dashboard, chat, CEO ask) reads this pointer.
+        if founder.active_business_id != biz.id:
+            founder.active_business_id = biz.id
+            session.add(founder)
+            session.commit()
+            session.refresh(founder)
+
+        # Every Business needs a root BusinessUnit so kanban /
+        # approvals / activity have somewhere to attach. Existing
+        # installs got this via PR2's Alembic backfill; fresh init
+        # needs the same.
+        existing_unit = session.exec(
+            select(BusinessUnit).where(BusinessUnit.business_id == biz.id)
+        ).first()
+        if existing_unit is None:
+            root_unit = BusinessUnit(
+                business_id=biz.id,
+                parent_id=None,
+                kind=BusinessUnitKind.DEFAULT,
+                name=biz.name,
+                slug="default",
+            )
+            session.add(root_unit)
+            session.commit()
 
         hiring = HiringService(session)
         ceo = hiring.ensure_ceo(biz.id)
