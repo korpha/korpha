@@ -97,22 +97,33 @@ prompts.
 
 ---
 
-## DeepSeek V4 Pro (historical, 3-run averaged, 4 roles)
+## DeepSeek V4 Pro (3-run averaged, 7 roles)
 
 Open-weights frontier reasoning model from DeepSeek AI. On OpenCode
-Go as `deepseek-v4-pro`. Tested on the original 4-role baseline before
-the eval framework expanded to 7 roles; a 7-role rerun is being added.
+Go as `deepseek-v4-pro`. Tested with `--max-tokens 64000` to give
+reasoning headroom; identical methodology to Kimi + GLM.
 
-| Role | Pass | Total | %      |
-| ---- | ---- | ----- | ------ |
-| CEO  | 16   | 16    | **100.0%** |
-| CMO  | 10   | 10    | **100.0%** |
-| COO  | 13   | 13    | **100.0%** |
-| CTO  | 11   | 11    | **100.0%** |
-| **Overall** | **50** | **50** | **100.0%** |
+| Role        | Pass | Total | %          |
+| ----------- | ---- | ----- | ---------- |
+| CEO         | 16   | 16    | **100.0%** |
+| CMO         | 10   | 10    | **100.0%** |
+| COO         | 13   | 13    | **100.0%** |
+| DESIGNER    | 10   | 10    | **100.0%** |
+| SUPPORT     |  9   |  9    | **100.0%** |
+| CTO         | 10   | 11    | 90.9%      |
+| COPYWRITER  |  9   | 11    | 81.8%      |
+| **Overall** | **77** | **80** | **96.2%** |
 
 Cost: $0.0000 (subscription, not metered).
 Raw: [`deepseek-v4-pro.txt`](deepseek-v4-pro.txt)
+
+**Where DeepSeek loses points**: same uniform pattern as Kimi/GLM —
+brevity caps (copywriter 95 words for headline+subhead vs 80 cap;
+tweet 81 words vs 60 cap) and lead-with-recommendation formatting
+(CTO writes `Plan: 2-day ship**` before the punchline in 2 of 3
+runs). The historical 4-role baseline that scored 100% didn't
+include the 3 Worker roles where verbose reasoning models naturally
+overshoot caps.
 
 ---
 
