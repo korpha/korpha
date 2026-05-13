@@ -43,6 +43,7 @@
         <input type="hidden" name="validation_experiment" value="{{ c.get('validation_experiment') or '' }}" />
         <input type="hidden" name="target_avatar" value="{{ c.get('target_avatar') or '' }}" />
         <input type="hidden" name="price_band" value="{{ c.get('price_band') or '' }}" />
+        <input type="hidden" name="line_kind" value="{{ c.get('line_kind') or '' }}" />
         <button type="submit" class="niche-card-pick {{ '' if is_rec else 'is-secondary' }}">
           {% if is_rec %}Go with this →{% else %}Pick this{% endif %}
         </button>

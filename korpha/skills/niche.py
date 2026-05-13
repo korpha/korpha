@@ -29,6 +29,8 @@ Founder skills: {skills}
 Weekly time budget: {time_budget_hours} hours
 Cash savings (USD): {savings_usd}
 Founder's stated goal: {goal}
+Founder's stated niches/directions (HONOR THESE): {niches_considered}
+Founder's constraints: {constraints}
 
 For each niche, give:
 - name: 3-7 word label (e.g. "Deployment automation for solo Python devs")
@@ -40,13 +42,20 @@ For each niche, give:
   (recruit X interviews, ship a 1-page landing, post in Y community...) within
   their time + cash budget
 - fit_score: 1-10, how well it matches the Founder's skills + budget
+- line_kind: which Korpha business line owns this. EXACTLY one of:
+    "saas" — software product, one app per customer (web app, plugin, bot)
+    "info" — course, ebook, newsletter, membership, coaching package
+    "pod"  — print-on-demand designs (t-shirts, mugs, posters, stickers)
+    "kdp"  — Amazon KDP books (paperback, kindle, audiobook)
+    "affiliate" — promote others' products for commission (email list, JV launches)
+    "agency" — done-for-you services delivered manually or with small team
 
 Respond with strict JSON only:
 {{
   "candidates": [
     {{"name": "...", "target_avatar": "...", "value_prop": "...",
       "price_band": "...", "competition": "...",
-      "validation_experiment": "...", "fit_score": 8}}
+      "validation_experiment": "...", "fit_score": 8, "line_kind": "info"}}
   ],
   "recommended_index": 0,
   "rationale": "<one sentence why the recommended niche wins>"
@@ -58,6 +67,12 @@ Rules:
 - Match the price band to who would pay (B2B prosumer = $29-99, B2C = $5-15,
   B2B SaaS = $99-499, agency = $500-2k).
 - The validation_experiment must fit the Founder's actual time + cash.
+- CRITICAL: If the Founder named directions / niches above, your candidates
+  MUST stay in that product class. Course-seeker gets courses + memberships,
+  not SaaS bots. POD-seeker gets shirts + mugs, not info products. Drift =
+  ignored brief = Mike never comes back.
+- line_kind is REQUIRED on every candidate. Pick the closest of the 6
+  canonical lines. When in doubt: info for content/coaching, saas for tools.
 """
 
 
@@ -84,6 +99,12 @@ class FindMicroNichesSkill(Skill):
         # Default missing args from the Day-0 founder_brief so a Founder
         # who ran `korpha onboard` doesn't have to repeat themselves.
         brief = ctx.business.founder_brief or {}
+
+        def _fmt_list(v: Any) -> str:
+            if isinstance(v, list):
+                return "; ".join(str(x) for x in v) or "(none stated)"
+            return str(v or "(none stated)")
+
         prompt = _NICHE_PROMPT.format(
             skills=str(args.get("skills") or brief.get("skills") or "(unspecified)"),
             time_budget_hours=str(
@@ -93,6 +114,8 @@ class FindMicroNichesSkill(Skill):
                 args.get("savings_usd") or brief.get("savings_usd") or "1000"
             ),
             goal=str(args.get("goal") or brief.get("goal") or "side income"),
+            niches_considered=_fmt_list(brief.get("niches_considered")),
+            constraints=_fmt_list(brief.get("constraints")),
         )
         request = CompletionRequest(
             messages=[

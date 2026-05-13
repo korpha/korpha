@@ -27,6 +27,7 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, select
 
 from korpha.approvals.model import ActionClass, Approval, ApprovalStatus
+from korpha.audit.model import Activity, ActorType
 from korpha.business.model import Business
 from korpha.cofounder.hiring import HiringService
 from korpha.identity.model import Founder
@@ -130,28 +131,57 @@ async def run_post_pick_niche_chain(
             business_unit_id=spawned_unit_id,
         )
 
-        # 1. Validate the picked niche. This is read-only — captured as
-        #    an Approval so the Founder sees the score in their queue.
+        # 1. Reality check on the picked niche. The validator scores
+        #    market dynamics (demand, willingness-to-pay, distribution)
+        #    independent of the founder fit the niche skill already
+        #    judged — so a "kill" verdict here means market risk, NOT
+        #    "your cofounder thinks this is bad" (the CEO just
+        #    recommended it). The proposal is framed as a reality check
+        #    + cheapest kill-test, not as a contradiction of the pick.
         try:
             r = await skills_registry.run(
                 "validate.score_idea",
                 ctx=ctx,
                 args={"idea": name, "avatar": avatar},
             )
+            verdict = (r.payload or {}).get("verdict") or "review"
+            kill_test = (r.payload or {}).get("kill_test") or ""
+            improvement = (r.payload or {}).get("improvement_path") or ""
+            framed = (
+                f"Reality check on {name!r}: cheapest test to know "
+                f"if it has legs — {kill_test[:160]}"
+                if kill_test
+                else f"Reality check on {name!r} — review market notes"
+            )
             session.add(
                 Approval(
                     business_id=business.id,
+                    business_unit_id=spawned_unit_id,
                     agent_role_id=ceo.id,
                     action_class=ActionClass.INTERNAL,
-                    proposal_summary=(
-                        f"Validation: {r.summary} for niche {name!r}"
-                    ),
+                    proposal_summary=framed,
                     action_payload={
-                        "kind": "validation_report",
+                        "kind": "reality_check",
                         "niche_name": name,
+                        "market_verdict": verdict,
+                        "kill_test": kill_test,
+                        "improvement_path": improvement,
                         "result": r.payload,
                     },
                     status=ApprovalStatus.PENDING,
+                )
+            )
+            session.add(
+                Activity(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    actor_type=ActorType.AGENT,
+                    actor_id=ceo.id,
+                    event_type="onboard.reality_check",
+                    payload={
+                        "niche_name": name,
+                        "market_verdict": verdict,
+                    },
                 )
             )
             approvals_created += 1
@@ -174,6 +204,7 @@ async def run_post_pick_niche_chain(
             session.add(
                 Approval(
                     business_id=business.id,
+                    business_unit_id=spawned_unit_id,
                     agent_role_id=ceo.id,
                     action_class=ActionClass.PUBLIC_POST,
                     proposal_summary=(
@@ -185,6 +216,16 @@ async def run_post_pick_niche_chain(
                         "result": r.payload,
                     },
                     status=ApprovalStatus.PENDING,
+                )
+            )
+            session.add(
+                Activity(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    actor_type=ActorType.AGENT,
+                    actor_id=ceo.id,
+                    event_type="onboard.landing_drafted",
+                    payload={"niche_name": name},
                 )
             )
             approvals_created += 1
@@ -231,6 +272,7 @@ async def run_post_pick_niche_chain(
             session.add(
                 Approval(
                     business_id=business.id,
+                    business_unit_id=spawned_unit_id,
                     agent_role_id=ceo.id,
                     action_class=ActionClass.EMAIL_OUTREACH,
                     proposal_summary=(
@@ -242,6 +284,16 @@ async def run_post_pick_niche_chain(
                         "result": r.payload,
                     },
                     status=ApprovalStatus.PENDING,
+                )
+            )
+            session.add(
+                Activity(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    actor_type=ActorType.AGENT,
+                    actor_id=ceo.id,
+                    event_type="onboard.outreach_drafted",
+                    payload={"niche_name": name},
                 )
             )
             approvals_created += 1
@@ -280,6 +332,7 @@ async def run_post_pick_niche_chain(
             session.add(
                 Approval(
                     business_id=business.id,
+                    business_unit_id=spawned_unit_id,
                     agent_role_id=ceo.id,
                     action_class=ActionClass.INTERNAL,
                     proposal_summary=(
@@ -291,6 +344,16 @@ async def run_post_pick_niche_chain(
                         "result": r.payload,
                     },
                     status=ApprovalStatus.PENDING,
+                )
+            )
+            session.add(
+                Activity(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    actor_type=ActorType.AGENT,
+                    actor_id=ceo.id,
+                    event_type="onboard.kickoff_scheduled",
+                    payload={"niche_name": name},
                 )
             )
             approvals_created += 1

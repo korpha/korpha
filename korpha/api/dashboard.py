@@ -498,6 +498,7 @@ def build_dashboard_router(
         validation_experiment: Annotated[str, Form()] = "",
         target_avatar: Annotated[str, Form()] = "",
         price_band: Annotated[str, Form()] = "",
+        line_kind: Annotated[str, Form()] = "",
     ) -> HTMLResponse | RedirectResponse:
         """Founder picks one of the proposed niches. Creates a Goal,
         seeds the first validation Task, and moves the Business out of
@@ -569,12 +570,22 @@ def build_dashboard_router(
                     "price_band": price_band.strip(),
                 }
                 _engine = engine_factory()
+                # Normalize line_kind. The niche skill emits one of
+                # pod/kdp/info/saas/affiliate/agency per candidate;
+                # anything else (or empty) means "stay in DEFAULT" and
+                # the chain will skip the Line spawn.
+                _valid_lines = {
+                    "pod", "kdp", "info", "saas", "affiliate", "agency",
+                }
+                _line = line_kind.strip().lower()
+                _line = _line if _line in _valid_lines else None
                 background_tasks.add_task(
                     run_post_pick_niche_chain,
                     engine=_engine,
                     business_id=business.id,
                     niche=niche_payload,
                     cost_tracker_factory=cost_tracker_factory,
+                    line_kind=_line,
                 )
             return RedirectResponse(
                 "/app/dashboard", status_code=status.HTTP_303_SEE_OTHER
