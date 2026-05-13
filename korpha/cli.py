@@ -7691,6 +7691,86 @@ def inference_probe(
         typer.echo(f"{status} {r.label:28} {r.provider:20}{extra}{msg}")
 
 
+@app.command()
+def debrief(
+    output: Annotated[str, typer.Option(
+        "--output", "-o",
+        help="Where to write the founder profile JSON. Defaults to "
+             "<data_dir>/founder_profile.json so Korpha picks it up "
+             "automatically.",
+    )] = "",
+) -> None:
+    """Run the Debriefeur deep-dive interview (~20 min).
+
+    Debriefeur is a separate tool — Korpha just orchestrates the
+    handoff. It writes a founder profile JSON that the CEO and
+    every Director / VP picks up on the next message: decision
+    style, risk tolerance, blindspots, operating rhythm, etc.
+
+    Same tool Hermes and OpenClaw users run for their own agents.
+
+    Skippable. Run anytime later; profile gets picked up on the
+    next message without restart.
+    """
+    import shutil
+    import subprocess
+
+    profile_path = Path(output) if output else _data_dir() / "founder_profile.json"
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+
+    binary = shutil.which("debriefeur")
+    if binary is None:
+        typer.echo(_yellow(
+            "Debriefeur isn't installed yet. One-line install:"
+        ))
+        typer.echo("")
+        typer.echo(_bold("  pip install debriefeur"))
+        typer.echo("")
+        typer.echo(_dim(
+            "Then run `korpha debrief` again. Or run `debriefeur "
+            "interview` directly and point Korpha at the output "
+            f"with `--output {profile_path}`."
+        ))
+        typer.echo(_dim(
+            "Source: https://github.com/AIgenteur/debriefeur"
+        ))
+        raise typer.Exit(code=1)
+
+    typer.echo(_dim(
+        f"Starting Debriefeur. Profile will be saved to "
+        f"{profile_path} when complete."
+    ))
+    typer.echo("")
+    try:
+        result = subprocess.run(
+            [binary, "interview", "--output", str(profile_path)],
+            check=False,
+        )
+    except KeyboardInterrupt:
+        typer.echo(_yellow(
+            "\nInterview interrupted. Profile not saved. Run "
+            "`korpha debrief` again when ready."
+        ))
+        raise typer.Exit(code=1)
+
+    if result.returncode != 0:
+        typer.echo(_red("✗") + " Debriefeur exited with an error.")
+        raise typer.Exit(code=result.returncode)
+
+    if not profile_path.exists():
+        typer.echo(_yellow(
+            "Debriefeur finished but didn't write a profile to "
+            f"{profile_path}. Check Debriefeur's output."
+        ))
+        raise typer.Exit(code=1)
+
+    typer.echo(_green("✓") + f" Founder profile saved: {profile_path}")
+    typer.echo(_dim(
+        "Korpha agents pick this up automatically on the next "
+        "message. You can rerun anytime to refresh."
+    ))
+
+
 def main() -> None:
     app()
 
