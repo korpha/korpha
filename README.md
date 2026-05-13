@@ -18,6 +18,10 @@ It helps you **start** a business (pick a niche, validate it, ship a landing
 page, get the first 10 customers) and helps you **run** it (daily support,
 weekly content, monthly P&L reviews, delegated coding work).
 
+> Already know Hermes / OpenClaw / Paperclip? See [**how Korpha
+> compares**](docs/COMPARE.md) — short version: cofounder framing,
+> Python-native, Line Packs out of the box.
+
 ---
 
 ## Status
@@ -49,18 +53,16 @@ covering hard rules from their prompt (no auto-promised refunds,
 no marketing fluff, mobile-first specs, etc.).
 
 Reproduce yourself: `korpha eval --tier pro --runs 3` after
-configuring any provider. Full report (including the historical
-baseline run under the project's previous name, AIgenteur):
+configuring any provider. Full report:
 [docs/eval-baselines/](docs/eval-baselines/README.md).
 
 **Picking a local model?** If you're running Korpha against a local
 Ollama / LM Studio / vLLM and want to know whether a given open-weights
 model will hit Korpha's quality bar, the [ClawEval harness](https://github.com/AIgenteur/ClawEval)
-(originally built and used for AIgenteur evals — same fixtures Korpha
-inherits) scores any open-weights model against the same cofounder
-prompts. Useful before committing GPU time to a local model — score
-Qwen 3.5 or Gemma 4 (or whichever open-weights model in that
-consumer-runnable class you're eyeing) against the same fixtures.
+scores any open-weights model against the same cofounder prompts.
+Useful before committing GPU time — score Qwen 3.5 or Gemma 4 (or
+whichever open-weights model in that consumer-runnable class you're
+eyeing) against the fixtures and see what passes.
 
 ---
 
