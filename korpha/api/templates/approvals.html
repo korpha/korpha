@@ -36,6 +36,18 @@
               {% endfor %}
             </div>
           {% endif %}
+          {% if a.side_effect_url %}
+            <div class="approval-result">
+              <span class="approval-result-icon">✓</span>
+              <a href="{{ a.side_effect_url }}" target="_blank" class="approval-result-link">{{ a.side_effect_url }}</a>
+            </div>
+          {% endif %}
+          {% if a.dispatch_error %}
+            <div class="approval-error">
+              <span class="approval-error-icon">⚠</span>
+              <span class="approval-error-text">{{ a.dispatch_error }}</span>
+            </div>
+          {% endif %}
           {% if a.status == 'pending' %}
             <div class="approval-actions">
               {% if a.kind_tag == 'landing copy' %}
@@ -81,6 +93,13 @@
 .approval-time { color: var(--text-faint); font-size: 11.5px; margin-left: auto; }
 .approval-summary { color: var(--text); font-size: 14px; line-height: 1.4; }
 .approval-preview { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 8px; }
+.approval-result { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 12px; background: var(--green-soft, rgba(109, 207, 128, 0.18)); border: 1px solid var(--green, #6dcf80); border-radius: var(--radius-sm); font-size: 12.5px; }
+.approval-result-icon { color: var(--green, #6dcf80); font-weight: 700; }
+.approval-result-link { color: var(--text); font-family: ui-monospace, Menlo, monospace; text-decoration: none; word-break: break-all; }
+.approval-result-link:hover { text-decoration: underline; }
+.approval-error { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; padding: 8px 12px; background: var(--red-soft, rgba(231, 111, 116, 0.18)); border: 1px solid var(--red, #e76f74); border-radius: var(--radius-sm); font-size: 12.5px; }
+.approval-error-icon { color: var(--red, #e76f74); font-weight: 700; flex-shrink: 0; }
+.approval-error-text { color: var(--text); line-height: 1.4; }
 .preview-row { display: flex; gap: 12px; padding: 4px 0; font-size: 12.5px; }
 .preview-row + .preview-row { border-top: 1px solid var(--border); }
 .preview-key { color: var(--text-dim); min-width: 90px; }

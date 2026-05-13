@@ -4616,6 +4616,8 @@ def _format_approval(a: Approval) -> dict[str, Any]:
     payload = a.action_payload or {}
     preview_lines: list[dict[str, str]] = []
     kind_tag: str | None = None
+    dispatch_error: str | None = None
+    side_effect_url: str | None = None
     if isinstance(payload, dict):
         # Chain-produced approvals carry a "kind" + "result" structure.
         # Pull the load-bearing field out of result so it shows up in
@@ -4633,6 +4635,26 @@ def _format_approval(a: Approval) -> dict[str, Any]:
                     )
                 elif isinstance(v, str | int | float | bool):
                     preview_lines.append({"key": k, "value": _shorten(str(v), 120)})
+        # Side-effect outcome surfacing: a failed dispatch must be
+        # loud, not buried in payload JSON. dispatch_error covers the
+        # pre-run failures (missing key, bad payload); execute_error +
+        # send_error are the legacy fields the CLI executors wrote.
+        for err_key in ("dispatch_error", "execute_error", "send_error"):
+            err_val = payload.get(err_key)
+            if err_val:
+                dispatch_error = str(err_val)
+                break
+        # Success URL: lift Stripe link / .ics URL so Mike can click
+        # straight from the approval card.
+        for url_key in (
+            "stripe_payment_link_url",
+            "ics_download_url",
+            "ics_add_to_google_url",
+        ):
+            url_val = payload.get(url_key)
+            if url_val:
+                side_effect_url = str(url_val)
+                break
     return {
         "id": str(a.id),
         "summary": a.proposal_summary,
@@ -4643,6 +4665,8 @@ def _format_approval(a: Approval) -> dict[str, Any]:
         "created_label": _humanize_time(a.created_at),
         "preview_lines": preview_lines,
         "kind_tag": kind_tag,
+        "dispatch_error": dispatch_error,
+        "side_effect_url": side_effect_url,
     }
 
 

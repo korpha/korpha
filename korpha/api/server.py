@@ -12,8 +12,11 @@ annotations``. FastAPI relies on *runtime* type introspection to detect
 import, the Annotated metadata isn't seen and dependency injection
 silently breaks (parameters get treated as query/body fields).
 """
+import logging
 import os
 import time
+
+logger = logging.getLogger(__name__)
 from collections.abc import AsyncIterator
 
 # Captured at module import time so /healthz can report uptime.
@@ -801,12 +804,12 @@ def build_app() -> FastAPI:
             session.close()
 
     @app.post("/approvals/{approval_id}/approve", response_model=DecisionResponse)
-    def approve(
+    async def approve(
         approval_id: str,
         session: Annotated[Session, Depends(_require_session)],
     ) -> DecisionResponse:
         try:
-            founder, _business = _founder_business(session)
+            founder, business = _founder_business(session)
             gate = ApprovalGate(session)
             result = gate.decide(
                 approval_id=UUID(approval_id),
@@ -835,6 +838,48 @@ def build_app() -> FastAPI:
                     apply_cron_proposal_from_approval,
                 )
                 apply_cron_proposal_from_approval(result.approval)
+            else:
+                # COMMERCE + EMAIL_OUTREACH — shared dispatch with
+                # the CLI executor. Without this Mike could approve a
+                # Stripe payment link from the dashboard but nothing
+                # would actually call Stripe; he'd have to drop to the
+                # terminal. Failures persist on the approval row
+                # (dispatch_error) so the dashboard can surface what
+                # went wrong; we still return 200 because the approval
+                # ITSELF succeeded — only the side effect failed.
+                from korpha.approvals.dispatch import (
+                    dispatch_by_action_class,
+                )
+                try:
+                    dr = await dispatch_by_action_class(
+                        session, result.approval, business,
+                    )
+                except Exception as _exc:  # noqa: BLE001
+                    logger.warning(
+                        "approve: dispatch_by_action_class raised",
+                        exc_info=True,
+                    )
+                    dr = None
+                    # Persist the bug-level failure too.
+                    result.approval.action_payload = {
+                        **(result.approval.action_payload or {}),
+                        "dispatch_error": (
+                            f"internal dispatch crash: {type(_exc).__name__}: {_exc}"
+                        ),
+                    }
+                    session.add(result.approval)
+                    session.commit()
+                if dr is not None and not dr.ok:
+                    # Pre-dispatch failure (missing config, bad payload).
+                    # Surface it so the dashboard can show "Approved but
+                    # couldn't run: <message>" instead of silently going
+                    # green.
+                    result.approval.action_payload = {
+                        **(result.approval.action_payload or {}),
+                        "dispatch_error": dr.message,
+                    }
+                    session.add(result.approval)
+                    session.commit()
             return DecisionResponse(
                 status=result.approval.status.value,
                 consecutive_approvals=result.envelope.consecutive_approvals,
