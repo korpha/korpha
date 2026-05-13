@@ -29,6 +29,7 @@ from sqlmodel import Session, select
 from korpha.approvals.model import ActionClass, Approval, ApprovalStatus
 from korpha.audit.model import Activity, ActorType
 from korpha.business.model import Business
+from korpha.kanban.model import CardPriority, KanbanCard, KanbanColumn
 from korpha.cofounder.hiring import HiringService
 from korpha.identity.model import Founder
 from korpha.inference.cost_tracker import CostTracker
@@ -294,37 +295,60 @@ async def run_post_pick_niche_chain(
                 logger.warning("commerce.create_payment_link failed in chain: %s", exc)
                 errors.append(f"commerce: {exc}")
 
-        # 3. Cold-email opener variants. Founder picks one to send (or
-        #    edits) — sending happens through the existing
-        #    outreach.send_cold_email side-effect skill, separately gated.
-        # If the skill fails (truncated JSON, model hiccup, etc.) we
-        # still write a "needs retry" Approval so the founder sees the
-        # slot rather than silently getting 4 of 5 cards.
+        # 3. First-week kanban cards — real tasks Mike acts on this
+        #    week, not theater. We don't auto-generate cold emails
+        #    (no contact list yet — drafts to nobody are useless) and
+        #    we don't auto-generate a kickoff meeting with the AI
+        #    cofounder (you don't meet with software). Instead: two
+        #    actionable cards land in BACKLOG so the Line VP has
+        #    something to claim on Day 1.
         try:
-            r = await skills_registry.run(
-                "outreach.draft_cold_emails",
-                ctx=ctx,
-                args={
-                    "avatar": avatar,
-                    "value_prop": value_prop,
-                    "channel": "email",
-                },
-            )
             session.add(
-                Approval(
+                KanbanCard(
                     business_id=business.id,
                     business_unit_id=spawned_unit_id,
-                    agent_role_id=ceo.id,
-                    action_class=ActionClass.EMAIL_OUTREACH,
-                    proposal_summary=(
-                        f"Cold-email drafts for {name!r} — pick one to send"
+                    title=f"Publish landing for {name!r} + share URL back",
+                    body=(
+                        f"Take the approved landing copy and put it on a "
+                        f"real page (Carrd, Framer, or your existing site). "
+                        f"Drop the URL in chat once it's live so the "
+                        f"cofounder can wire the Stripe link into it and "
+                        f"start tracking signups."
                     ),
-                    action_payload={
-                        "kind": "outreach_drafts",
-                        "niche_name": name,
-                        "result": r.payload,
-                    },
-                    status=ApprovalStatus.PENDING,
+                    column=KanbanColumn.BACKLOG,
+                    priority=CardPriority.HIGH,
+                    acceptance_criteria=[
+                        "Landing page is live at a real URL",
+                        "URL pasted into chat",
+                    ],
+                    owner_role="founder",
+                )
+            )
+            experiment = str(niche.get("validation_experiment") or "").strip()
+            if not experiment:
+                experiment = (
+                    "Find 10 people in the target avatar, talk to them, "
+                    "learn what they actually want to pay for."
+                )
+            session.add(
+                KanbanCard(
+                    business_id=business.id,
+                    business_unit_id=spawned_unit_id,
+                    title=(
+                        f"Get 10 real conversations with {avatar[:60]}"
+                    ),
+                    body=(
+                        f"Validation experiment for {name!r}: {experiment} "
+                        f"Drop notes from each conversation into chat so the "
+                        f"cofounder can spot patterns + sharpen the offer."
+                    ),
+                    column=KanbanColumn.BACKLOG,
+                    priority=CardPriority.HIGH,
+                    acceptance_criteria=[
+                        "10 conversations logged",
+                        "Patterns summarized back to cofounder",
+                    ],
+                    owner_role="founder",
                 )
             )
             session.add(
@@ -333,127 +357,15 @@ async def run_post_pick_niche_chain(
                     business_unit_id=spawned_unit_id,
                     actor_type=ActorType.AGENT,
                     actor_id=ceo.id,
-                    event_type="onboard.outreach_drafted",
-                    payload={"niche_name": name},
+                    event_type="onboard.first_week_cards_created",
+                    payload={"niche_name": name, "count": 2},
                 )
             )
-            approvals_created += 1
-        except (SkillError, Exception) as exc:
-            logger.warning("outreach.draft_cold_emails failed in chain: %s", exc)
-            errors.append(f"outreach: {exc}")
-            session.add(
-                Approval(
-                    business_id=business.id,
-                    business_unit_id=spawned_unit_id,
-                    agent_role_id=ceo.id,
-                    action_class=ActionClass.EMAIL_OUTREACH,
-                    proposal_summary=(
-                        f"Cold-email drafts for {name!r} — generation failed, "
-                        "click Retry to regenerate"
-                    ),
-                    action_payload={
-                        "kind": "outreach_drafts_failed",
-                        "niche_name": name,
-                        "avatar": avatar,
-                        "value_prop": value_prop,
-                        "dispatch_error": str(exc)[:300],
-                    },
-                    status=ApprovalStatus.PENDING,
-                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "first-week kanban cards failed in chain: %s", exc,
             )
-            session.add(
-                Activity(
-                    business_id=business.id,
-                    business_unit_id=spawned_unit_id,
-                    actor_type=ActorType.AGENT,
-                    actor_id=ceo.id,
-                    event_type="onboard.outreach_failed",
-                    payload={
-                        "niche_name": name,
-                        "error": str(exc)[:200],
-                    },
-                )
-            )
-            approvals_created += 1
-
-        # 4. Kickoff invite — BRIEF.md minute 4:30 promise: "calendar
-        #    slot for kickoff with cofounder tomorrow". Tomorrow at
-        #    09:00 UTC, 30-min default. The .ics + add-link URLs land
-        #    in the Approval payload so the dashboard renders both
-        #    a download and a one-click "Add to Google Calendar" link.
-        try:
-            from datetime import datetime, timedelta, timezone
-
-            tomorrow_9am = (
-                datetime.now(timezone.utc).replace(
-                    hour=9, minute=0, second=0, microsecond=0,
-                ) + timedelta(days=1)
-            )
-            r = await skills_registry.run(
-                "calendar.create_event",
-                ctx=ctx,
-                args={
-                    "title": f"Kickoff with cofounder — {name}",
-                    "start": tomorrow_9am.isoformat(),
-                    "duration_minutes": 30,
-                    "description": (
-                        f"Day-1 plan walkthrough for {name}. Bring "
-                        f"questions on the validation report, landing "
-                        f"copy, and outreach drafts in your queue."
-                    ),
-                    "attendees": [founder.email] if founder.email else [],
-                },
-            )
-            session.add(
-                Approval(
-                    business_id=business.id,
-                    business_unit_id=spawned_unit_id,
-                    agent_role_id=ceo.id,
-                    action_class=ActionClass.INTERNAL,
-                    proposal_summary=(
-                        f"Kickoff invite — tomorrow 09:00 UTC, 30 min"
-                    ),
-                    action_payload={
-                        "kind": "calendar_invite",
-                        "niche_name": name,
-                        "result": r.payload,
-                    },
-                    status=ApprovalStatus.PENDING,
-                )
-            )
-            session.add(
-                Activity(
-                    business_id=business.id,
-                    business_unit_id=spawned_unit_id,
-                    actor_type=ActorType.AGENT,
-                    actor_id=ceo.id,
-                    event_type="onboard.kickoff_scheduled",
-                    payload={"niche_name": name},
-                )
-            )
-            approvals_created += 1
-        except (SkillError, Exception) as exc:
-            logger.warning("calendar.create_event failed in chain: %s", exc)
-            errors.append(f"calendar: {exc}")
-            session.add(
-                Approval(
-                    business_id=business.id,
-                    business_unit_id=spawned_unit_id,
-                    agent_role_id=ceo.id,
-                    action_class=ActionClass.INTERNAL,
-                    proposal_summary=(
-                        f"Kickoff invite for {name!r} — generation failed, "
-                        "click Retry to regenerate"
-                    ),
-                    action_payload={
-                        "kind": "calendar_invite_failed",
-                        "niche_name": name,
-                        "dispatch_error": str(exc)[:300],
-                    },
-                    status=ApprovalStatus.PENDING,
-                )
-            )
-            approvals_created += 1
+            errors.append(f"kanban: {exc}")
 
         session.commit()
 
