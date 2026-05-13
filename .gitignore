@@ -60,4 +60,3 @@ website.zip
 # Top-level dev DB (only the one in $data_dir matters)
 /korpha.db
 /korpha.db
-docs/eval-baselines/gemma-4-31b-local.txt

@@ -43,12 +43,13 @@ assertions, no LLM-as-judge — and score every role prompt against
 
 **Open-weights baselines (3-run averaged, same 80-assertion 7-role fixture set):**
 
-| Model | CEO | CMO | COO | CTO | Workers† | Overall |
-| --- | --- | --- | --- | --- | --- | --- |
-| DeepSeek V4 Pro | 100% | 100% | 100% | 91% | 94%‡ | **96.2%** |
-| DeepSeek V4 Flash (workhorse) | 100% | 90% | 100% | 100% | 93%‡ | **96.2%** |
-| Kimi K2.6 (Moonshot, 256k ctx) | 100% | 100% | 100% | 82% | 89%‡ | **92.5%** |
-| GLM 5.1 (Zhipu, 200k ctx) | 88% | 100% | 100% | 91% | 86%‡ | **91.2%** |
+| Model | Where it runs | CEO | CMO | COO | CTO | Workers† | Overall |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| DeepSeek V4 Pro | cloud | 100% | 100% | 100% | 91% | 94%‡ | **96.2%** |
+| DeepSeek V4 Flash (workhorse) | cloud | 100% | 90% | 100% | 100% | 93%‡ | **96.2%** |
+| Kimi K2.6 (Moonshot, 256k ctx) | cloud | 100% | 100% | 100% | 82% | 89%‡ | **92.5%** |
+| **Gemma-4-31B (Q4_K_M, 262k ctx)** | **local RTX 3090** | **100%** | **90%** | **100%** | **91%** | **87%‡** | **92.5%** |
+| GLM 5.1 (Zhipu, 200k ctx) | cloud | 88% | 100% | 100% | 91% | 86%‡ | **91.2%** |
 
 † Designer / Copywriter / Support Workers each have a fixture set
 covering hard rules from their prompt (no auto-promised refunds,

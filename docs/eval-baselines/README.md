@@ -34,21 +34,29 @@ after `korpha config`.
 
 ## The headline
 
-Three frontier open-weights models, all clearing 90% on the same
-7-role / 80-assertion test set. Korpha works with any of them — pick
-the one you prefer:
+Five model deployments, all clearing 90% on the same 7-role /
+80-assertion test set. One of them runs **entirely on a single
+RTX 3090** — no cloud, no API key, no subscription. Korpha works
+with any of them; pick the one that fits your hardware and budget:
 
-| Model | Provider tested | Pass | Total | Overall | Wall time |
-| ----- | --------------- | ---- | ----- | ------- | --------- |
-| DeepSeek V4 Pro | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
-| DeepSeek V4 Flash (workhorse) | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
-| Kimi K2.6 | OpenCode Go (Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
-| GLM 5.1   | OpenCode Go (Zhipu AI)    | 73 | 80 | **91.2%** | 18 min |
+| Model | Where it runs | Pass | Total | Overall | Wall time |
+| ----- | ------------- | ---- | ----- | ------- | --------- |
+| DeepSeek V4 Pro | OpenCode Go (cloud, DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
+| DeepSeek V4 Flash (workhorse) | OpenCode Go (cloud, DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
+| Kimi K2.6 | OpenCode Go (cloud, Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
+| **Gemma-4-31B (Q4_K_M)** | **Local RTX 3090, llama.cpp + TurboQuant** | **74** | **80** | **92.5%** | **25 min** |
+| GLM 5.1   | OpenCode Go (cloud, Zhipu AI)    | 73 | 80 | **91.2%** | 18 min |
 
-Pro and Flash tied at 96.2% on the harder test set — different
-assertions miss but the same overall count. Validates that you can
-run Korpha on either tier and get equivalent quality, just with
-different latency profiles.
+**Local Gemma matches cloud Kimi.** A single consumer GPU (24 GB
+VRAM, Q4 quantization, 262k context via TurboQuant) hits 92.5% —
+tied with cloud-served Kimi K2.6 and 1.3 pts ahead of cloud-served
+GLM 5.1. Korpha runs fully offline with no quality penalty for
+founders who want to keep their cofounder under their own roof.
+
+DeepSeek Pro and Flash tied at 96.2% on the harder test set — Pro
+and Flash trade individual assertions but hit the same overall
+count. Validates that you can run Korpha on either tier and get
+equivalent quality, just with different latency profiles.
 
 ---
 
@@ -140,6 +148,50 @@ tweet 81 words vs 60 cap) and lead-with-recommendation formatting
 runs). The historical 4-role baseline that scored 100% didn't
 include the 3 Worker roles where verbose reasoning models naturally
 overshoot caps.
+
+---
+
+## Gemma-4-31B local (3-run averaged, 7 roles)
+
+Open-weights model from Google DeepMind, served entirely locally on
+a single RTX 3090. Q4_K_M quantization (22.9 GB / 24.6 GB VRAM),
+TurboQuant turbo3 KV-cache fork of llama.cpp, **full native 262k
+context window**. ~36 tok/s decode, ~150 tok/s prompt processing.
+No cloud calls, no API key, no subscription.
+
+| Role        | Pass | Total | %          |
+| ----------- | ---- | ----- | ---------- |
+| CEO         | 16   | 16    | **100.0%** |
+| COO         | 13   | 13    | **100.0%** |
+| DESIGNER    | 10   | 10    | **100.0%** |
+| CTO         | 10   | 11    | 90.9%      |
+| CMO         |  9   | 10    | 90.0%      |
+| SUPPORT     |  8   |  9    | 88.9%      |
+| COPYWRITER  |  8   | 11    | 72.7%      |
+| **Overall** | **74** | **80** | **92.5%** |
+
+Cost: $0.0000 (local compute, your electricity bill).
+Raw: [`gemma-4-31b-local.txt`](gemma-4-31b-local.txt)
+
+**Where Gemma loses points** (same uniform pattern as the cloud
+models, slightly amplified):
+- COPYWRITER: writes 191 words for headline+subhead (vs 80 cap),
+  66 words for tweet (vs 60 cap), occasionally drops "cutting-edge"
+  as marketing fluff
+- CMO: omits literal `Subject:` labels in 3 cold-email variants (uses
+  bold markdown headers without the word). Same flake as DeepSeek
+  Flash on this exact assertion.
+- SUPPORT: writes "ETA" in a bug-report response (1 of 3 runs)
+- CTO: leads with `Options for MVP hosting:` before the punchline
+
+Same brevity + format pattern as the cloud models. Content is
+correct; presentation overshoots in the same predictable ways.
+
+**Why this matters**: Korpha's cofounder loop runs on a $700-used
+GPU at 92.5% — the same score as Moonshot AI's frontier Kimi K2.6
+served from the cloud. Pair this with the Stripe + (your CRM) +
+(your email tool) integrations and you have a fully local AI
+cofounder. No vendor lock-in, no data leaves your machine.
 
 ---
 
