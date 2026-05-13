@@ -3196,7 +3196,71 @@ def build_dashboard_router(
                 'Click "+ Add provider" below to wire one up.</div>'
             )
         else:
+            # Aggregate tier coverage across every configured account.
+            # Used to render the missing-vision nudge banner above the
+            # list when no provider serves the VISION tier.
+            covered_tiers: set[str] = set()
             for account in loaded.accounts:
+                for tier in account.tier_models:
+                    covered_tiers.add(tier.value)
+
+            from korpha.api.server import _data_dir as _server_data_dir
+            nudge_dismissed = (
+                Path(_server_data_dir()) / ".vision-nudge-dismissed"
+            ).exists()
+            if "vision" not in covered_tiers and not nudge_dismissed:
+                rows.append(
+                    '<div class="provider-row vision-nudge"'
+                    ' style="background:rgba(255,200,0,0.08);'
+                    'border-left:3px solid var(--accent);padding:10px 14px;'
+                    'margin-bottom:6px;border-radius:6px;">'
+                    '  <div class="provider-meta">'
+                    '    <span class="provider-meta-name">⚠ No vision model configured</span>'
+                    '    <span class="provider-meta-detail">'
+                    '      Your agents can\'t see images yet (screenshots, product photos, '
+                    '      competitor pages, OCR). Recommended: NVIDIA Nemotron 3 Nano Omni '
+                    '      — free on OpenRouter, also on NVIDIA NIM. Optional but very '
+                    '      useful for marketing + design work.'
+                    '    </span>'
+                    '  </div>'
+                    '  <div style="display:flex;gap:6px;">'
+                    '    <button class="provider-remove-btn"'
+                    '            hx-get="/app/settings/providers/new?preset=openrouter"'
+                    '            hx-target="#provider-form"'
+                    '            hx-swap="innerHTML"'
+                    '            style="border-color:var(--accent);color:var(--accent);">'
+                    '      + Add OpenRouter (free vision)'
+                    '    </button>'
+                    '    <button class="provider-remove-btn"'
+                    '            hx-get="/app/settings/providers/new?preset=nvidia-nim"'
+                    '            hx-target="#provider-form"'
+                    '            hx-swap="innerHTML"'
+                    '            style="border-color:var(--accent);color:var(--accent);">'
+                    '      + Add NVIDIA NIM'
+                    '    </button>'
+                    '    <form method="post" action="/app/settings/providers/dismiss-vision-nudge"'
+                    '          hx-post="/app/settings/providers/dismiss-vision-nudge"'
+                    '          hx-target="#providers-panel" hx-swap="innerHTML"'
+                    '          style="display:inline;">'
+                    '      <button type="submit" class="provider-remove-btn">Skip</button>'
+                    '    </form>'
+                    '  </div>'
+                    '</div>'
+                )
+
+            # Render each configured account row with per-tier badges
+            # so Mike sees at a glance which tiers each provider covers.
+            for account in loaded.accounts:
+                covered = {t.value for t in account.tier_models}
+                badges_html = "".join(
+                    f'<span style="display:inline-block;padding:2px 6px;'
+                    f'border-radius:3px;font-size:10px;margin-right:4px;'
+                    f'background:{"rgba(80,200,120,0.15)" if t in covered else "rgba(150,150,150,0.1)"};'
+                    f'color:{"var(--green, #5fb878)" if t in covered else "var(--text-faint)"};">'
+                    f'{("✓" if t in covered else "·")} {t}'
+                    f'</span>'
+                    for t in ("workhorse", "pro", "vision")
+                )
                 tiers = ", ".join(
                     f"{t.value}={m}" for t, m in sorted(
                         account.tier_models.items(), key=lambda kv: kv[0].value
@@ -3212,6 +3276,7 @@ def build_dashboard_router(
                     f'<div class="provider-row">'
                     f'  <div class="provider-meta">'
                     f'    <span class="provider-meta-name">{label}</span>'
+                    f'    <span style="margin:4px 0;">{badges_html}</span>'
                     f'    <span class="provider-meta-detail">'
                     f'      {account.provider_name} · {tiers}{cap}'
                     f'    </span>'
@@ -3233,29 +3298,58 @@ def build_dashboard_router(
         )
         return HTMLResponse(f'<div class="card">{"".join(rows)}</div>')
 
+    # Recommended presets — the short list Mike sees up-front. Hosted
+    # cloud providers with sensible cost-ascending defaults. Everything
+    # else (self-hosted, custom endpoints, Anthropic/OpenAI direct) is
+    # tucked under the Advanced expander so the main form stays tidy.
+    _RECOMMENDED_PRESETS: tuple[str, ...] = (
+        "opencode-go",
+        "ollama-cloud",
+        "openrouter",
+        "nvidia-nim",
+        "deepseek",
+        "codex-cli",
+        "claude-code-cli",
+    )
+
     @router.get("/settings/providers/new", response_class=HTMLResponse)
-    def provider_form_partial(preset: str = "") -> HTMLResponse:
+    def provider_form_partial(
+        preset: str = "",
+        scope: str = "main",
+    ) -> HTMLResponse:
         """Render the add-provider form. When ``preset`` is set in the
         query string, pre-fill the workhorse / pro / vision model
         fields with the known good defaults for that preset — Mike
         doesn't need to know "what's a valid model id for ollama-cloud."
         He can still override the values; they're starting points.
 
-        The ``<select name="preset">`` re-triggers this endpoint on
-        change so the model defaults swap in live when Mike picks a
-        different provider."""
+        ``scope`` controls the preset list shown:
+        - ``main`` (default): only recommended presets (the Mike path)
+        - ``advanced``: every preset including self-hosted, custom,
+          Anthropic/OpenAI direct, LM Studio, local Ollama. Used by
+          the collapsed Advanced expander on /app/settings.
+        """
         from korpha.inference.providers.openai_compat import (
             PROVIDER_PRESETS,
             SUBSCRIPTION_PRESETS,
         )
         from korpha.inference.env_fallback import get_preset_defaults
 
-        ordered = (
-            list(SUBSCRIPTION_PRESETS) + sorted(PROVIDER_PRESETS) + ["custom"]
-        )
-        # Default the picker to the first non-subscription preset so
-        # Mike sees real model strings on first render.
-        chosen = preset if preset in ordered else "opencode-go"
+        is_advanced = scope == "advanced"
+        if is_advanced:
+            # Everything not already in Recommended, plus 'custom' for
+            # arbitrary OpenAI-compat endpoints (vLLM, custom shims, …).
+            advanced = sorted(
+                (set(PROVIDER_PRESETS) | {"custom"})
+                - set(_RECOMMENDED_PRESETS)
+            )
+            ordered = advanced
+            default_preset = "local-ollama"
+        else:
+            ordered = list(_RECOMMENDED_PRESETS)
+            default_preset = "opencode-go"
+
+        chosen = preset if preset in ordered else default_preset
         options = "".join(
             f'<option value="{p}"{" selected" if p == chosen else ""}>{p}</option>'
             for p in ordered
@@ -3279,16 +3373,59 @@ def build_dashboard_router(
         # invent one — he can still edit before submitting.
         default_label = f"{chosen}-primary" if chosen != "custom" else ""
 
+        # Custom preset needs explicit name + base_url; self-hosted
+        # presets (local-ollama, lm-studio) take an optional host
+        # override. Both are surfaced inline so power users coming
+        # from Hermes/OpenClaw can wire their own endpoint without
+        # editing YAML by hand.
+        needs_endpoint = chosen == "custom"
+        is_self_hosted = chosen in ("local-ollama", "lm-studio")
+        host_hint = ""
+        if chosen == "local-ollama":
+            host_hint = "http://localhost:11434"
+        elif chosen == "lm-studio":
+            host_hint = "http://localhost:1234"
+
+        scope_hidden = f'<input type="hidden" name="scope" value="{scope}" />'
+
+        endpoint_fields = ""
+        if needs_endpoint:
+            endpoint_fields = """
+              <label class="provider-form-label" for="provider_name">Provider id</label>
+              <input name="provider_name" id="provider_name" class="provider-form-input"
+                     placeholder="e.g. my-vllm" required />
+
+              <label class="provider-form-label" for="base_url">Base URL</label>
+              <input name="base_url" id="base_url" class="provider-form-input"
+                     placeholder="https://api.example.com/v1" required />
+              <div class="provider-form-hint">
+                The OpenAI-compatible chat-completions endpoint. Anthropic native
+                speaks this dialect at api.anthropic.com/v1. Most local servers
+                (vLLM, llama.cpp, TGI, …) work out of the box.
+              </div>
+            """
+        elif is_self_hosted:
+            endpoint_fields = f"""
+              <label class="provider-form-label" for="base_url">Host (optional)</label>
+              <input name="base_url" id="base_url" class="provider-form-input"
+                     placeholder="{host_hint}" />
+              <div class="provider-form-hint">
+                Leave blank for the default. Override if your daemon
+                runs on a different port or remote host.
+              </div>
+            """
+
         html = f"""
         <div class="card provider-form-card">
           <form hx-post="/app/settings/providers"
                 hx-target="#providers-panel"
                 hx-swap="innerHTML"
                 hx-on::after-request="if (event.detail.successful) document.getElementById('provider-form').innerHTML = ''">
+            {scope_hidden}
             <div class="provider-form-grid">
               <label class="provider-form-label" for="preset">Provider</label>
               <select name="preset" id="preset" class="provider-form-select" required
-                      hx-get="/app/settings/providers/new"
+                      hx-get="/app/settings/providers/new?scope={scope}"
                       hx-target="#provider-form"
                       hx-swap="innerHTML"
                       hx-include="[name=preset]"
@@ -3305,9 +3442,10 @@ def build_dashboard_router(
               <input name="api_key" id="api_key" class="provider-form-input"
                      type="password" placeholder="{key_placeholder}" {key_disabled} />
               <div class="provider-form-hint">
-                Leave blank for subscription-auth presets (codex-cli, claude-code-cli).
-                For custom or self-hosted, paste your provider's key.
+                Leave blank for subscription-auth presets (codex-cli, claude-code-cli)
+                and most local servers that don't require auth.
               </div>
+              {endpoint_fields}
 
               <label class="provider-form-label" for="workhorse_model">Workhorse model</label>
               <input name="workhorse_model" id="workhorse_model" class="provider-form-input"
@@ -3356,6 +3494,8 @@ def build_dashboard_router(
         workhorse_model: Annotated[str, Form()] = "",
         vision_model: Annotated[str, Form()] = "",
         spend_cap: Annotated[str, Form()] = "",
+        provider_name: Annotated[str, Form()] = "",
+        base_url: Annotated[str, Form()] = "",
     ) -> HTMLResponse:
         """Append a new provider entry to providers.yaml.
 
@@ -3416,13 +3556,41 @@ def build_dashboard_router(
             "label": label,
             "tiers": tiers,
         }
+
+        # Custom preset: name + base_url are mandatory. Self-hosted
+        # presets (local-ollama / lm-studio) accept an optional
+        # base_url override and don't need an api_key.
+        is_self_hosted = preset in ("local-ollama", "lm-studio")
+        if preset == "custom":
+            if not provider_name.strip():
+                return HTMLResponse(
+                    _provider_error("Provider id is required for custom endpoint."),
+                    status_code=400,
+                )
+            if not base_url.strip():
+                return HTMLResponse(
+                    _provider_error("Base URL is required for custom endpoint."),
+                    status_code=400,
+                )
+            entry["name"] = provider_name.strip()
+            entry["base_url"] = base_url.strip()
+        elif is_self_hosted and base_url.strip():
+            entry["base_url"] = base_url.strip()
+
+        # API-key validation. Subscription + self-hosted presets are
+        # the only ones that may legitimately omit a key.
         if api_key.strip():
             entry["api_key"] = api_key.strip()
-        elif preset not in SUBSCRIPTION_PRESETS:
+        elif (
+            preset not in SUBSCRIPTION_PRESETS
+            and not is_self_hosted
+            and preset != "custom"
+        ):
             return HTMLResponse(
                 _provider_error(
                     f"API key required for preset '{preset}'. "
                     f"Subscription presets (codex-cli / claude-code-cli) "
+                    f"and self-hosted presets (local-ollama / lm-studio) "
                     f"are the only ones that work without a key."
                 ),
                 status_code=400,
@@ -3452,6 +3620,22 @@ def build_dashboard_router(
         from korpha.inference.config_writer import remove_provider_entry
 
         remove_provider_entry(label)
+        return providers_list_partial()
+
+    @router.post(
+        "/settings/providers/dismiss-vision-nudge",
+        response_class=HTMLResponse,
+    )
+    def provider_dismiss_vision_nudge() -> HTMLResponse:
+        """Persist Mike's "skip" choice on the missing-vision nudge so
+        it doesn't reappear every page render. Stored as a marker file
+        in the data dir — survives restarts, simple to undo by deleting
+        the file."""
+        from korpha.api.server import _data_dir as _server_data_dir
+        marker = Path(_server_data_dir()) / ".vision-nudge-dismissed"
+        with contextlib.suppress(OSError):
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.touch()
         return providers_list_partial()
 
     @router.get("/settings/themes/edit", response_class=HTMLResponse, response_model=None)
