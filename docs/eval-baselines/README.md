@@ -19,20 +19,20 @@ after `korpha config`.
 ## The headline
 
 Three frontier open-weights models, all clearing 90% on the same
-7-role test set. Korpha works with any of them — pick the one you
-prefer:
+7-role / 80-assertion test set. Korpha works with any of them — pick
+the one you prefer:
 
 | Model | Provider tested | Pass | Total | Overall | Wall time |
 | ----- | --------------- | ---- | ----- | ------- | --------- |
+| DeepSeek V4 Pro | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
+| DeepSeek V4 Flash (workhorse) | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
 | Kimi K2.6 | OpenCode Go (Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
 | GLM 5.1   | OpenCode Go (Zhipu AI)    | 73 | 80 | **91.2%** | 18 min |
-| DeepSeek V4 Pro (historical, 4-role test set) | OpenCode Go | 50 | 50 | **100%** | ~30 min |
-| DeepSeek V4 Flash (workhorse, 7 roles) | OpenCode Go | 77 | 80 | **96.2%** | ~25 min |
 
-⚠ DeepSeek V4 Pro's 100% is on the older 4-role baseline; a 7-role
-rerun is being added to match Kimi + GLM apples-to-apples. The
-4-role roles are CEO / CMO / COO / CTO — where DeepSeek, Kimi, and
-GLM all score within 1–2 assertions of each other.
+Pro and Flash tied at 96.2% on the harder test set — different
+assertions miss but the same overall count. Validates that you can
+run Korpha on either tier and get equivalent quality, just with
+different latency profiles.
 
 ---
 

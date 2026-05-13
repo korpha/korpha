@@ -41,14 +41,14 @@ an internal eval harness — exact substring / regex / word-count
 assertions, no LLM-as-judge — and score every role prompt against
 50 founder-asks. Same code, same fixtures, same scoring. Reproducible.
 
-**Open-weights baselines (3-run averaged, same 80-assertion fixture set):**
+**Open-weights baselines (3-run averaged, same 80-assertion 7-role fixture set):**
 
 | Model | CEO | CMO | COO | CTO | Workers† | Overall |
 | --- | --- | --- | --- | --- | --- | --- |
+| DeepSeek V4 Pro | 100% | 100% | 100% | 91% | 94%‡ | **96.2%** |
+| DeepSeek V4 Flash (workhorse) | 100% | 90% | 100% | 100% | 93%‡ | **96.2%** |
 | Kimi K2.6 (Moonshot, 256k ctx) | 100% | 100% | 100% | 82% | 89%‡ | **92.5%** |
 | GLM 5.1 (Zhipu, 200k ctx) | 88% | 100% | 100% | 91% | 86%‡ | **91.2%** |
-| DeepSeek V4 Flash (workhorse) | 100% | 90% | 100% | 100% | 93%‡ | **96.2%** |
-| DeepSeek V4 Pro (4-role baseline) | 100% | 100% | 100% | 100% | — | **100%** |
 
 † Designer / Copywriter / Support Workers each have a fixture set
 covering hard rules from their prompt (no auto-promised refunds,
