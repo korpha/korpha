@@ -196,6 +196,28 @@ _PRESETS: tuple[_PresetSpec, ...] = (
 )
 
 
+def get_preset_defaults(name: str) -> dict[str, str] | None:
+    """Return the known good model defaults for a preset name.
+
+    Used by the dashboard "Add provider" form to pre-fill workhorse /
+    pro / vision model fields when Mike picks a preset — he doesn't
+    need to know "what's the model string for opencode-go." He can
+    still override; these are starting points, not lock-ins.
+
+    Returns None if no preset matches (e.g. ``custom`` or a typo).
+    """
+    for spec in _PRESETS:
+        if spec.name == name:
+            out = {
+                "workhorse_model": spec.workhorse_model,
+                "pro_model": spec.pro_model,
+            }
+            if spec.vision_model:
+                out["vision_model"] = spec.vision_model
+            return out
+    return None
+
+
 def detect_configured_providers() -> list[tuple[
     OpenAICompatibleProvider, ProviderAccount,
 ]]:
