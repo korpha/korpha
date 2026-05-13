@@ -53,6 +53,14 @@ configuring any provider. Full report (including the historical
 baseline run under the project's previous name, AIgenteur):
 [docs/eval-baselines/](docs/eval-baselines/README.md).
 
+**Picking a local model?** If you're running Korpha against a local
+Ollama / LM Studio / vLLM and want to know whether a given open-weights
+model will hit Korpha's quality bar, the [ClawEval harness](https://github.com/AIgenteur/ClawEval)
+(originally built and used for AIgenteur evals — same fixtures Korpha
+inherits) scores any open-weights model against the same cofounder
+prompts. Useful before committing GPU time to download Llama 3.3 70B
+vs Qwen 3 32B vs DeepSeek V3.
+
 ---
 
 ## Repo layout
