@@ -41,19 +41,30 @@ an internal eval harness — exact substring / regex / word-count
 assertions, no LLM-as-judge — and score every role prompt against
 50 founder-asks. Same code, same fixtures, same scoring. Reproducible.
 
-**Canonical baseline (3-run averaged, open-weights frontier model):**
+**Open-weights baselines (3-run averaged, same 80-assertion fixture set):**
 
-| Tier | Model | CEO | CMO | COO | CTO | Workers† | Overall |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Pro | DeepSeek V4 Pro | 100% | 100% | 100% | 100% | covered | **100%** |
-| Workhorse | DeepSeek V4 Flash | 100% | 90% | 100% | 100% | covered | **98%** |
+| Model | CEO | CMO | COO | CTO | Workers† | Overall |
+| --- | --- | --- | --- | --- | --- | --- |
+| Kimi K2.6 (Moonshot, 256k ctx) | 100% | 100% | 100% | 82% | 89%‡ | **92.5%** |
+| GLM 5.1 (Zhipu, 200k ctx) | 88% | 100% | 100% | 91% | 86%‡ | **91.2%** |
+| DeepSeek V4 Flash (workhorse) | 100% | 90% | 100% | 100% | 93%‡ | **96.2%** |
+| DeepSeek V4 Pro (4-role baseline) | 100% | 100% | 100% | 100% | — | **100%** |
 
 † Designer / Copywriter / Support Workers each have a fixture set
 covering hard rules from their prompt (no auto-promised refunds,
 no marketing fluff, mobile-first specs, etc.).
 
-Reproduce yourself: `korpha eval --tier pro --runs 3` after
-configuring any provider. Full report:
+‡ Worker scores averaged across Designer / Copywriter / Support roles.
+
+**All three frontier open-weights models clear 90%.** Korpha isn't
+tied to one. Pick the model you trust — Kimi if you want the longest
+context, GLM if you want the fastest eval turnaround, DeepSeek if
+you want the tightest brevity discipline. The remaining ~8% miss is
+uniform across models: brevity caps and "lead with the recommendation"
+formatting — prompt-tuning targets, not capability gaps.
+
+Reproduce yourself: `korpha eval --tier pro --runs 3 --max-tokens 64000`
+after configuring any provider. Full per-role breakdowns + raw output:
 [docs/eval-baselines/](docs/eval-baselines/README.md).
 
 **Picking a local model?** If you're running Korpha against a local
