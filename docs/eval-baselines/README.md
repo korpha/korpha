@@ -14,6 +14,22 @@ latency and cost.
 **Run with**: `korpha eval --tier pro --runs 3 --max-tokens 64000`
 after `korpha config`.
 
+> **⚠ What this is and isn't.** This eval measures
+> **instruction-following + Korpha role-prompt compatibility** — does
+> the model write under the word cap, lead with the recommendation,
+> avoid forbidden phrases, hit required substrings. It does **not**
+> measure reasoning power, factual accuracy, or general intelligence.
+>
+> All four models in the table below produce correct content for
+> every fixture — they just differ on whether they obey the brevity
+> and format rules. A model scoring 91% isn't "weaker"; it's writing
+> a 95-word headline when the prompt caps at 80. Pick the model you
+> like for everyday tasks; the eval just tells you which one's
+> phrasing fits Korpha's prompt scaffolding out-of-the-box.
+>
+> For raw model capability, look at MMLU / GSM8K / HumanEval / SWE-Bench
+> on each model's HuggingFace card — those measure something different.
+
 ---
 
 ## The headline
