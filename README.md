@@ -59,9 +59,8 @@ model will hit Korpha's quality bar, the [ClawEval harness](https://github.com/A
 (originally built and used for AIgenteur evals — same fixtures Korpha
 inherits) scores any open-weights model against the same cofounder
 prompts. Useful before committing GPU time to a local model — score
-any open-weights option that actually fits on consumer hardware
-(Qwen 3.5, GLM-4.6 air, Mistral Small, etc.) against the same
-fixtures.
+Qwen 3.5 or Gemma 4 (or whichever open-weights model in that
+consumer-runnable class you're eyeing) against the same fixtures.
 
 ---
 
