@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Welcome · Korpha{% endblock %}
+{% block breadcrumbs %}Welcome{% endblock %}
+{% block body %}
+  <div class="onboard">
+    <div class="onboard-eyebrow">First-time setup — 30 seconds</div>
+    <h1 class="onboard-h1">Who are you, and what are we building?</h1>
+    <p class="onboard-sub">
+      Three quick fields so your cofounder can address you by name,
+      route calendar invites + receipts, and label your dashboard.
+      Then we'll get into what you actually want to do.
+    </p>
+
+    {% if error %}
+      <div class="onboard-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/app/welcome" class="welcome-form">
+      <label class="welcome-field">
+        <span class="welcome-label">Your name</span>
+        <input type="text" name="founder_name" autofocus required
+               value="{{ existing_name }}"
+               placeholder="Mike"
+               class="welcome-input" />
+      </label>
+
+      <label class="welcome-field">
+        <span class="welcome-label">Your email</span>
+        <input type="email" name="founder_email" required
+               value="{{ existing_email }}"
+               placeholder="you@example.com"
+               class="welcome-input" />
+        <span class="welcome-hint">
+          Calendar invites + (optional) cost-reset emails land here.
+          We don't ship anything elsewhere.
+        </span>
+      </label>
+
+      <label class="welcome-field">
+        <span class="welcome-label">Business name</span>
+        <input type="text" name="business_name" required
+               value="{{ existing_business }}"
+               placeholder="Acme Studio"
+               class="welcome-input" />
+        <span class="welcome-hint">
+          The umbrella name shown in your dashboard. You can run
+          multiple business lines under it (POD, KDP, course, SaaS).
+        </span>
+      </label>
+
+      <div class="onboard-actions">
+        <button type="submit" class="onboard-submit">
+          Continue to brief →
+        </button>
+      </div>
+    </form>
+
+    <div class="onboard-footer">
+      Everything stays on your machine in <code>~/.korpha/</code>.
+      You can edit any of this later from Settings.
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+.welcome-form { display: flex; flex-direction: column; gap: 22px; max-width: 540px; }
+.welcome-field { display: flex; flex-direction: column; gap: 6px; }
+.welcome-label { font-size: 13px; font-weight: 500; color: var(--text, #f4f4f4); }
+.welcome-input {
+  background: var(--bg, #1a1a1d);
+  border: 1px solid var(--border, #333);
+  color: var(--text, #f4f4f4);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm, 6px);
+  font-size: 14px;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.welcome-input:focus {
+  outline: none;
+  border-color: var(--accent, #e7c14b);
+}
+.welcome-hint {
+  font-size: 11px;
+  color: var(--text-faint, #888);
+  line-height: 1.4;
+}
+</style>
+{% endblock %}

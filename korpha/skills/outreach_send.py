@@ -84,6 +84,7 @@ class SendColdEmailSkill(Skill):
         proposal_summary = f"Send email to {to} — {subject[:80]}"
         approval = Approval(
             business_id=ctx.business.id,
+            business_unit_id=ctx.business_unit_id,
             agent_role_id=agent_role_id,
             action_class=ActionClass.EMAIL_OUTREACH,
             platform="email",
@@ -100,6 +101,7 @@ class SendColdEmailSkill(Skill):
         ctx.session.add(
             Activity(
                 business_id=ctx.business.id,
+                business_unit_id=ctx.business_unit_id,
                 actor_type=ActorType.AGENT,
                 actor_id=agent_role_id,
                 event_type="email.proposed",
