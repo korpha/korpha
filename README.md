@@ -3,9 +3,8 @@
 > Your AI cofounder for the online business you keep saying you'll start.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![ClawEval](https://img.shields.io/badge/ClawEval-eval%20harness-4f46e5)](https://github.com/korpha/ClawEval)
+[![Eval: 100%](https://img.shields.io/badge/eval-100%25-4f46e5)](docs/eval-baselines/README.md)
 
-> 🧪 Sister project: **[korpha/ClawEval](https://github.com/korpha/ClawEval)** — open evaluation harness for cofounder-style agents.
 
 **Korpha** ( *KOR · fa*, like *Alpha* ) is an AI cofounder, not an AI assistant.
 It doesn't ask you what to do — it shows you what *it* would do, and asks for
@@ -369,7 +368,6 @@ Project:
 
 ## Community
 
-- **[Korpha/ClawEval](https://github.com/Korpha/ClawEval)** — sister repo: open eval harness for cofounder-style agents. Score your run, share results.
 - **GitHub Issues** — bugs and feature requests
 - **GitHub Discussions** — questions, builds, playbooks
 - **GitHub Discussions** — ideas and RFC
