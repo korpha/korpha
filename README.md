@@ -58,8 +58,8 @@ Ollama / LM Studio / vLLM and want to know whether a given open-weights
 model will hit Korpha's quality bar, the [ClawEval harness](https://github.com/AIgenteur/ClawEval)
 (originally built and used for AIgenteur evals — same fixtures Korpha
 inherits) scores any open-weights model against the same cofounder
-prompts. Useful before committing GPU time to download Llama 3.3 70B
-vs Qwen 3 32B vs DeepSeek V3.
+prompts. Useful before committing GPU time to download Qwen 3 235B
+vs DeepSeek V3 vs Kimi K2 vs GLM-4.6.
 
 ---
 
