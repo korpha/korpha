@@ -1140,6 +1140,26 @@ class CEO:
                 "unit-summary injection failed", exc_info=True,
             )
 
+        # Optional founder deep-profile from Debriefeur (see
+        # korpha.identity.founder_profile). When present, the CEO
+        # picks up "how this founder thinks" — decision style,
+        # risk tolerance, blindspots, etc. — so plans and proposals
+        # match Mike's actual operating style instead of generic
+        # cofounder defaults.
+        try:
+            from korpha.config import get_settings
+            from korpha.identity.founder_profile import load_founder_profile
+            profile_block = load_founder_profile(
+                get_settings().data_dir
+            ).as_prompt_preamble()
+            if profile_block:
+                system_parts.append(profile_block)
+        except Exception:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).warning(
+                "founder-profile injection failed", exc_info=True,
+            )
+
         if digest is not None and digest.items:
             system_parts.append(
                 "Open items the team is blocked on (your Chief of Staff has triaged "

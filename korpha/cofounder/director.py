@@ -592,12 +592,27 @@ class Director:
     # --- helpers ---
 
     def _system_prompt(self, business: Business, founder: Founder) -> str:
-        return (
-            f"{self.personality.system_prompt}\n\n"
-            f"Business: {business.name}"
-            + (f" — {business.description}" if business.description else "")
-            + f"\nFounder: {founder.display_name or founder.email}"
-        )
+        parts = [
+            self.personality.system_prompt,
+            (
+                f"Business: {business.name}"
+                + (f" — {business.description}" if business.description else "")
+                + f"\nFounder: {founder.display_name or founder.email}"
+            ),
+        ]
+        # Optional founder deep-profile (Debriefeur). When present, the
+        # Director picks up how Mike thinks so plans land in his style.
+        try:
+            from korpha.config import get_settings
+            from korpha.identity.founder_profile import load_founder_profile
+            profile_block = load_founder_profile(
+                get_settings().data_dir
+            ).as_prompt_preamble()
+            if profile_block:
+                parts.append(profile_block)
+        except Exception:  # noqa: BLE001
+            pass
+        return "\n\n".join(parts)
 
     def _log_attempt(
         self,
@@ -719,13 +734,27 @@ class Worker:
         )
 
     def _system_prompt(self, business: Business, founder: Founder) -> str:
-        return (
-            f"{self.personality.system_prompt}\n\n"
-            f"Specialty: {self.personality.specialty}\n"
-            f"Business: {business.name}"
-            + (f" — {business.description}" if business.description else "")
-            + f"\nFounder: {founder.display_name or founder.email}"
-        )
+        parts = [
+            self.personality.system_prompt,
+            (
+                f"Specialty: {self.personality.specialty}\n"
+                f"Business: {business.name}"
+                + (f" — {business.description}" if business.description else "")
+                + f"\nFounder: {founder.display_name or founder.email}"
+            ),
+        ]
+        # Optional founder deep-profile (Debriefeur).
+        try:
+            from korpha.config import get_settings
+            from korpha.identity.founder_profile import load_founder_profile
+            profile_block = load_founder_profile(
+                get_settings().data_dir
+            ).as_prompt_preamble()
+            if profile_block:
+                parts.append(profile_block)
+        except Exception:  # noqa: BLE001
+            pass
+        return "\n\n".join(parts)
 
 
 def _build_attempt_prompt(task: str) -> str:
