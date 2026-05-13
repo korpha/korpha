@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}Cron · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Cron{% endblock %}
+{% block body %}
+  <div class="cron-shell">
+    {% if request.query_params.get('created') %}
+      <div class="cron-flash">
+        ✓ Created cron <code>{{ request.query_params.get('created') }}</code>.
+        Will run at the next tick.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('ran') %}
+      <div class="cron-flash">
+        ✓ Ran <code>{{ request.query_params.get('ran') }}</code> — status:
+        <strong>{{ request.query_params.get('status') }}</strong>.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('toggled') %}
+      <div class="cron-flash">
+        ✓ Toggled <code>{{ request.query_params.get('name') }}</code>
+        <strong>{{ request.query_params.get('toggled') }}</strong>.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('deleted') %}
+      <div class="cron-flash">
+        ✓ Deleted <code>{{ request.query_params.get('deleted') }}</code>.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('error') == 'not_found' %}
+      <div class="cron-flash cron-flash-warn">
+        Job not found or not owned by this business.
+      </div>
+    {% elif request.query_params.get('error') == 'bad_id' %}
+      <div class="cron-flash cron-flash-warn">Bad job id.</div>
+    {% endif %}
+
+    <div class="cron-header">
+      <p class="cron-blurb">
+        Agentless cron — schedule scripts that ping a channel with
+        their stdout. <strong>$0 token cost per tick.</strong>
+        Empty stdout = silent (watchdog pattern). Failure = error
+        alert.
+      </p>
+      <a href="/app/cron/new" class="cron-new-btn">+ New cron</a>
+    </div>
+    <p class="cron-blurb cron-blurb-dim">
+      Jobs run every minute when <code>korpha tick --watch</code>
+      (or a system cron line) is running. CLI alternative:
+      <code>korpha cron add</code>.
+    </p>
+
+    {% if not jobs %}
+      <div class="empty-state">
+        <div class="empty-icon">⏰</div>
+        <h2>No cron jobs yet</h2>
+        <p>Use the CLI command above to add one. Common examples:</p>
+        <ul class="cron-examples">
+          <li><strong>Memory watchdog</strong>: alerts only when RAM &gt; 80%</li>
+          <li><strong>Disk space</strong>: alerts at 90% full</li>
+          <li><strong>RSS pull</strong>: every 12h, ping you with new entries</li>
+          <li><strong>SaaS health</strong>: hit /healthz, alert if down</li>
+        </ul>
+      </div>
+    {% else %}
+      <table class="cron-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Cadence</th>
+            <th>Status</th>
+            <th>Last run</th>
+            <th>Delivery</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in jobs %}
+            <tr class="cron-row{% if not j.enabled %} cron-row-off{% endif %}">
+              <td>
+                <code>{{ j.name }}</code>
+                {% if not j.enabled %}<span class="cron-disabled-pill">paused</span>{% endif %}
+              </td>
+              <td>{{ j.cadence }}</td>
+              <td>
+                <span class="cron-pill cron-pill-{{ j.last_status.value }}">{{ j.last_status.value }}</span>
+                {% if j.last_summary %}
+                  <span class="cron-summary">{{ j.last_summary }}</span>
+                {% endif %}
+              </td>
+              <td>{% if j.last_run_at %}{{ j.last_run_at.strftime('%Y-%m-%d %H:%M') }}{% else %}<span class="cron-faint">never</span>{% endif %}</td>
+              <td>
+                {% if j.deliver_platform %}
+                  {{ j.deliver_platform }} → <code>{{ j.deliver_recipient }}</code>
+                {% else %}
+                  <span class="cron-faint">log-only</span>
+                {% endif %}
+              </td>
+              <td class="cron-actions">
+                <form method="post" action="/app/cron/{{ j.id }}/run-now">
+                  <button type="submit" class="cron-btn"
+                          title="Run this job now, ignoring cadence">▶ run</button>
+                </form>
+                <form method="post" action="/app/cron/{{ j.id }}/toggle">
+                  <button type="submit" class="cron-btn"
+                          title="{% if j.enabled %}Pause{% else %}Resume{% endif %}">
+                    {% if j.enabled %}⏸ pause{% else %}▶ resume{% endif %}
+                  </button>
+                </form>
+                <form method="post" action="/app/cron/{{ j.id }}/delete"
+                      onsubmit="return confirm('Delete cron {{ j.name }}? This is permanent.');">
+                  <button type="submit" class="cron-btn cron-btn-danger"
+                          title="Delete this job permanently">×</button>
+                </form>
+              </td>
+            </tr>
+            {% if j.last_output or j.last_error %}
+              <tr class="cron-detail-row">
+                <td colspan="6">
+                  {% if j.last_error %}
+                    <div class="cron-error">last error: {{ j.last_error[:300] }}</div>
+                  {% endif %}
+                  {% if j.last_output %}
+                    <div class="cron-output">last stdout: <code>{{ j.last_output[:300] }}</code></div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .cron-shell { display: flex; flex-direction: column; gap: 14px; max-width: 1100px; }
+  .cron-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .cron-new-btn {
+    background: var(--accent, #e7c14b);
+    color: var(--bg);
+    text-decoration: none;
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .cron-new-btn:hover { filter: brightness(1.1); }
+  .cron-blurb { color: var(--text-faint); font-size: 13px; max-width: 720px; }
+  .cron-blurb-dim { color: var(--text-faint); font-size: 12px; }
+  .cron-blurb code { background: var(--bg-elev); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .cron-cmd {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text);
+    max-width: 720px;
+    white-space: pre-wrap;
+  }
+  .cron-flash {
+    background: var(--bg-elev);
+    border: 1px solid var(--accent, #e7c14b);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .cron-flash-warn { border-color: #c25; }
+  .cron-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .cron-table th {
+    text-align: left;
+    padding: 9px 12px;
+    background: var(--bg);
+    color: var(--text-faint);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+  }
+  .cron-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .cron-row-off td { opacity: 0.55; }
+  .cron-detail-row td {
+    background: var(--bg);
+    padding: 6px 12px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cron-actions { display: flex; gap: 4px; }
+  .cron-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .cron-pill-ok { background: rgba(40, 180, 99, 0.2); color: #28b463; }
+  .cron-pill-silent { background: rgba(160, 160, 160, 0.2); color: var(--text-faint); }
+  .cron-pill-failed { background: rgba(204, 51, 102, 0.2); color: #c25; }
+  .cron-summary {
+    display: block;
+    margin-top: 3px;
+    color: var(--text-faint);
+    font-size: 11px;
+    line-height: 1.3;
+    max-width: 60ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cron-pill-never_run { background: rgba(160, 160, 160, 0.2); color: var(--text-faint); }
+  .cron-disabled-pill {
+    margin-left: 6px;
+    background: rgba(204, 51, 102, 0.15);
+    color: #c25;
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 10px;
+  }
+  .cron-btn {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .cron-btn:hover { background: var(--bg-hover); }
+  .cron-btn-danger:hover { color: #c25; border-color: #c25; }
+  .cron-faint { color: var(--text-faint); }
+  .cron-error { color: #c25; font-size: 12px; padding: 4px 0; }
+  .cron-output { color: var(--text-faint); font-size: 12px; padding: 4px 0; }
+  .cron-output code { color: var(--text); }
+  .cron-examples { color: var(--text-faint); font-size: 13px; padding-left: 20px; }
+  .cron-examples li { margin: 4px 0; }
+  .cron-examples strong { color: var(--text); }
+</style>
+{% endblock %}

@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Memory · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Memory{% endblock %}
+{% block body %}
+  <div class="memory-shell">
+    {% if request.query_params.get('forgot') == '1' %}
+      <div class="memory-flash">✓ Forgotten.</div>
+    {% endif %}
+    {% if request.query_params.get('error') == 'not_found' %}
+      <div class="memory-flash memory-flash-warn">
+        That memory doesn't belong to this business.
+      </div>
+    {% elif request.query_params.get('error') == 'bad_id' %}
+      <div class="memory-flash memory-flash-warn">Bad memory id.</div>
+    {% endif %}
+
+    <p class="memory-blurb">
+      Cross-session facts the cofounder remembers about you. Stored
+      via <code>memory.remember</code> and surfaced via
+      <code>memory.recall</code>. Built-in DB store; replaceable
+      with a plugin (mem0 / supermemory / honcho).
+    </p>
+
+    <form method="get" action="/app/memory" class="memory-search">
+      <input type="text" name="q" value="{{ query or '' }}"
+             class="memory-search-input"
+             placeholder="Search memories…" autocomplete="off" />
+      {% if query %}
+        <a href="/app/memory" class="memory-search-clear">clear</a>
+      {% endif %}
+    </form>
+
+    {% if not entries %}
+      <div class="empty-state">
+        <div class="empty-icon">🧠</div>
+        {% if query %}
+          <h2>No memories match {{ query }}</h2>
+          <p>Try a different search, or <a href="/app/memory">show all</a>.</p>
+        {% else %}
+          <h2>No stored memories yet</h2>
+          <p>Tell your cofounder things you want it to remember across sessions:</p>
+          <pre class="empty-code">"Remember: I'm targeting freelance designers, not enterprise."</pre>
+          <p>The agent will call <code>memory.remember</code> automatically when you phrase it as a memory ask.</p>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="memory-count">
+        {{ entries|length }} memory{% if entries|length != 1 %}ies{% endif %}
+        {% if query %}matching <code>{{ query }}</code>{% endif %}
+      </div>
+      <ul class="memory-list">
+        {% for e in entries %}
+          <li class="memory-row">
+            <div class="memory-content">
+              <div class="memory-text">{{ e.text }}</div>
+              <div class="memory-meta">
+                {% if e.tags %}
+                  <span class="memory-tags">
+                    {% for tag in e.tags %}
+                      <span class="memory-tag">{{ tag }}</span>
+                    {% endfor %}
+                  </span>
+                {% endif %}
+                <span class="memory-time">
+                  {% if e.created_at %}{{ e.created_at.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+                </span>
+                {% if e.score is not none %}
+                  <span class="memory-score">match: {{ "%.0f"|format(e.score * 100) }}%</span>
+                {% endif %}
+              </div>
+            </div>
+            <form method="post" action="/app/memory/{{ e.id }}/forget"
+                  class="memory-forget-form"
+                  onsubmit="return confirm('Forget this memory? This is permanent.');">
+              <button type="submit" class="memory-forget-btn"
+                      title="Forget this memory">×</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .memory-shell { display: flex; flex-direction: column; gap: 16px; max-width: 900px; }
+  .memory-blurb { color: var(--text-faint); font-size: 13px; max-width: 720px; }
+  .memory-blurb code { background: var(--bg-elev); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .memory-flash {
+    background: var(--bg-elev);
+    border: 1px solid var(--accent, #e7c14b);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .memory-flash-warn { border-color: #c25; }
+  .memory-search { display: flex; gap: 8px; align-items: center; }
+  .memory-search-input {
+    flex: 1;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 9px 12px;
+    color: var(--text);
+    font-size: 14px;
+  }
+  .memory-search-input:focus { outline: 2px solid var(--accent, #e7c14b); }
+  .memory-search-clear { color: var(--text-faint); font-size: 13px; }
+  .memory-count { color: var(--text-faint); font-size: 13px; }
+  .memory-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+  .memory-row {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .memory-content { flex: 1; min-width: 0; }
+  .memory-text { color: var(--text); font-size: 14px; line-height: 1.4; }
+  .memory-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 6px;
+    color: var(--text-faint);
+    font-size: 11px;
+  }
+  .memory-tags { display: inline-flex; gap: 4px; }
+  .memory-tag {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 10px;
+  }
+  .memory-time, .memory-score { font-variant-numeric: tabular-nums; }
+  .memory-forget-form { margin: 0; }
+  .memory-forget-btn {
+    background: transparent;
+    color: var(--text-faint);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    width: 24px; height: 24px;
+    line-height: 1;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .memory-forget-btn:hover {
+    color: #c25;
+    border-color: #c25;
+    background: rgba(204, 51, 102, 0.05);
+  }
+  .empty-code {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--text);
+    display: inline-block;
+    text-align: left;
+  }
+</style>
+{% endblock %}

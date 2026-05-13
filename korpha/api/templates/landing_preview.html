@@ -1,0 +1,131 @@
+{# Standalone landing-page preview for an approval. Deliberately NOT
+extending base.html — this is what the Founder is approving, so it
+should look like a real page, not the dashboard chrome around one. #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ headline }} · {{ business_name }}</title>
+  <style>
+    :root {
+      --fg: #0c0d12;
+      --fg-dim: #4a4e58;
+      --accent: #0f172a;
+      --bg: #f6f5ef;
+      --card: #ffffff;
+      --border: #e8e4d6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.5;
+    }
+    .preview-strip {
+      background: #15161a;
+      color: #e7c14b;
+      padding: 8px 16px;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+    .preview-strip a {
+      color: #fff;
+      text-decoration: underline;
+      margin-left: 8px;
+    }
+    .hero {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 80px 24px 60px;
+    }
+    .hero h1 {
+      font-size: 44px;
+      line-height: 1.1;
+      margin: 0 0 20px;
+      letter-spacing: -0.01em;
+    }
+    .hero .sub {
+      font-size: 19px;
+      color: var(--fg-dim);
+      margin: 0 0 28px;
+      max-width: 56ch;
+    }
+    .cta-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .cta {
+      background: var(--accent);
+      color: #fff;
+      padding: 14px 22px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .cta:hover { filter: brightness(1.1); }
+    .social {
+      color: var(--fg-dim);
+      font-size: 13.5px;
+    }
+    .objections {
+      max-width: 720px;
+      margin: 30px auto 80px;
+      padding: 0 24px;
+    }
+    .objection {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+    }
+    .objection-q {
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+    .objection-a {
+      color: var(--fg-dim);
+      font-size: 14.5px;
+      line-height: 1.55;
+    }
+    @media (max-width: 600px) {
+      .hero { padding: 50px 18px 40px; }
+      .hero h1 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-strip">
+    Preview · {{ niche_name or business_name }}
+    <a href="/app/approvals">← back to approvals</a>
+  </div>
+  <section class="hero">
+    <h1>{{ headline or "Untitled landing" }}</h1>
+    {% if subhead %}<p class="sub">{{ subhead }}</p>{% endif %}
+    <div class="cta-row">
+      <a href="#" class="cta" onclick="event.preventDefault();">{{ cta_label }}</a>
+      {% if social_proof %}<span class="social">{{ social_proof }}</span>{% endif %}
+    </div>
+  </section>
+  {% if objections %}
+    <section class="objections">
+      {% for o in objections %}
+        <div class="objection">
+          <div class="objection-q">{{ o.objection if o.objection is defined else o.get("objection", "") }}</div>
+          <div class="objection-a">{{ o.response if o.response is defined else o.get("response", "") }}</div>
+        </div>
+      {% endfor %}
+    </section>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtualenv
+.venv/
+venv/
+env/
+
+# uv
+.uv/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.local
+*.local
+
+# Logs
+*.log
+
+# Local data (will be created at runtime)
+.korpha/
+data/
+korpha.db
+
+# Marketing / JV site — never committed (private launch assets)
+website/
+
+# Local DB snapshots (never commit)
+*.db
+*.db.bak.*
+
+# Bundled site asset — built artifact, not source
+website.zip
+
+# IDE / agent artifacts — not for OSS
+.claude/
+
+# Top-level dev DB (only the one in $data_dir matters)
+/korpha.db
+/korpha.db

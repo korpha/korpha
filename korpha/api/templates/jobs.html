@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Jobs · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Jobs{% endblock %}
+{% block body %}
+  <div class="jobs-shell">
+    {% if request.query_params.get('cancelled') == '1' %}
+      <div class="job-flash">✓ Cancellation requested.</div>
+    {% elif request.query_params.get('cancelled') == '0' %}
+      <div class="job-flash job-flash-warn">
+        Job already finished or unknown — nothing to cancel.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('error') == 'not_found' %}
+      <div class="job-flash job-flash-warn">
+        Job not found or not owned by this business.
+      </div>
+    {% endif %}
+
+    <p class="jobs-blurb">
+      Background jobs (long-running Codex builds, etc.). Submitted
+      via skills like <code>code.ship_via_codex</code> with
+      <code>wait=False</code>. The registry is in-memory — restarts
+      drop everything.
+    </p>
+
+    {% if not jobs %}
+      <div class="empty-state">
+        <div class="empty-icon">⚙️</div>
+        <h2>No background jobs</h2>
+        <p>Ask the cofounder to run something with <code>wait=false</code> — for example a multi-minute refactor — and it'll show up here without freezing the chat.</p>
+      </div>
+    {% else %}
+      <table class="jobs-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Status</th>
+            <th>Label</th>
+            <th class="jobs-num">Duration</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in jobs %}
+            <tr class="jobs-row jobs-row-{{ j.status.value }}">
+              <td><code>{{ j.id }}</code></td>
+              <td>
+                <span class="jobs-pill jobs-pill-{{ j.status.value }}">{{ j.status.value }}</span>
+              </td>
+              <td>{{ j.label }}</td>
+              <td class="jobs-num">
+                {% set dur = j.duration_seconds() %}
+                {% if dur is none %}—{% else %}{{ "%.1f"|format(dur) }}s{% endif %}
+              </td>
+              <td>
+                {% if j.status.value == 'running' %}
+                  <form method="post" action="/app/jobs/{{ j.id }}/cancel"
+                        onsubmit="return confirm('Cancel job {{ j.id }}? The cofounder will record it as cancelled and any partial work is lost.');">
+                    <button type="submit" class="jobs-cancel-btn">Cancel</button>
+                  </form>
+                {% else %}
+                  <span class="jobs-no-action">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% if j.error %}
+              <tr class="jobs-error-row">
+                <td colspan="5">
+                  <code class="jobs-error">{{ j.error }}</code>
+                </td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .jobs-shell { display: flex; flex-direction: column; gap: 18px; max-width: 1100px; }
+  .jobs-blurb { color: var(--text-faint); font-size: 13px; max-width: 720px; }
+  .jobs-blurb code { background: var(--bg-elev); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .job-flash {
+    background: var(--bg-elev);
+    border: 1px solid var(--accent, #e7c14b);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .job-flash-warn { border-color: #c25; }
+  .jobs-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .jobs-table th {
+    text-align: left;
+    padding: 9px 12px;
+    background: var(--bg);
+    color: var(--text-faint);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+  }
+  .jobs-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .jobs-table tbody tr:last-child td { border-bottom: none; }
+  .jobs-table .jobs-num { text-align: right; font-variant-numeric: tabular-nums; }
+  .jobs-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .jobs-pill-running { background: rgba(231, 193, 75, 0.2); color: var(--accent, #e7c14b); }
+  .jobs-pill-completed { background: rgba(40, 180, 99, 0.2); color: #28b463; }
+  .jobs-pill-failed { background: rgba(204, 51, 102, 0.2); color: #c25; }
+  .jobs-pill-cancelled { background: rgba(160, 160, 160, 0.2); color: var(--text-faint); }
+  .jobs-pill-pending { background: rgba(160, 160, 160, 0.2); color: var(--text-faint); }
+  .jobs-cancel-btn {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .jobs-cancel-btn:hover { background: var(--bg-hover); border-color: #c25; }
+  .jobs-no-action { color: var(--text-faint); }
+  .jobs-error-row td { padding-top: 0; padding-bottom: 12px; }
+  .jobs-error {
+    color: #c25;
+    font-size: 12px;
+    background: rgba(204, 51, 102, 0.05);
+    padding: 6px 10px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+</style>
+{% endblock %}

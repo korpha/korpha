@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}Working on it · Korpha{% endblock %}
+{% block breadcrumbs %}Onboard · Step 2{% endblock %}
+{% block body %}
+  <div class="onboard">
+    <div class="onboard-eyebrow">Captured ✓</div>
+    <h1 class="onboard-h1">{{ brief.get("summary") or brief.get("goal") or "Got it." }}</h1>
+    <p class="onboard-sub" style="margin-bottom: 8px;">
+      <span style="color: var(--text-dim, #9aa0a6);">
+        Goal:</span> {{ brief.get("goal") or "—" }} ·
+      <span style="color: var(--text-dim, #9aa0a6);">
+        {{ brief.get("time_per_week_hours") or "?" }}h/wk ·
+        ${{ brief.get("savings_usd") or "?" }} ·
+        {{ brief.get("timeline_months") or "?" }} months</span>
+    </p>
+
+    <div class="onboard-step-divider"></div>
+
+    <div class="onboard-step">
+      <div class="onboard-step-label">Now finding your first niche…</div>
+
+      <div id="niche-results"
+           hx-get="/app/onboard/niche-fragment"
+           hx-trigger="load"
+           hx-swap="innerHTML">
+        <div class="niche-thinking">
+          <div class="niche-thinking-spinner"></div>
+          <div class="niche-thinking-text">
+            Scanning micro-niches that match your skills, time, and savings…
+            <span class="niche-thinking-elapsed">
+              <span id="niche-elapsed">0</span>s elapsed
+              <span id="niche-stage" class="niche-stage"></span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div id="niche-bailout" class="niche-bailout" hidden>
+        Still working — typical run is 60–90s on a Pro-tier model.
+        <a href="/app/dashboard">Skip to the dashboard</a> if you'd
+        rather not wait; we'll keep finding niches in the background
+        and surface them in the inbox.
+      </div>
+    </div>
+
+    <div class="onboard-footer" style="margin-top: 32px;">
+      Don't see a fit? <a href="/app/onboard">Edit your brief</a> or
+      <a href="/app/dashboard">skip to the dashboard</a>.
+    </div>
+
+<script>
+  // Elapsed timer + progress messaging while niche discovery runs.
+  // Niche discovery is a Pro LLM call that typically takes 60-90s;
+  // without feedback users assume it's hung. The bail-out link
+  // appears at 30s so they have an out before they get frustrated.
+  (() => {
+    const elapsedEl = document.getElementById("niche-elapsed");
+    const stageEl = document.getElementById("niche-stage");
+    const bailoutEl = document.getElementById("niche-bailout");
+    const target = document.getElementById("niche-results");
+    if (!elapsedEl || !target) return;
+
+    const stages = [
+      [0, "starting…"],
+      [10, "matching against your savings + hours/week…"],
+      [25, "scoring fit on B2B vs B2C, MRR vs one-off…"],
+      [45, "narrowing to top 3 candidates…"],
+      [70, "drafting validation experiments…"],
+      [100, "almost done…"],
+    ];
+    let elapsed = 0;
+    const tick = setInterval(() => {
+      // Stop once HTMX has swapped in the result fragment.
+      if (target.dataset.swapped === "1") { clearInterval(tick); return; }
+      elapsed++;
+      elapsedEl.textContent = String(elapsed);
+      const stage = [...stages].reverse().find(([t]) => elapsed >= t);
+      if (stage) stageEl.textContent = " · " + stage[1];
+      if (elapsed === 30 && bailoutEl) bailoutEl.hidden = false;
+    }, 1000);
+
+    // HTMX fires this once the swap completes — flag the target so
+    // the timer stops + hide the bail-out.
+    document.body.addEventListener("htmx:afterSwap", (evt) => {
+      if (evt.detail.target === target) {
+        target.dataset.swapped = "1";
+        if (bailoutEl) bailoutEl.hidden = true;
+      }
+    });
+  })();
+</script>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .onboard {
+    max-width: 760px;
+    margin: 60px auto 80px;
+    padding: 0 16px;
+  }
+  .onboard-eyebrow {
+    color: #4ade80;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .onboard-h1 {
+    font-size: 22px;
+    line-height: 1.4;
+    font-weight: 500;
+    margin: 0 0 8px;
+    color: var(--text, #f4f4f4);
+  }
+  .onboard-sub {
+    color: var(--text-dim, #9aa0a6);
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0 0 20px;
+  }
+  .onboard-step-divider {
+    border-top: 1px solid var(--border, #2a2c33);
+    margin: 24px 0;
+  }
+  .onboard-step-label {
+    color: var(--text-dim, #9aa0a6);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 16px;
+  }
+  .niche-thinking {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 16px;
+    border: 1px dashed var(--border, #2a2c33);
+    border-radius: 8px;
+    color: var(--text-dim, #9aa0a6);
+  }
+  .niche-thinking-spinner {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--border, #2a2c33);
+    border-top-color: var(--accent, #e7c14b);
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .niche-thinking-text { font-size: 13px; }
+  .niche-thinking-elapsed {
+    display: block;
+    margin-top: 6px;
+    font-size: 11.5px;
+    color: var(--text-faint, #58595c);
+    font-variant-numeric: tabular-nums;
+  }
+  .niche-stage { color: var(--text-dim, #9aa0a6); }
+  .niche-bailout {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--border, #2a2c33);
+    border-radius: 6px;
+    background: rgba(231, 193, 75, 0.04);
+    color: var(--text-dim, #9aa0a6);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .niche-bailout a {
+    color: var(--accent, #e7c14b);
+    font-weight: 500;
+  }
+
+  .niche-card {
+    border: 1px solid var(--border, #2a2c33);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    background: var(--bg-elevated, #131418);
+  }
+  .niche-card.is-recommended {
+    border-color: rgba(231, 193, 75, 0.5);
+    background: rgba(231, 193, 75, 0.04);
+  }
+  .niche-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .niche-card-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text, #f4f4f4);
+  }
+  .niche-card-fit {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim, #9aa0a6);
+  }
+  .niche-card-recommended-tag {
+    background: var(--accent, #e7c14b);
+    color: #15161a;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+  }
+  .niche-card-row {
+    color: var(--text-dim, #9aa0a6);
+    font-size: 13px;
+    line-height: 1.45;
+    margin-top: 4px;
+  }
+  .niche-card-row strong {
+    color: var(--text, #f4f4f4);
+    font-weight: 500;
+    margin-right: 6px;
+  }
+  .niche-card-actions {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .niche-card-pick {
+    background: var(--accent, #e7c14b);
+    color: #15161a;
+    border: 0;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-weight: 600;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .niche-card-pick.is-secondary {
+    background: transparent;
+    color: var(--text, #f4f4f4);
+    border: 1px solid var(--border, #2a2c33);
+  }
+  .niche-card-pick:hover { filter: brightness(1.05); }
+
+  .niche-rationale {
+    font-size: 12.5px;
+    color: var(--text-dim, #9aa0a6);
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: rgba(231, 193, 75, 0.04);
+    border-left: 2px solid var(--accent, #e7c14b);
+    border-radius: 0 4px 4px 0;
+  }
+
+  .niche-error {
+    background: rgba(220, 80, 80, 0.10);
+    border: 1px solid rgba(220, 80, 80, 0.32);
+    color: #f5b8b8;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+  .niche-empty {
+    color: var(--text-dim, #9aa0a6);
+    font-size: 13px;
+    padding: 14px 0;
+  }
+</style>
+{% endblock %}

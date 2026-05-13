@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+{% block title %}Chat · {{ business.name }} · Korpha{% endblock %}
+{% block breadcrumbs %}
+  {% if is_archived %}Archived chat — {{ thread_topic }}
+  {% elif thread_id %}{{ thread_topic or 'Chat' }}
+  {% else %}Chat with your cofounder
+  {% endif %}
+{% endblock %}
+{% block body %}
+<div class="chat-shell">
+  {% if is_archived %}
+    <div class="chat-archive-banner">
+      <div class="chat-archive-text">
+        <strong>This chat is archived.</strong>
+        Reading-only — start a new chat or resume this one to continue.
+      </div>
+      <form method="post" action="/app/chat/{{ thread_id }}/resume">
+        <button type="submit" class="chat-archive-resume">Resume this chat</button>
+      </form>
+    </div>
+  {% elif has_history %}
+    <div class="chat-history-pointer">
+      <a href="/app/chat/history">← Previous chats</a>
+    </div>
+  {% endif %}
+
+  <div class="chat-history" id="chat-history" data-empty="{{ 'true' if not messages else 'false' }}">
+    {% if not messages %}
+    <div class="chat-empty">
+      <div class="chat-empty-eyebrow">Day {{ day_number or 0 }}</div>
+      <h2 class="chat-empty-title">Tell your cofounder what to do.</h2>
+      <p class="chat-empty-sub">
+        Ask anything: "draft a cold email to 10 prospects",
+        "set up a $29/month Stripe link", "broadcast our launch to my Teams channel".
+        Outbound actions need your approval before anything ships.
+      </p>
+      <div class="chat-empty-suggestions">
+        <button type="button" class="chat-suggestion" data-q="What should I work on this week?">What should I work on this week?</button>
+        <button type="button" class="chat-suggestion" data-q="Draft 5 cold-email subject lines for our offer.">Draft 5 cold-email subject lines</button>
+        <button type="button" class="chat-suggestion" data-q="Create a $29/month Stripe payment link for the basic tier.">Create a $29/month Stripe link</button>
+      </div>
+    </div>
+    {% else %}
+      {% for m in messages %}
+        <div class="chat-msg chat-msg-{{ m.sender_type_value }}">
+          <div class="chat-msg-head">
+            <span class="chat-msg-who">
+              {% if m.sender_type_value == 'founder' %}You
+              {% elif m.sender_type_value == 'agent' %}{{ m.sender_role_title }}
+              {% else %}System{% endif %}
+            </span>
+            <span class="chat-msg-time">{{ m.created_at.strftime('%H:%M') }}</span>
+          </div>
+          <div class="chat-msg-body">{{ m.content }}</div>
+          {% if m.attachments and m.attachments.get('clarify_choices') %}
+            <div class="chat-clarify" data-msg-id="{{ m.id }}">
+              {% for choice in m.attachments['clarify_choices'] %}
+                <button type="button"
+                        class="chat-clarify-choice"
+                        data-choice="{{ choice }}">{{ loop.index }}. {{ choice }}</button>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  {% if not is_archived %}
+  <form class="chat-input" id="chat-form" autocomplete="off">
+    <textarea class="chat-input-text"
+              id="chat-input-text"
+              name="message"
+              rows="1"
+              placeholder="Ask your cofounder…"
+              required></textarea>
+    <button type="submit" class="chat-input-send" id="chat-input-send">Send</button>
+  </form>
+
+  <div class="chat-status" id="chat-status" hidden></div>
+  {% endif %}
+</div>
+
+<style>
+  .chat-shell {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 120px);
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .chat-history-pointer {
+    margin: 0 0 8px;
+    font-size: 12.5px;
+  }
+  .chat-history-pointer a {
+    color: var(--text-dim);
+    text-decoration: none;
+  }
+  .chat-history-pointer a:hover { color: var(--text); }
+  .chat-archive-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 12px;
+  }
+  .chat-archive-text { color: var(--text-dim); font-size: 13px; }
+  .chat-archive-text strong { color: var(--text); margin-right: 6px; }
+  .chat-archive-resume {
+    background: var(--accent);
+    color: var(--bg);
+    border: 0;
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .chat-history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 4px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .chat-history[data-empty="true"] {
+    justify-content: center;
+  }
+  .chat-empty {
+    text-align: left;
+    padding: 0 8px;
+  }
+  .chat-empty-eyebrow {
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .chat-empty-title {
+    font-size: 26px;
+    line-height: 1.2;
+    margin: 0 0 12px;
+    color: var(--text);
+  }
+  .chat-empty-sub {
+    color: var(--text-dim);
+    font-size: 14.5px;
+    line-height: 1.55;
+    margin: 0 0 22px;
+    max-width: 640px;
+  }
+  .chat-empty-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chat-suggestion {
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .chat-suggestion:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+  .chat-clarify {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    padding-left: 4px;
+  }
+  .chat-clarify-choice {
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 60ms, border-color 60ms;
+  }
+  .chat-clarify-choice:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--accent, #e7c14b);
+  }
+  .chat-clarify-choice:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .chat-msg {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px 12px;
+  }
+  .chat-msg-founder {
+    background: var(--accent-soft);
+    border-color: transparent;
+  }
+  .chat-msg-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .chat-msg-who { color: var(--text); font-weight: 600; }
+  .chat-msg-time { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+  .chat-msg-body {
+    color: var(--text);
+    font-size: 14.5px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .chat-input {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-top: 8px;
+  }
+  .chat-input-text {
+    flex: 1;
+    background: transparent;
+    color: var(--text);
+    border: 0;
+    outline: none;
+    font: inherit;
+    font-size: 14.5px;
+    line-height: 1.45;
+    resize: none;
+    max-height: 200px;
+    padding: 8px 6px;
+  }
+  .chat-input-send {
+    background: var(--accent);
+    color: var(--bg);
+    border: 0;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    align-self: flex-end;
+  }
+  .chat-input-send:disabled {
+    opacity: 0.5;
+    cursor: progress;
+  }
+  .chat-status {
+    margin-top: 6px;
+    color: var(--text-dim);
+    font-size: 12.5px;
+    text-align: right;
+    min-height: 1.2em;
+  }
+  .chat-status[data-error] { color: #f5a8a8; }
+</style>
+
+<script>
+(() => {
+  const historyEl = document.getElementById("chat-history");
+  const form = document.getElementById("chat-form");
+  const input = document.getElementById("chat-input-text");
+  const sendBtn = document.getElementById("chat-input-send");
+  const status = document.getElementById("chat-status");
+
+  // Clicking a suggestion fills the textarea + sends.
+  document.querySelectorAll(".chat-suggestion").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      input.value = btn.dataset.q || btn.textContent.trim();
+      form.requestSubmit();
+    });
+  });
+
+  // Auto-grow the textarea up to 200px.
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 200) + "px";
+  });
+
+  // Submit on Enter (without shift).
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  function appendMsg({ who, klass, content, time }) {
+    if (historyEl.dataset.empty === "true") {
+      historyEl.innerHTML = "";
+      historyEl.dataset.empty = "false";
+    }
+    const wrap = document.createElement("div");
+    wrap.className = "chat-msg chat-msg-" + klass;
+    wrap.innerHTML =
+      '<div class="chat-msg-head">' +
+        '<span class="chat-msg-who"></span>' +
+        '<span class="chat-msg-time"></span>' +
+      "</div>" +
+      '<div class="chat-msg-body"></div>';
+    wrap.querySelector(".chat-msg-who").textContent = who;
+    wrap.querySelector(".chat-msg-time").textContent = time || new Date().toTimeString().slice(0,5);
+    wrap.querySelector(".chat-msg-body").textContent = content;
+    historyEl.appendChild(wrap);
+    historyEl.scrollTop = historyEl.scrollHeight;
+    return wrap.querySelector(".chat-msg-body");
+  }
+
+  // Render clickable clarify choices below an assistant bubble.
+  // The user clicks; the chosen text becomes the next message.
+  function renderClarify(bubble, choices) {
+    const wrap = document.createElement("div");
+    wrap.className = "chat-clarify";
+    choices.forEach((choice, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chat-clarify-choice";
+      btn.dataset.choice = choice;
+      btn.textContent = (i + 1) + ". " + choice;
+      btn.addEventListener("click", () => {
+        input.value = choice;
+        // Disable all buttons in this clarify group so the user
+        // can't double-pick.
+        wrap.querySelectorAll("button").forEach((b) => b.disabled = true);
+        form.requestSubmit();
+      });
+      wrap.appendChild(btn);
+    });
+    bubble.appendChild(wrap);
+    historyEl.scrollTop = historyEl.scrollHeight;
+  }
+
+  // Persisted clarify buttons (rendered by the server template) need
+  // wiring on initial load too — same click → submit flow.
+  document.querySelectorAll(".chat-clarify-choice").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      input.value = btn.dataset.choice || btn.textContent.trim();
+      const wrap = btn.closest(".chat-clarify");
+      if (wrap) wrap.querySelectorAll("button").forEach((b) => b.disabled = true);
+      form.requestSubmit();
+    });
+  });
+
+  function setStatus(msg, isError) {
+    if (!msg) {
+      status.hidden = true;
+      delete status.dataset.error;
+    } else {
+      status.hidden = false;
+      status.textContent = msg;
+      if (isError) status.dataset.error = "1"; else delete status.dataset.error;
+    }
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+
+    appendMsg({ who: "You", klass: "founder", content: text });
+    input.value = "";
+    input.style.height = "auto";
+    sendBtn.disabled = true;
+    setStatus("Thinking…");
+
+    // Render an empty agent bubble we'll stream into.
+    const bodyEl = appendMsg({ who: "Cofounder", klass: "agent", content: "" });
+
+    try {
+      const resp = await fetch("/ask/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+        body: JSON.stringify({ message: text }),
+      });
+      if (!resp.ok || !resp.body) {
+        throw new Error("HTTP " + resp.status);
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let fullContent = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const frames = buf.split("\n\n");
+        buf = frames.pop() || "";
+        for (const frame of frames) {
+          const line = frame.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
+          let evt;
+          try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+          if (evt.type === "phase") {
+            setStatus(({ router: "Routing…", skill: "Running skill…", synth: "Drafting reply…" })[evt.phase] || evt.phase);
+          } else if (evt.type === "content") {
+            fullContent += evt.text || "";
+            bodyEl.textContent = fullContent;
+            historyEl.scrollTop = historyEl.scrollHeight;
+          } else if (evt.type === "done") {
+            // Server sends final canonical content too — prefer it.
+            if (evt.content) bodyEl.textContent = evt.content;
+            const skills = (evt.skills_used || []).filter(Boolean);
+            setStatus(skills.length ? "Used: " + skills.join(", ") : "");
+            if (Array.isArray(evt.clarify_choices) && evt.clarify_choices.length) {
+              renderClarify(bodyEl.parentElement, evt.clarify_choices);
+            }
+          } else if (evt.type === "error") {
+            bodyEl.textContent = "(error: " + (evt.message || "unknown") + ")";
+            setStatus("Failed", true);
+          }
+        }
+      }
+    } catch (err) {
+      bodyEl.textContent = "(error reaching server: " + err.message + ")";
+      setStatus("Failed: " + err.message, true);
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  });
+
+  // Auto-scroll on load + focus.
+  historyEl.scrollTop = historyEl.scrollHeight;
+  input.focus();
+})();
+</script>
+{% endblock %}

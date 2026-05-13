@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ entry.name }} · Source · Korpha{% endblock %}
+{% block breadcrumbs %}Authored skills · {{ entry.name }}{% endblock %}
+{% block body %}
+<div class="src-shell">
+  <div class="src-header">
+    <div>
+      <h1 class="src-title">{{ entry.name }}</h1>
+      <p class="src-sub">{{ entry.description }}</p>
+      <p class="src-meta">
+        <span class="src-kind src-kind-{{ entry.kind }}">{{ entry.kind }}</span>
+        · <code>{{ entry.primary_file }}</code>
+        · {{ (entry.size_bytes / 1024) | round(1) }} KB
+        · last touched {{ entry.mtime.strftime('%b %d %Y, %H:%M UTC') }}
+      </p>
+    </div>
+    <a href="/app/skills/authored" class="src-back">← All authored</a>
+  </div>
+
+  <pre class="src-code">{{ source_text }}</pre>
+</div>
+
+<style>
+  .src-shell { max-width: 1040px; margin: 0 auto; padding: 0 4px 24px; }
+  .src-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 24px; margin: 4px 0 18px;
+  }
+  .src-title {
+    font-size: 22px; font-weight: 600; color: var(--text); margin: 0 0 4px;
+    font-family: ui-monospace, Menlo, monospace;
+  }
+  .src-sub { color: var(--text-dim); font-size: 13.5px; margin: 0 0 6px; }
+  .src-meta {
+    color: var(--text-faint); font-size: 11.5px; margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .src-meta code {
+    background: var(--bg-elev); padding: 1px 5px; border-radius: 3px;
+  }
+  .src-kind {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 7px; border-radius: 999px; font-weight: 700;
+  }
+  .src-kind-yaml {
+    background: rgba(94, 158, 255, 0.16); color: #5e9eff;
+  }
+  .src-kind-python {
+    background: rgba(231, 193, 75, 0.16); color: #e7c14b;
+  }
+  .src-back {
+    color: var(--text-dim); text-decoration: none; font-size: 13px;
+    white-space: nowrap;
+  }
+  .src-back:hover { color: var(--text); }
+  .src-code {
+    background: var(--bg-elev); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px; margin: 0;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12.5px;
+    line-height: 1.55; color: var(--text);
+    white-space: pre-wrap; word-break: break-all; overflow-x: auto;
+    max-height: 720px;
+  }
+</style>
+{% endblock %}

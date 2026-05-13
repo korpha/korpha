@@ -1,0 +1,42 @@
+# RankMyAnswer.com — reference Cofounder Protocol manifest.
+#
+# Live the partner experience: Korpha ships these skills built-in,
+# but RankMyAnswer.com (the SaaS) hosts a manifest at
+# https://rankmyanswer.com/.well-known/cofounder.yaml so any
+# Korpha user can run `korpha cofounder install
+# https://rankmyanswer.com/.well-known/cofounder.yaml` and get the
+# auth flow + branding wired automatically.
+
+spec_version: 1
+name: rank_my_answer
+display_name: "RankMyAnswer.com — GEO + SEO"
+description: |
+  Audit landing pages for both Google SEO (classic on-page +
+  technical signals) and GEO (Generative Engine Optimization —
+  getting cited by ChatGPT, Perplexity, Claude, Gemini answers).
+  Generate JSON-LD schema, track tracked-site KPIs, list project
+  niche templates.
+homepage: https://rankmyanswer.com
+docs_url: https://rankmyanswer.com/docs/agents/korpha
+
+provides:
+  skills:
+    - geo_seo.audit_url
+    - geo_seo.generate_schema
+    - geo_seo.list_projects
+    - geo_seo.balance
+
+auth:
+  kind: api_key
+  api_key_env: RANKMYANSWER_API_KEY
+  setup_command: korpha config-rankmyanswer-add
+  signup_url: https://rankmyanswer.com/signup
+
+branding:
+  primary_color: "#1f7a4d"
+  logo_url: https://rankmyanswer.com/logo.svg
+
+requires:
+  korpha_version: ">=0.1.0"
+  network_egress:
+    - api.rankmyanswer.com

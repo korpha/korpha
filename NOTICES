@@ -1,0 +1,28 @@
+Korpha — Third-Party Notices
+============================
+
+This product includes software developed by third parties. Their licenses
+are reproduced below.
+
+--------------------------------------------------------------------------------
+
+hermes-agent (vendored under hermes/)
+Source: https://github.com/NousResearch/hermes-agent
+Copyright (c) Nous Research
+Licensed under the MIT License.
+
+The full MIT License text for hermes-agent is preserved at hermes/LICENSE.
+
+--------------------------------------------------------------------------------
+
+paperclip — architectural inspiration only (no code redistributed)
+Source: https://github.com/paperclipai/paperclip
+Copyright (c) paperclipai
+Licensed under the MIT License.
+
+Korpha was inspired by Paperclip's design for multi-agent business
+orchestration (heartbeats, ticketing, governance, multi-company isolation).
+No Paperclip source code is included in this repository — its concepts have
+been independently reimplemented in Python with a different product framing
+("cofounder, not employee"). Credit to the Paperclip team for proving the
+shape of the problem.

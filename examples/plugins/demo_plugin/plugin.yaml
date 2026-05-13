@@ -1,0 +1,19 @@
+# Example Korpha plugin.
+#
+# Drop this whole directory under ~/.korpha/plugins/ (or set
+# KORPHA_PLUGINS_DIR to a path containing it) and `korpha plugins-list`
+# will show it. Plugins run in-process today — same Python interpreter as
+# Korpha — so only install ones from authors you trust.
+
+name: demo-plugin
+version: 1.0.0
+description: |
+  Toy plugin that registers a heartbeat handler logging "tick" every time
+  it fires. Replace this with real capability code as a starting point.
+author: Example Author
+entry_point: ./demo.py:register
+
+# Declare exactly the capabilities the plugin needs. Anything else the
+# plugin tries will raise PluginPermissionError at call time.
+permissions:
+  - wakeup_handlers

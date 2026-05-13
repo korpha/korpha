@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+{% block title %}Kanban · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Kanban{% endblock %}
+{% block body %}
+  <div class="kb-shell">
+    {% if request.query_params.get('created') %}
+      <div class="kb-flash">
+        ✓ Created card <code>{{ request.query_params.get('created') }}</code>.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('moved') %}
+      <div class="kb-flash">
+        ✓ Moved to <strong>{{ request.query_params.get('moved') }}</strong>.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+      <div class="kb-flash kb-flash-warn">
+        {{ request.query_params.get('error') }}
+      </div>
+    {% endif %}
+
+    <div class="kb-header">
+      <p class="kb-blurb">
+        The board the C-suite works from. Cards flow left → right.
+        Cards are scoped in <strong>SPECIFY</strong> (acceptance
+        criteria + owner), claimed from <strong>READY</strong>, and
+        verified in <strong>REVIEW</strong> before <strong>DONE</strong>.
+      </p>
+      <form method="post" action="/app/kanban/new" class="kb-quick-form">
+        <input type="text" name="title" placeholder="Card title…"
+               class="kb-quick-input" required maxlength="200" />
+        <button type="submit" class="kb-quick-btn">+ Add to backlog</button>
+      </form>
+    </div>
+
+    {% if unit_filter_options %}
+      <div class="kb-filter-ribbon">
+        <span class="kb-filter-label">Line:</span>
+        <a href="/app/kanban"
+           class="kb-filter-pill {{ 'is-active' if not unit_filter_id }}">All</a>
+        <a href="/app/kanban?unit=__none__"
+           class="kb-filter-pill {{ 'is-active' if unit_filter_id == '__none__' }}">
+          Company-wide
+        </a>
+        {% for u in unit_filter_options %}
+          <a href="/app/kanban?unit={{ u.id }}"
+             class="kb-filter-pill {{ 'is-active' if unit_filter_id == u.id|string }}">
+            {{ u.name }} <code class="tm-muted">{{ u.kind.value }}</code>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="kb-board">
+      {% for col, cards in snapshot.items() %}
+        <div class="kb-col kb-col-{{ col.value }}">
+          <div class="kb-col-head">
+            <span class="kb-col-name">{{ col.value.replace('_', ' ') }}</span>
+            <span class="kb-col-count">{{ cards|length }}</span>
+          </div>
+          <div class="kb-col-body">
+            {% for c in cards %}
+              <div class="kb-card kb-card-{{ c.priority.value }}{% if c.id in live_card_ids %} kb-card-live{% endif %}">
+                <div class="kb-card-title">
+                  {% if c.id in live_card_ids %}
+                    <span class="kb-live-dot" title="A {{ c.owner_role|upper }} agent is actively working this card right now"></span>
+                  {% endif %}
+                  {{ c.title }}
+                </div>
+                {% if c.body %}
+                  <div class="kb-card-body">{{ c.body[:240] }}{% if c.body|length > 240 %}…{% endif %}</div>
+                {% endif %}
+                <div class="kb-card-meta">
+                  {% if c.owner_role %}
+                    <span class="kb-pill kb-pill-owner">{{ c.owner_role|upper }}</span>
+                  {% endif %}
+                  {% if c.priority.value != 'normal' %}
+                    <span class="kb-pill kb-pill-{{ c.priority.value }}">{{ c.priority.value }}</span>
+                  {% endif %}
+                  {% if c.acceptance_criteria %}
+                    <span class="kb-pill kb-pill-spec">{{ c.acceptance_criteria|length }} criteria</span>
+                  {% endif %}
+                  {% if c.review_evidence %}
+                    <span class="kb-pill kb-pill-evidence">evidence ✓</span>
+                  {% endif %}
+                </div>
+                {% set arts = artifacts_by_card.get(c.id, []) if artifacts_by_card else [] %}
+                {% if arts %}
+                  <div class="kb-card-artifacts">
+                    {% for art in arts %}
+                      <div class="kb-artifact kb-art-{{ art.kind.value }} kb-art-state-{{ art.review_state.value }}{% if art.is_primary %} kb-art-primary{% endif %}">
+                        <span class="kb-art-kind">{{ art.kind.value }}</span>
+                        {% if art.location.startswith("http") %}
+                          <a href="{{ art.location }}" target="_blank"
+                             rel="noopener" class="kb-art-link">
+                            {{ art.label }}
+                          </a>
+                        {% else %}
+                          <span class="kb-art-label">{{ art.label }}</span>
+                        {% endif %}
+                        {% if art.review_state.value == 'accepted' %}
+                          <span class="kb-art-verdict kb-art-accepted">✓</span>
+                        {% elif art.review_state.value == 'rework' %}
+                          <span class="kb-art-verdict kb-art-rework">↩</span>
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                <div class="kb-card-actions">
+                  {% set allowed = transitions.get(col, []) %}
+                  {% for to_col in allowed %}
+                    {% if to_col.value not in ['archived'] %}
+                      <form method="post" action="/app/kanban/{{ c.id }}/move" class="kb-move-form">
+                        <input type="hidden" name="to_column" value="{{ to_col.value }}" />
+                        <button type="submit" class="kb-btn kb-btn-{{ to_col.value }}"
+                                title="Move to {{ to_col.value.replace('_', ' ') }}">
+                          → {{ to_col.value.replace('_', ' ') }}
+                        </button>
+                      </form>
+                    {% endif %}
+                  {% endfor %}
+                  <form method="post" action="/app/kanban/{{ c.id }}/move"
+                        onsubmit="return confirm('Archive {{ c.title|e }}?');">
+                    <input type="hidden" name="to_column" value="archived" />
+                    <button type="submit" class="kb-btn kb-btn-danger" title="Archive">×</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+            {% if not cards %}
+              <div class="kb-col-empty">empty</div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .kb-shell { display: flex; flex-direction: column; gap: 14px; }
+  .kb-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .kb-blurb { color: var(--text-faint); font-size: 13px; max-width: 720px; }
+  .kb-blurb strong { color: var(--text); }
+  .kb-quick-form { display: flex; gap: 6px; }
+  .kb-quick-input {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    min-width: 240px;
+  }
+  .kb-quick-btn {
+    background: var(--accent, #e7c14b);
+    color: var(--bg);
+    padding: 6px 14px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .kb-quick-btn:hover { filter: brightness(1.1); }
+
+  .kb-flash {
+    background: var(--bg-elev);
+    border: 1px solid var(--accent, #e7c14b);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .kb-flash-warn { border-color: #c25; }
+
+  .kb-board {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(180px, 1fr));
+    gap: 10px;
+    overflow-x: auto;
+  }
+  .kb-col {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+  }
+  .kb-col-head {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .kb-col-name {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+  }
+  .kb-col-count {
+    background: var(--bg);
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+  .kb-col-body {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+  .kb-col-empty {
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 11px;
+    padding: 24px 8px;
+    opacity: 0.4;
+  }
+
+  .kb-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .kb-card-high { border-left: 3px solid #c25; }
+  .kb-card-low { opacity: 0.7; }
+  .kb-card-live {
+    background: linear-gradient(
+      to bottom right,
+      var(--bg),
+      rgba(40, 180, 99, 0.08)
+    );
+    border-color: rgba(40, 180, 99, 0.5);
+  }
+  .kb-live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #28b463;
+    margin-right: 4px;
+    vertical-align: middle;
+    animation: kb-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes kb-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(40, 180, 99, 0.6); }
+    50% { opacity: 0.55; box-shadow: 0 0 0 6px rgba(40, 180, 99, 0); }
+  }
+  .kb-card-title { font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .kb-card-body { color: var(--text-faint); font-size: 11px; margin-bottom: 6px; }
+  .kb-card-meta { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+
+  .kb-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .kb-pill-owner { background: rgba(231, 193, 75, 0.18); color: #e7c14b; }
+  .kb-pill-high { background: rgba(204, 51, 102, 0.2); color: #c25; }
+  .kb-pill-low { background: rgba(160, 160, 160, 0.2); color: var(--text-faint); }
+  .kb-pill-spec { background: rgba(80, 140, 220, 0.2); color: #5cf; }
+  .kb-pill-evidence { background: rgba(40, 180, 99, 0.2); color: #28b463; }
+
+  .kb-card-artifacts {
+    display: flex; flex-direction: column; gap: 3px;
+    margin-bottom: 6px;
+  }
+  .kb-artifact {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px;
+    padding: 2px 4px;
+    border-left: 2px solid var(--border);
+  }
+  .kb-art-primary { border-left-color: var(--accent, #e7c14b); }
+  .kb-art-state-accepted { opacity: 0.55; }
+  .kb-art-kind {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    background: var(--bg-elev);
+    padding: 0 4px;
+    border-radius: 2px;
+  }
+  .kb-art-link { color: var(--accent, #e7c14b); text-decoration: none; }
+  .kb-art-link:hover { text-decoration: underline; }
+  .kb-art-label { color: var(--text); }
+  .kb-art-verdict { font-size: 10px; }
+  .kb-art-accepted { color: #28b463; }
+  .kb-art-rework { color: #c25; }
+
+  .kb-card-actions { display: flex; gap: 3px; flex-wrap: wrap; }
+  .kb-move-form { display: inline; }
+  .kb-btn {
+    background: var(--bg-elev);
+    color: var(--text-faint);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-size: 9px;
+    cursor: pointer;
+    text-transform: lowercase;
+  }
+  .kb-btn:hover { background: var(--bg); color: var(--text); }
+  .kb-btn-danger:hover { color: #c25; border-color: #c25; }
+  .kb-btn-done { color: #28b463; }
+  .kb-btn-review { color: #5cf; }
+</style>
+{% endblock %}

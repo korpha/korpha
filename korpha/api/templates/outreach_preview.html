@@ -1,0 +1,151 @@
+{# Cold-email variants rendered as a stack of email-client mockups so
+the Founder can see what each one *reads* like in a real inbox.
+Standalone like landing_preview.html — not under base.html. #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cold emails: {{ niche_name }} · {{ business_name }}</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --card: #ffffff;
+      --fg: #1f2328;
+      --fg-dim: #6b7280;
+      --border: #e5e7eb;
+      --accent: #2563eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+      line-height: 1.5;
+    }
+    .preview-strip {
+      background: #15161a;
+      color: #e7c14b;
+      padding: 8px 16px;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+    .preview-strip a { color: #fff; text-decoration: underline; margin-left: 8px; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 28px 18px 60px; }
+    h1 { font-size: 14px; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 6px; font-weight: 500; }
+    .niche { font-size: 22px; font-weight: 600; margin: 0 0 8px; }
+    .lede { color: var(--fg-dim); font-size: 13.5px; margin: 0 0 22px; }
+    .email {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    .email-head {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .head-text { flex: 1; min-width: 0; }
+    .from-row { display: flex; gap: 8px; font-size: 13px; align-items: baseline; }
+    .from-name { font-weight: 600; }
+    .from-addr { color: var(--fg-dim); }
+    .subject { font-size: 15px; font-weight: 600; margin-top: 2px; }
+    .angle-tag {
+      display: inline-block;
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      background: rgba(37, 99, 235, 0.08);
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-left: 8px;
+      vertical-align: 1px;
+    }
+    .body {
+      padding: 16px 16px 18px;
+      font-size: 14.5px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+    .meta {
+      background: rgba(255, 255, 255, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-top: 22px;
+      font-size: 13px;
+      color: var(--fg-dim);
+      line-height: 1.6;
+    }
+    .meta strong { color: var(--fg); }
+    @media (max-width: 600px) {
+      .wrap { padding: 18px 12px 50px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-strip">
+    Cold-email drafts
+    <a href="/app/approvals">← back to approvals</a>
+  </div>
+  <div class="wrap">
+    <h1>Niche</h1>
+    <div class="niche">{{ niche_name or "(unknown niche)" }}</div>
+    <p class="lede">
+      {{ variants|length }} opener variant{{ 's' if variants|length != 1 else '' }} drafted in your voice. Pick one to send (or edit) when you approve.
+    </p>
+
+    {% for v in variants %}
+      <div class="email">
+        <div class="email-head">
+          <div class="avatar">{{ founder_name[0]|upper }}</div>
+          <div class="head-text">
+            <div class="from-row">
+              <span class="from-name">{{ founder_name }}</span>
+              <span class="from-addr">to {recipient}</span>
+            </div>
+            <div class="subject">
+              {{ v.subject or "(no subject)" }}
+              {% if v.angle %}<span class="angle-tag">{{ v.angle }}</span>{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="body">{{ v.body or "(empty body)" }}</div>
+      </div>
+    {% endfor %}
+
+    {% if personalization_template or follow_up_subject %}
+      <div class="meta">
+        {% if personalization_template %}
+          <div><strong>Per-prospect cue:</strong> {{ personalization_template }}</div>
+        {% endif %}
+        {% if follow_up_subject %}
+          <div><strong>Follow-up subject:</strong> {{ follow_up_subject }}</div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>

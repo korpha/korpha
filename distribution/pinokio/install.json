@@ -1,0 +1,46 @@
+{
+  "version": "3.0",
+  "run": [
+    {
+      "id": "install_uv",
+      "method": "shell.run",
+      "params": {
+        "message": [
+          "echo Installing uv (Astral's Python toolchain)...",
+          "curl -LsSf https://astral.sh/uv/install.sh | sh"
+        ],
+        "env": {
+          "UV_INSTALL_DIR": "{{cwd}}/.uv-bin"
+        }
+      }
+    },
+    {
+      "id": "install_korpha",
+      "method": "shell.run",
+      "params": {
+        "message": [
+          "echo Installing Korpha from source...",
+          "{{cwd}}/.uv-bin/uv tool install --force git+https://github.com/korpha/korpha@main"
+        ]
+      }
+    },
+    {
+      "id": "init_db",
+      "method": "shell.run",
+      "params": {
+        "message": [
+          "echo Setting up first-run database + founder profile...",
+          "{{cwd}}/.uv-bin/uv tool run korpha init --email pinokio@local --name 'Pinokio User' --business 'My Business' --description 'TBD'"
+        ]
+      }
+    },
+    {
+      "id": "done",
+      "method": "browser.open",
+      "params": {
+        "uri": "https://github.com/korpha/korpha/blob/main/docs/README.md",
+        "fullscreen": true
+      }
+    }
+  ]
+}

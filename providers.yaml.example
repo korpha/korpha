@@ -1,0 +1,43 @@
+# Korpha provider config.
+#
+# Copy this to ~/.korpha/providers.yaml (or set KORPHA_PROVIDERS_FILE)
+# to configure which inference providers / models / accounts to route through.
+#
+# Order matters: earlier entries are tried first when no session affinity exists.
+# Multiple entries against the same preset = multi-key parallelism.
+#
+# Available presets (run `korpha providers` to confirm):
+#   anthropic, cerebras, deepseek, groq, huggingface, local-ollama,
+#   minimax, moonshot, nous-portal, nvidia-nim, ollama-cloud,
+#   openai, opencode-go, opencode-zen, openrouter, together, z-ai
+
+providers:
+  # Primary: OpenCode Go ($10/mo subscription, fast, less throttled)
+  - preset: opencode-go
+    label: opencode-primary
+    api_key_env: OPENCODE_API_KEY
+    tiers:
+      workhorse: deepseek-v4-flash
+      pro: deepseek-v4-pro
+    concurrency_limit: 4
+
+  # Fallback: Ollama Cloud (free tier, prone to 503 overloads)
+  - preset: ollama-cloud
+    label: ollama-fallback
+    api_key_env: OLLAMA_CLOUD_API_KEY
+    tiers:
+      workhorse: deepseek-v4-flash:cloud
+      pro: deepseek-v4-pro:cloud
+
+  # Optional: cheap workhorse via Groq (extremely fast LLama 3.3)
+  # - preset: groq
+  #   api_key_env: GROQ_API_KEY
+  #   tiers:
+  #     workhorse: llama-3.3-70b-versatile
+
+  # Optional: premium consultant tier via Anthropic
+  # - preset: anthropic
+  #   api_key_env: ANTHROPIC_API_KEY
+  #   tiers:
+  #     consultant: claude-sonnet-4-6
+  #   spend_cap_usd: 50.00

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en" data-theme="{{ active_theme_name|default('default') }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{% block title %}{{ business.name }} · Korpha{% endblock %}</title>
+  {# Theme-driven CSS variables: rendered server-side from the active
+     DashboardTheme. The shell stylesheet reads these vars, so swapping
+     theme = re-render this <style> block on next page load. #}
+  {% if theme_css_vars %}
+  <style id="korpha-theme">{{ theme_css_vars|safe }}</style>
+  {% endif %}
+  {% if theme_font_link %}{{ theme_font_link|safe }}{% endif %}
+  <link rel="stylesheet" href="/static/css/shell.css" />
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body class="theme-dark">
+  <div class="app" x-data="{ sidebarOpen: false }">
+    <!-- Top bar -->
+    <header class="topbar">
+      <button class="hamburger" @click="sidebarOpen = !sidebarOpen" aria-label="Menu">
+        ☰
+      </button>
+      <div class="brand">
+        <span class="brand-mark">A</span>
+        <span class="brand-name">{{ business.name }}</span>
+      </div>
+      <div class="topbar-search">
+        <input type="search" placeholder="Search…" disabled />
+      </div>
+      <a class="cost-pill"
+         href="/app/costs"
+         hx-get="/app/partials/cost-pill"
+         hx-trigger="load, every 30s"
+         hx-swap="innerHTML"
+         title="Click for full cost dashboard">
+        <span class="cost-pill-loading">…</span>
+      </a>
+      {% if available_themes %}
+      <div class="theme-switcher" x-data="{ open: false }" @click.outside="open = false">
+        <button class="theme-switcher-trigger"
+                @click="open = !open"
+                :aria-expanded="open"
+                aria-haspopup="listbox"
+                title="Switch theme">
+          <span class="theme-switcher-icon">◐</span>
+          <span class="theme-switcher-label">{{ active_theme.label if active_theme else 'Theme' }}</span>
+        </button>
+        <div class="theme-switcher-menu" x-show="open" x-cloak role="listbox">
+          {% for entry in available_themes %}
+          <form method="post" action="/app/theme" class="theme-switcher-item-form">
+            <input type="hidden" name="name" value="{{ entry.name }}" />
+            <button type="submit"
+                    class="theme-switcher-item {{ 'is-active' if entry.name == active_theme_name else '' }}"
+                    role="option"
+                    :aria-selected="'{{ entry.name }}' === '{{ active_theme_name }}'">
+              {# Palette swatches — built-ins use their hardcoded preset
+                 colors, user themes use their inline ``definition`` (the
+                 May-4 Hermes fix). Authors get real palette previews. #}
+              {% set sw_bg = (entry.definition.palette.background.hex if entry.definition else '') %}
+              {% set sw_mg = (entry.definition.palette.midground.hex if entry.definition else '') %}
+              {% set sw_glow = (entry.definition.palette.warm_glow if entry.definition else '') %}
+              <span class="theme-switcher-swatch"
+                    {% if entry.is_builtin %}data-builtin="{{ entry.name }}"{% endif %}
+                    {% if not entry.is_builtin %}style="--sw-bg:{{ sw_bg }}; --sw-mg:{{ sw_mg }}; --sw-glow:{{ sw_glow }}"{% endif %}
+                    aria-hidden="true"></span>
+              <span class="theme-switcher-text">
+                <span class="theme-switcher-name">{{ entry.label }}</span>
+                <span class="theme-switcher-desc">{{ entry.description }}</span>
+              </span>
+              {% if entry.name == active_theme_name %}
+              <span class="theme-switcher-check" aria-hidden="true">✓</span>
+              {% endif %}
+            </button>
+          </form>
+          {% endfor %}
+          <div class="theme-switcher-footer">
+            Drop a YAML at <code>~/.korpha/dashboard-themes/</code> to add your own.
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </header>
+
+    <!-- Sidebar -->
+    <aside class="sidebar"
+           :class="sidebarOpen ? 'sidebar-open' : ''"
+           @click.outside="sidebarOpen = false">
+      <form method="post" action="/app/chat/new" class="primary-cta-form">
+        <button type="submit" class="primary-cta" title="Start a fresh chat">
+          + New chat
+        </button>
+      </form>
+
+      <nav class="nav"
+           hx-get="/app/partials/sidebar-live-counts"
+           hx-trigger="load, every 10s"
+           hx-swap="none">
+        <a href="/app/chat" class="nav-item nav-item-chat {{ 'is-active' if active == 'chat' }}">
+          <span class="icon">◧</span>
+          <span class="label">Chat</span>
+        </a>
+        <a href="/app/chat/history" class="nav-item nav-item-chat-history {{ 'is-active' if active == 'chat-history' }}">
+          <span class="icon">⟲</span>
+          <span class="label">History</span>
+        </a>
+        <a href="/app/dashboard" class="nav-item nav-item-live {{ 'is-active' if active == 'dashboard' }}">
+          <span class="icon">⬚</span>
+          <span class="label">Dashboard</span>
+          {% if live_agents %}<span class="badge badge-live">{{ live_agents }} live</span>{% endif %}
+        </a>
+        <a href="/app/weekly" class="nav-item {{ 'is-active' if active == 'weekly' }}">
+          <span class="icon">▦</span>
+          <span class="label">This week</span>
+        </a>
+        <a href="/app/inbox" class="nav-item {{ 'is-active' if active == 'inbox' }}">
+          <span class="icon">▦</span>
+          <span class="label">Inbox</span>
+        </a>
+        <a href="/app/approvals" class="nav-item nav-item-approvals {{ 'is-active' if active == 'approvals' }}">
+          <span class="icon">✓</span>
+          <span class="label">Approvals</span>
+        </a>
+      </nav>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Work</div>
+        <a href="/app/issues" class="nav-item {{ 'is-active' if active == 'issues' }}">
+          <span class="icon">○</span>
+          <span class="label">Issues</span>
+        </a>
+        <a href="/app/routines" class="nav-item {{ 'is-active' if active == 'routines' }}">
+          <span class="icon">↻</span>
+          <span class="label">Routines</span>
+        </a>
+        <a href="/app/goals" class="nav-item {{ 'is-active' if active == 'goals' }}">
+          <span class="icon">◎</span>
+          <span class="label">Goals</span>
+        </a>
+      </div>
+
+      {% if agents %}
+      <div class="nav-section">
+        <div class="nav-section-title">Agents</div>
+        {% for agent in agents %}
+          <a href="/app/agents/{{ agent.id }}"
+             class="nav-item {{ 'is-active' if active_agent_id == agent.id|string }}">
+            <span class="icon">●</span>
+            <span class="label">{{ agent.title }}</span>
+          </a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="nav-section">
+        <div class="nav-section-title">Company</div>
+        <a href="/app/org" class="nav-item {{ 'is-active' if active == 'org' }}">
+          <span class="icon">⌬</span>
+          <span class="label">Org</span>
+        </a>
+        <a href="/app/units" class="nav-item {{ 'is-active' if active == 'units' }}">
+          <span class="icon">🏛</span>
+          <span class="label">Lines</span>
+        </a>
+        <a href="/app/credentials" class="nav-item {{ 'is-active' if active == 'credentials' }}">
+          <span class="icon">🔑</span>
+          <span class="label">Credentials</span>
+        </a>
+        <a href="/app/team" class="nav-item {{ 'is-active' if active == 'team' }}">
+          <span class="icon">👥</span>
+          <span class="label">Team</span>
+        </a>
+        <a href="/app/skills" class="nav-item {{ 'is-active' if active == 'skills' }}">
+          <span class="icon">⬢</span>
+          <span class="label">Skills</span>
+        </a>
+        <a href="/app/skills/authored"
+           class="nav-item nav-item-sub {{ 'is-active' if active == 'skills-authored' }}">
+          <span class="icon">✎</span>
+          <span class="label">Authored</span>
+        </a>
+        <a href="/app/activity" class="nav-item {{ 'is-active' if active == 'activity' }}">
+          <span class="icon">⏱</span>
+          <span class="label">Activity</span>
+        </a>
+        <a href="/app/insights" class="nav-item {{ 'is-active' if active == 'insights' }}">
+          <span class="icon">📊</span>
+          <span class="label">Insights</span>
+        </a>
+        <a href="/app/checkpoints" class="nav-item {{ 'is-active' if active == 'checkpoints' }}">
+          <span class="icon">📸</span>
+          <span class="label">Checkpoints</span>
+        </a>
+        <a href="/app/jobs" class="nav-item {{ 'is-active' if active == 'jobs' }}">
+          <span class="icon">⚙️</span>
+          <span class="label">Jobs</span>
+        </a>
+        <a href="/app/kanban" class="nav-item {{ 'is-active' if active == 'kanban' }}">
+          <span class="icon">📋</span>
+          <span class="label">Kanban</span>
+        </a>
+        <a href="/app/cron" class="nav-item {{ 'is-active' if active == 'cron' }}">
+          <span class="icon">⏰</span>
+          <span class="label">Cron</span>
+        </a>
+        <a href="/app/memory" class="nav-item {{ 'is-active' if active == 'memory' }}">
+          <span class="icon">🧠</span>
+          <span class="label">Memory</span>
+        </a>
+        <a href="/app/disk" class="nav-item {{ 'is-active' if active == 'disk' }}">
+          <span class="icon">💾</span>
+          <span class="label">Disk</span>
+        </a>
+        <a href="/app/budgets" class="nav-item {{ 'is-active' if active == 'budgets' }}">
+          <span class="icon">💰</span>
+          <span class="label">Budgets</span>
+        </a>
+        <a href="/app/backups" class="nav-item {{ 'is-active' if active == 'backups' }}">
+          <span class="icon">📦</span>
+          <span class="label">Backups</span>
+        </a>
+        <a href="/app/inference" class="nav-item {{ 'is-active' if active == 'inference' }}">
+          <span class="icon">🧠</span>
+          <span class="label">Inference</span>
+        </a>
+        <a href="/app/browser" class="nav-item {{ 'is-active' if active == 'browser' }}">
+          <span class="icon">🌐</span>
+          <span class="label">Browser pool</span>
+        </a>
+        <a href="/app/settings" class="nav-item {{ 'is-active' if active == 'settings' }}">
+          <span class="icon">⚙</span>
+          <span class="label">Settings</span>
+        </a>
+      </div>
+
+      <div class="sidebar-footer" x-data="{ op: localStorage.getItem('korpha:operator') === '1' }"
+           x-init="document.body.classList.toggle('operator-mode', op); $watch('op', v => { document.body.classList.toggle('operator-mode', v); localStorage.setItem('korpha:operator', v ? '1' : '0'); })">
+        <label class="operator-toggle" title="Show raw payloads, UUIDs, and advanced fields">
+          <input type="checkbox" x-model="op" />
+          <span>Operator mode</span>
+        </label>
+        <div class="user-pill">
+          <span class="user-avatar">{{ founder.display_name[0]|upper if founder.display_name else founder.email[0]|upper }}</span>
+          <span class="user-name">{{ founder.display_name or founder.email }}</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <div class="page-header">
+        <div class="breadcrumbs">{% block breadcrumbs %}{{ active|title }}{% endblock %}</div>
+      </div>
+      <div class="page-body">
+        {% block body %}{% endblock %}
+      </div>
+    </main>
+  </div>
+  <script src="/static/js/shell.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Approvals · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Approvals{% endblock %}
+{% block body %}
+  <div class="approvals-tabs">
+    <a href="/app/approvals" class="approvals-tab {{ 'is-active' if tab == 'pending' }}">
+      Pending {% if pending_count %}<span class="tab-count">{{ pending_count }}</span>{% endif %}
+    </a>
+    <a href="/app/approvals?tab=all" class="approvals-tab {{ 'is-active' if tab == 'all' }}">All</a>
+  </div>
+
+  {% if approvals %}
+    <div class="approval-list">
+      {% for a in approvals %}
+        <div class="approval-card">
+          <div class="approval-head">
+            <div class="approval-meta">
+              <span class="pill pill-{{ a.status_class }}">{{ a.status }}</span>
+              {% if a.kind_tag %}
+                <span class="approval-kind">{{ a.kind_tag }}</span>
+              {% else %}
+                <span class="approval-class">{{ a.action_class_label }}</span>
+              {% endif %}
+              {% if a.platform %}<span class="approval-platform">{{ a.platform }}</span>{% endif %}
+              <span class="approval-time">{{ a.created_label }}</span>
+            </div>
+            <div class="approval-summary">{{ a.summary }}</div>
+          </div>
+          {% if a.preview_lines %}
+            <div class="approval-preview">
+              {% for line in a.preview_lines %}
+                <div class="preview-row">
+                  <span class="preview-key">{{ line.key }}</span>
+                  <span class="preview-value">{{ line.value }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+          {% if a.status == 'pending' %}
+            <div class="approval-actions">
+              {% if a.kind_tag == 'landing copy' %}
+                <a href="/app/approvals/{{ a.id }}/preview" target="_blank" class="approval-preview-link">Preview as page →</a>
+              {% elif a.kind_tag == 'validation report' %}
+                <a href="/app/approvals/{{ a.id }}/preview" target="_blank" class="approval-preview-link">View report →</a>
+              {% elif a.kind_tag == 'outreach drafts' %}
+                <a href="/app/approvals/{{ a.id }}/preview" target="_blank" class="approval-preview-link">Read all drafts →</a>
+              {% endif %}
+              <span class="approval-hint">Approve / reject from the chat or via <code>korpha approve {{ a.id }}</code></span>
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">✓</div>
+      {% if tab == 'pending' %}
+        <h2>No pending approvals</h2>
+        <p>The cofounder team has nothing waiting on your call right now.</p>
+      {% else %}
+        <h2>No approvals on record</h2>
+        <p>Once agents start asking permission for actions, they'll show up here.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}
+{% block scripts %}
+<style>
+.approvals-tabs { display: flex; gap: 16px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+.approvals-tab { color: var(--text-dim); font-size: 13px; padding: 8px 0; border-bottom: 2px solid transparent; }
+.approvals-tab.is-active { color: var(--text); border-bottom-color: var(--accent); }
+.approvals-tab .tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; padding: 0 6px; height: 18px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 600; margin-left: 6px; }
+
+.approval-list { display: flex; flex-direction: column; gap: 10px; }
+.approval-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; }
+.approval-head { margin-bottom: 8px; }
+.approval-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.approval-class { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; }
+.approval-kind { font-size: 11px; color: var(--accent, #e7c14b); background: rgba(231, 193, 75, 0.08); padding: 2px 8px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.approval-platform { font-size: 11.5px; color: var(--text-dim); padding: 1px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+.approval-time { color: var(--text-faint); font-size: 11.5px; margin-left: auto; }
+.approval-summary { color: var(--text); font-size: 14px; line-height: 1.4; }
+.approval-preview { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 8px; }
+.preview-row { display: flex; gap: 12px; padding: 4px 0; font-size: 12.5px; }
+.preview-row + .preview-row { border-top: 1px solid var(--border); }
+.preview-key { color: var(--text-dim); min-width: 90px; }
+.preview-value { color: var(--text); flex: 1; word-break: break-word; }
+.approval-actions { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.approval-hint { color: var(--text-dim); font-size: 12px; }
+.approval-hint code { font-family: ui-monospace, Menlo, monospace; padding: 1px 6px; background: var(--bg); border-radius: 4px; color: var(--text); }
+.approval-preview-link { color: var(--accent, #e7c14b); font-size: 12.5px; text-decoration: none; font-weight: 500; }
+.approval-preview-link:hover { text-decoration: underline; }
+</style>
+{% endblock %}

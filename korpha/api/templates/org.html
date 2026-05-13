@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Org · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Org{% endblock %}
+{% block body %}
+  <div class="org-actions">
+    <span class="btn-secondary disabled" title="Coming soon">↑ Import company</span>
+    <a class="btn-secondary" href="#" onclick="alert('Run: korpha business-export --to file.json'); return false;">↓ Export company</a>
+  </div>
+
+  {% if org_tree %}
+    <div class="org-canvas">
+      {% for tier in org_tree %}
+        <div class="org-tier">
+          <div class="org-tier-label">{{ tier.label }}</div>
+          <div class="org-tier-row">
+            {% for node in tier.nodes %}
+              <a class="org-node" href="/app/agents/{{ node.id }}">
+                <span class="agent-avatar">{{ node.title[0] }}</span>
+                <div>
+                  <div class="agent-name">{{ node.title }}</div>
+                  <div class="agent-role">{{ node.role_type }}</div>
+                  {% if node.specialty %}
+                    <div class="agent-specialty">{{ node.specialty }}</div>
+                  {% endif %}
+                </div>
+              </a>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">⌬</div>
+      <h2>Org chart will appear once you have agents</h2>
+      <p>Talk to the cofounder via chat — your CEO is hired automatically.</p>
+    </div>
+  {% endif %}
+{% endblock %}
+{% block scripts %}
+<style>
+.org-actions { display: flex; gap: 8px; margin-bottom: 18px; }
+.btn-secondary { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elev); color: var(--text); font-size: 12.5px; cursor: pointer; }
+.btn-secondary:hover { background: var(--bg-hover); }
+.btn-secondary.disabled { opacity: 0.55; cursor: not-allowed; }
+
+.org-canvas { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 32px; min-height: 400px; }
+.org-tier + .org-tier { margin-top: 32px; position: relative; }
+.org-tier + .org-tier::before {
+  content: "";
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  width: 1px;
+  height: 24px;
+  background: var(--border-strong);
+}
+.org-tier-label { text-align: center; font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; font-weight: 600; }
+.org-tier-row { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+.org-node { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; min-width: 200px; max-width: 260px; background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-md); transition: border-color 80ms; }
+.org-node:hover { border-color: var(--accent); }
+.agent-avatar { width: 32px; height: 32px; border-radius: 8px; background: var(--bg-active); display: inline-flex; align-items: center; justify-content: center; font-weight: 600; flex-shrink: 0; }
+.agent-name { font-size: 14px; font-weight: 500; color: var(--text); }
+.agent-role { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.agent-specialty { font-size: 11.5px; color: var(--text-faint); margin-top: 2px; }
+</style>
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Budgets · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Budgets{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">Budgets</h1>
+      <p class="tm-blurb">
+        Hard-stop spend caps. The strictest one trips first.
+        Storage is USD because LLM billing is USD; amounts shown in
+        <code>{{ currency }}</code> at rate {{ rate }} USD = 1
+        {{ currency }} (set via <code>KORPHA_DISPLAY_CURRENCY</code>
+        + <code>KORPHA_USD_TO_DISPLAY_RATE</code>).
+      </p>
+    </div>
+  </div>
+
+  {% if request.query_params.get('flash') %}
+    <div class="tm-flash">✓ {{ request.query_params.get('flash') }}</div>
+  {% endif %}
+  {% if request.query_params.get('error') %}
+    <div class="tm-flash tm-flash-warn">{{ request.query_params.get('error') }}</div>
+  {% endif %}
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Active caps ({{ policies|length }})</h2>
+    {% if not policies %}
+      <p class="tm-blurb">No caps yet. Add one below.</p>
+    {% else %}
+      <table class="tm-table">
+        <thead>
+          <tr>
+            <th>Scope</th><th>Target</th><th>Window</th>
+            <th>Spent</th><th>Limit</th><th>Use</th>
+            <th>Status</th><th>Label</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in policies %}
+            <tr>
+              <td><code>{{ p.scope }}</code></td>
+              <td>{{ p.target }}</td>
+              <td>{{ p.window }}</td>
+              <td>{{ p.spent_display }}</td>
+              <td>{{ p.limit_display }}</td>
+              <td>
+                <span class="tm-pill {% if p.pct >= 100 %}tm-pill-paused{% else %}tm-pill-active{% endif %}">
+                  {{ p.pct }}%
+                </span>
+              </td>
+              <td>
+                {% if p.active %}
+                  <span class="tm-pill tm-pill-active">ACTIVE</span>
+                {% else %}
+                  <span class="tm-pill tm-pill-paused">PAUSED</span>
+                  {% if p.paused_reason %}
+                    <span class="tm-muted">— {{ p.paused_reason }}</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td>{{ p.label }}</td>
+              <td>
+                {% if p.active %}
+                  <form method="post" action="/app/budgets/{{ p.id }}/pause" style="display:inline">
+                    <button type="submit" class="tm-hire-btn">Pause</button>
+                  </form>
+                {% else %}
+                  <form method="post" action="/app/budgets/{{ p.id }}/resume" style="display:inline">
+                    <button type="submit" class="tm-hire-btn">Resume</button>
+                  </form>
+                {% endif %}
+                <form method="post" action="/app/budgets/{{ p.id }}/delete" style="display:inline"
+                      onsubmit="return confirm('Delete this cap? Future calls will not be capped by it.')">
+                  <button type="submit" class="tm-hire-btn">Delete</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Add a cap</h2>
+    <form method="post" action="/app/budgets/create"
+          class="tm-cred-form" x-data="{scope: 'business'}">
+      <div class="tm-cred-row">
+        <label>Scope
+          <select name="scope" x-model="scope" required>
+            <option value="business">business (entire company)</option>
+            <option value="business_unit">business_unit (one line)</option>
+            <option value="tier">tier (workhorse / pro / vision)</option>
+          </select>
+        </label>
+        <label>Window
+          <select name="window" required>
+            <option value="day" selected>day</option>
+            <option value="hour">hour</option>
+            <option value="week">week</option>
+            <option value="month">month</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="tm-cred-row" x-show="scope === 'business_unit'">
+        <label>Line / BusinessUnit
+          <select name="unit_id">
+            <option value="">— pick one —</option>
+            {% for u in units %}
+              <option value="{{ u.id }}">{{ u.name }} ({{ u.kind.value }})</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+
+      <div class="tm-cred-row" x-show="scope === 'tier'">
+        <label>Tier
+          <select name="tier">
+            <option value="">— pick one —</option>
+            <option value="workhorse">workhorse</option>
+            <option value="pro">pro</option>
+            <option value="consultant">consultant</option>
+            <option value="vision">vision</option>
+            <option value="coding">coding</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="tm-cred-row">
+        <label>Limit
+          <input type="number" name="limit" step="0.01" min="0.01" required placeholder="e.g. 50" />
+        </label>
+        <label>Currency mode
+          <select name="currency_mode">
+            <option value="display" selected>{{ currency }} (display)</option>
+            <option value="usd">USD (raw)</option>
+          </select>
+        </label>
+        <label>Label
+          <input type="text" name="label" placeholder="e.g. POD daily cap" />
+        </label>
+        <button type="submit" class="tm-hire-btn">Add cap</button>
+      </div>
+    </form>
+  </section>
+</div>
+{% endblock %}

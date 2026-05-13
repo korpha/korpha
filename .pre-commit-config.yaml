@@ -1,0 +1,51 @@
+# Run before each commit:
+#   uv pip install pre-commit
+#   pre-commit install
+#
+# Skip a single commit:
+#   git commit --no-verify
+
+repos:
+  # Standard hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '^(hermes/|alembic/versions/.*\.py$)'
+      - id: end-of-file-fixer
+        exclude: '^hermes/'
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # Ruff — lint + format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: '^(korpha|tests)/'
+      - id: ruff-format
+        files: '^(korpha|tests)/'
+
+  # mypy strict — runs against korpha/ only (tests have looser typing)
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy --strict (korpha/)
+        entry: uv run mypy --strict korpha/
+        language: system
+        pass_filenames: false
+        files: '^korpha/.*\.py$'
+
+  # Quick smoke — run the unit suite (skipping integration which needs creds)
+  - repo: local
+    hooks:
+      - id: pytest-quick
+        name: pytest unit suite
+        entry: uv run pytest tests/ --ignore=tests/integration -q --tb=short
+        language: system
+        pass_filenames: false
+        stages: [pre-push]   # only on push, not every commit (slow-ish)

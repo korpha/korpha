@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Goals · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Goals{% endblock %}
+{% block body %}
+  {% if goals %}
+    <div class="goal-list">
+      {% for g in goals %}
+        <div class="goal-row">
+          <span class="goal-tag">Company</span>
+          <span class="goal-title">{{ g.title }}</span>
+          <span class="pill pill-{{ g.status_class }}">{{ g.status_label }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">◎</div>
+      <h2>No goals yet</h2>
+      <p>Tell your CEO what success looks like and goals will be drafted automatically.</p>
+    </div>
+  {% endif %}
+{% endblock %}
+{% block scripts %}
+<style>
+.goal-list { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.goal-row { display: flex; align-items: center; gap: 14px; padding: 12px 14px; background: var(--bg-elev); }
+.goal-row + .goal-row { border-top: 1px solid var(--border); }
+.goal-tag { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+.goal-title { flex: 1; color: var(--text); font-size: 13.5px; }
+</style>
+{% endblock %}

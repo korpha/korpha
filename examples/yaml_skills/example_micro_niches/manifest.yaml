@@ -1,0 +1,67 @@
+# Example Korpha YAML skill.
+#
+# Copy this whole directory under ~/.korpha/skills/ (or set
+# KORPHA_SKILLS_DIR to a path containing it) and the skill will load on
+# startup. Built-in Python skills with the same name take precedence — to
+# override, rename this skill or remove the Python copy.
+
+name: example.find_micro_niches
+version: 1.0.0
+description: |
+  Demo skill: given the Founder's skills, weekly time, and savings, output
+  3-5 specific micro-niches with target avatar, value prop, price band, and
+  a one-week validation experiment.
+
+default_tier: pro
+max_tokens: 4000
+
+parameters:
+  skills:
+    description: Founder's skills / strengths (free text)
+    default: "(unspecified)"
+  time_budget_hours:
+    description: Hours per week available
+    default: "5"
+  savings_usd:
+    description: Cash savings (USD)
+    default: "1000"
+  goal:
+    description: Stated goal e.g. '$5k MRR side income in 6 months'
+    default: "side income"
+
+system_prompt: |
+  You are the niche-discovery skill in Korpha, an AI cofounder for solo
+  entrepreneurs. Be ruthless about specificity — vague niches help nobody.
+
+user_prompt_template: |
+  Founder skills: {skills}
+  Weekly time budget: {time_budget_hours} hours
+  Cash savings (USD): {savings_usd}
+  Founder's stated goal: {goal}
+
+  Output 3-5 specific micro-niches. For each, give:
+    name, target_avatar, value_prop, price_band, competition,
+    validation_experiment, fit_score (1-10).
+
+  Respond with strict JSON only:
+  {{
+    "candidates": [
+      {{"name": "...", "target_avatar": "...", "value_prop": "...",
+        "price_band": "...", "competition": "...",
+        "validation_experiment": "...", "fit_score": 8}}
+    ],
+    "recommended_index": 0,
+    "summary": "Recommended: <name>"
+  }}
+
+  Rules:
+  - Be SPECIFIC. "AI tools for marketers" is worthless. Aim for the precision
+    of "Email-warmup agent for cold-outreach SaaS founders shipping their
+    first 100 sends".
+  - Match the price band to who would pay.
+  - The validation_experiment must fit the Founder's actual time + cash.
+
+output:
+  format: json
+  summary_key: summary
+  required_keys: [candidates, recommended_index, summary]

@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+{% block title %}Theme editor · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}<a href="/app/settings">Settings</a> · Theme editor{% endblock %}
+{% block body %}
+  <div class="theme-editor">
+    <div class="theme-editor-pane theme-editor-form">
+      <h2 class="theme-editor-title">Visual theme editor</h2>
+      <p class="theme-editor-subtitle">
+        Pick colors, adjust spacing, save to <code>~/.korpha/dashboard-themes/</code>.
+        Live preview on the right.
+      </p>
+
+      <form id="theme-form"
+            hx-post="/app/settings/themes/save"
+            hx-target="#theme-save-status"
+            hx-swap="innerHTML">
+
+        <div class="theme-editor-grid">
+          <label class="theme-editor-label" for="theme_name">Name</label>
+          <input id="theme_name" name="name" class="theme-editor-input"
+                 pattern="[a-z][a-z0-9_-]*" required
+                 placeholder="my_theme" value="my_theme" />
+          <div class="theme-editor-hint">
+            Lowercase a-z, 0-9, _, -. Used as filename + identifier.
+          </div>
+
+          <label class="theme-editor-label" for="theme_label">Label</label>
+          <input id="theme_label" name="label" class="theme-editor-input"
+                 required value="My Theme" />
+          <div class="theme-editor-hint"></div>
+
+          <label class="theme-editor-label" for="theme_description">Description</label>
+          <input id="theme_description" name="description" class="theme-editor-input"
+                 required value="My custom theme." />
+          <div class="theme-editor-hint">
+            One line shown under the label in the picker dropdown.
+          </div>
+
+          <h3 class="theme-editor-section">Palette</h3>
+
+          <label class="theme-editor-label" for="bg">Background</label>
+          <div class="theme-editor-color-row">
+            <input type="color" id="bg" name="background" value="#0c0d10"
+                   oninput="document.getElementById('bg-text').value = this.value; updatePreview();" />
+            <input type="text" id="bg-text" class="theme-editor-input theme-editor-hex"
+                   value="#0c0d10"
+                   oninput="document.getElementById('bg').value = this.value; updatePreview();" />
+          </div>
+          <div class="theme-editor-hint">Deepest canvas color.</div>
+
+          <label class="theme-editor-label" for="mg">Midground</label>
+          <div class="theme-editor-color-row">
+            <input type="color" id="mg" name="midground" value="#e6e8eb"
+                   oninput="document.getElementById('mg-text').value = this.value; updatePreview();" />
+            <input type="text" id="mg-text" class="theme-editor-input theme-editor-hex"
+                   value="#e6e8eb"
+                   oninput="document.getElementById('mg').value = this.value; updatePreview();" />
+          </div>
+          <div class="theme-editor-hint">Primary text + accent color.</div>
+
+          <label class="theme-editor-label" for="warm_glow_color">Warm glow</label>
+          <div class="theme-editor-color-row">
+            <input type="color" id="warm_glow_color" value="#5e9eff"
+                   oninput="document.getElementById('warm_glow_text').value = this.value; updatePreview();" />
+            <input type="text" id="warm_glow_text" class="theme-editor-input theme-editor-hex"
+                   name="warm_glow_color" value="#5e9eff"
+                   oninput="document.getElementById('warm_glow_color').value = this.value; updatePreview();" />
+            <input type="range" id="glow_opacity" name="warm_glow_opacity"
+                   min="0" max="0.5" step="0.01" value="0.06"
+                   style="width:100%;"
+                   oninput="document.getElementById('glow_opacity_label').textContent = this.value; updatePreview();" />
+            <span id="glow_opacity_label" style="font-size:11px;color:var(--text-dim);">0.06</span>
+          </div>
+          <div class="theme-editor-hint">Vignette accent — usually subtle (alpha 0.05–0.15).</div>
+
+          <h3 class="theme-editor-section">Color overrides</h3>
+
+          <label class="theme-editor-label" for="primary">Primary / accent</label>
+          <div class="theme-editor-color-row">
+            <input type="color" id="primary" name="primary" value="#5e9eff"
+                   oninput="document.getElementById('primary-text').value = this.value; updatePreview();" />
+            <input type="text" id="primary-text" class="theme-editor-input theme-editor-hex"
+                   value="#5e9eff"
+                   oninput="document.getElementById('primary').value = this.value; updatePreview();" />
+          </div>
+
+          <label class="theme-editor-label" for="success">Success</label>
+          <div class="theme-editor-color-row">
+            <input type="color" id="success" name="success" value="#6dcf80"
+                   oninput="document.getElementById('success-text').value = this.value; updatePreview();" />
+            <input type="text" id="success-text" class="theme-editor-input theme-editor-hex"
+                   value="#6dcf80"
+                   oninput="document.getElementById('success').value = this.value; updatePreview();" />
+          </div>
+
+          <label class="theme-editor-label" for="warning">Warning</label>
+          <div class="theme-editor-color-row">
+            <input type="color" id="warning" name="warning" value="#e9c46a"
+                   oninput="document.getElementById('warning-text').value = this.value; updatePreview();" />
+            <input type="text" id="warning-text" class="theme-editor-input theme-editor-hex"
+                   value="#e9c46a"
+                   oninput="document.getElementById('warning').value = this.value; updatePreview();" />
+          </div>
+
+          <label class="theme-editor-label" for="destructive">Destructive</label>
+          <div class="theme-editor-color-row">
+            <input type="color" id="destructive" name="destructive" value="#e76f74"
+                   oninput="document.getElementById('destructive-text').value = this.value; updatePreview();" />
+            <input type="text" id="destructive-text" class="theme-editor-input theme-editor-hex"
+                   value="#e76f74"
+                   oninput="document.getElementById('destructive').value = this.value; updatePreview();" />
+          </div>
+
+          <h3 class="theme-editor-section">Layout</h3>
+
+          <label class="theme-editor-label" for="radius">Corner radius</label>
+          <input type="text" id="radius" name="radius" class="theme-editor-input"
+                 value="0.5rem" oninput="updatePreview();" />
+          <div class="theme-editor-hint">CSS length. Try 0, 0.25rem, 0.5rem, 1rem.</div>
+
+          <label class="theme-editor-label" for="density">Density</label>
+          <select id="density" name="density" class="theme-editor-input"
+                  onchange="updatePreview();">
+            <option value="compact">compact</option>
+            <option value="comfortable" selected>comfortable</option>
+            <option value="spacious">spacious</option>
+          </select>
+          <div class="theme-editor-hint">Spacing multiplier across the shell.</div>
+        </div>
+
+        <div class="theme-editor-actions">
+          <a href="/app/settings" class="theme-editor-cancel">Back to settings</a>
+          <button type="submit" class="theme-editor-submit">Save theme</button>
+        </div>
+        <div id="theme-save-status" style="margin-top:10px;"></div>
+      </form>
+    </div>
+
+    <div class="theme-editor-pane theme-editor-preview" id="preview-pane">
+      <h3 class="theme-editor-section">Live preview</h3>
+      <div class="theme-preview-card" id="preview-card">
+        <div class="preview-header">
+          <span class="preview-brand">A</span>
+          <span class="preview-title">{{ business.name }}</span>
+        </div>
+        <div class="preview-body">
+          <div class="preview-kpi">
+            <span class="preview-kpi-label">Today's spend</span>
+            <span class="preview-kpi-value">$0.0312</span>
+          </div>
+          <div class="preview-message preview-message-agent">
+            <strong>CEO:</strong> Picked the niche. Drafting cold-email opener
+            now — should land in 3 minutes.
+          </div>
+          <div class="preview-message preview-message-founder">
+            <strong>You:</strong> ship it
+          </div>
+          <div class="preview-actions">
+            <button class="preview-btn preview-btn-primary">Approve</button>
+            <button class="preview-btn">Discuss</button>
+            <button class="preview-btn preview-btn-danger">Deny</button>
+          </div>
+          <div class="preview-status">
+            <span class="status-dot status-success"></span> Email queued (saved
+            $1.84 vs Sonnet)
+          </div>
+          <div class="preview-status">
+            <span class="status-dot status-warning"></span> Approval pending: Stripe payment link
+          </div>
+          <div class="preview-status">
+            <span class="status-dot status-error"></span> Rate-limited on workhorse account (rotating)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+function updatePreview() {
+  const bg = document.getElementById('bg').value;
+  const mg = document.getElementById('mg').value;
+  const glow = document.getElementById('warm_glow_color').value;
+  const glowAlpha = parseFloat(document.getElementById('glow_opacity').value);
+  const primary = document.getElementById('primary').value;
+  const success = document.getElementById('success').value;
+  const warning = document.getElementById('warning').value;
+  const destructive = document.getElementById('destructive').value;
+  const radius = document.getElementById('radius').value;
+  const density = document.getElementById('density').value;
+
+  const dMul = {compact: 0.85, comfortable: 1.0, spacious: 1.2}[density] || 1.0;
+
+  // hex → rgb helper
+  const rgb = (h) => {
+    const x = h.replace('#', '');
+    return [
+      parseInt(x.substring(0,2), 16),
+      parseInt(x.substring(2,4), 16),
+      parseInt(x.substring(4,6), 16),
+    ];
+  };
+  const [gr, gg, gb] = rgb(glow);
+  const glowRgba = `rgba(${gr}, ${gg}, ${gb}, ${glowAlpha})`;
+
+  const card = document.getElementById('preview-card');
+  card.style.setProperty('--p-bg', bg);
+  card.style.setProperty('--p-mg', mg);
+  card.style.setProperty('--p-glow', glowRgba);
+  card.style.setProperty('--p-primary', primary);
+  card.style.setProperty('--p-success', success);
+  card.style.setProperty('--p-warning', warning);
+  card.style.setProperty('--p-destructive', destructive);
+  card.style.setProperty('--p-radius', radius);
+  card.style.setProperty('--p-density', dMul);
+}
+window.addEventListener('load', updatePreview);
+</script>
+
+<style>
+.theme-editor {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.theme-editor-pane { padding: 18px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.theme-editor-title { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+.theme-editor-subtitle { font-size: 12.5px; color: var(--text-dim); margin: 0 0 18px; }
+.theme-editor-grid { display: grid; grid-template-columns: 110px 1fr; gap: 8px 14px; align-items: center; }
+.theme-editor-label { color: var(--text-dim); font-size: 12px; }
+.theme-editor-input,
+.theme-editor-color-row .theme-editor-hex {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  padding: 5px 9px; border-radius: var(--radius-sm); font-size: 13px;
+  font-family: ui-monospace, Menlo, monospace; min-width: 0;
+}
+.theme-editor-color-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.theme-editor-color-row input[type=color] {
+  width: 40px; height: 32px; padding: 2px; cursor: pointer;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.theme-editor-hex { width: 90px; }
+.theme-editor-hint {
+  grid-column: 2; font-size: 11px; color: var(--text-faint); margin-top: -4px; margin-bottom: 4px;
+}
+.theme-editor-section {
+  grid-column: 1 / -1;
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin: 16px 0 6px; padding-top: 12px; border-top: 1px solid var(--border);
+}
+.theme-editor-section:first-of-type { border-top: 0; padding-top: 0; }
+.theme-editor-actions {
+  margin-top: 18px; display: flex; gap: 10px; justify-content: flex-end; align-items: center;
+}
+.theme-editor-cancel { color: var(--text-dim); font-size: 12px; text-decoration: none; }
+.theme-editor-submit {
+  background: var(--accent); color: var(--bg); border: 0; padding: 7px 16px;
+  border-radius: var(--radius-sm); font-weight: 500; cursor: pointer;
+}
+
+/* Preview pane — uses --p-* vars set by updatePreview() instead of the
+   global theme so the user sees their CHANGES, not the saved active. */
+.theme-preview-card {
+  --p-bg: var(--bg);
+  --p-mg: var(--text);
+  --p-glow: var(--warm-glow);
+  --p-primary: var(--primary);
+  --p-success: var(--green);
+  --p-warning: var(--yellow);
+  --p-destructive: var(--red);
+  --p-radius: var(--radius);
+  --p-density: 1.0;
+
+  background: var(--p-bg);
+  color: var(--p-mg);
+  border-radius: var(--p-radius);
+  padding: calc(16px * var(--p-density));
+  position: relative; overflow: hidden;
+  background-image: radial-gradient(at top right, var(--p-glow) 0%, transparent 70%);
+}
+.preview-header {
+  display: flex; align-items: center; gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--p-mg) 15%, transparent);
+  margin-bottom: 12px;
+}
+.preview-brand {
+  width: 26px; height: 26px; display: inline-flex;
+  align-items: center; justify-content: center;
+  background: var(--p-primary); color: var(--p-bg);
+  border-radius: var(--p-radius); font-weight: 700;
+}
+.preview-title { font-weight: 600; font-size: 14px; }
+.preview-body { display: flex; flex-direction: column; gap: 10px; }
+.preview-kpi {
+  display: flex; justify-content: space-between;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--p-mg) 4%, transparent);
+  border-radius: var(--p-radius);
+}
+.preview-kpi-label { color: color-mix(in srgb, var(--p-mg) 60%, transparent); font-size: 11px; }
+.preview-kpi-value { font-weight: 600; }
+.preview-message {
+  padding: 8px 12px; border-radius: var(--p-radius);
+  font-size: 12px; line-height: 1.4;
+}
+.preview-message-agent { background: color-mix(in srgb, var(--p-primary) 12%, transparent); }
+.preview-message-founder {
+  background: color-mix(in srgb, var(--p-mg) 6%, transparent);
+  color: color-mix(in srgb, var(--p-mg) 85%, transparent);
+}
+.preview-actions { display: flex; gap: 6px; margin-top: 4px; }
+.preview-btn {
+  background: transparent; color: var(--p-mg);
+  border: 1px solid color-mix(in srgb, var(--p-mg) 20%, transparent);
+  padding: 5px 12px; border-radius: var(--p-radius);
+  font-size: 11px; font-weight: 500; cursor: pointer;
+}
+.preview-btn-primary { background: var(--p-primary); color: var(--p-bg); border-color: var(--p-primary); }
+.preview-btn-danger {
+  border-color: color-mix(in srgb, var(--p-destructive) 50%, transparent);
+  color: var(--p-destructive);
+}
+.preview-status {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11.5px; padding: 4px 0;
+  color: color-mix(in srgb, var(--p-mg) 75%, transparent);
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-success { background: var(--p-success); }
+.status-warning { background: var(--p-warning); }
+.status-error { background: var(--p-destructive); }
+
+@media (max-width: 900px) {
+  .theme-editor { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}

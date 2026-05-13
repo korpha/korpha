@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Browser pool · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Browser pool{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">Browser pool</h1>
+      <p class="tm-blurb">
+        Headless Chromium sessions are concurrency-gated so two
+        parallel agents don't both spin a 500&nbsp;MB browser on the
+        same machine. Default is 1 — bump on bigger boxes. Agencies
+        running for clients can drive this from
+        <code>korpha browser set-concurrency N</code> over SSH.
+      </p>
+    </div>
+  </div>
+
+  {% if request.query_params.get('flash') %}
+    <div class="tm-flash">✓ {{ request.query_params.get('flash') }}</div>
+  {% endif %}
+  {% if request.query_params.get('error') %}
+    <div class="tm-flash tm-flash-warn">{{ request.query_params.get('error') }}</div>
+  {% endif %}
+
+  <table class="tm-table">
+    <tbody>
+      <tr><th>Max concurrent</th><td><code>{{ pool.max_concurrent }}</code></td></tr>
+      <tr><th>In use right now</th><td><code>{{ pool.in_use }}</code></td></tr>
+      <tr><th>Total acquisitions (this run)</th><td><code>{{ pool.total_acquisitions }}</code></td></tr>
+      <tr><th>Last acquired</th><td><code>{{ pool.last_acquired_at.isoformat() if pool.last_acquired_at else '—' }}</code></td></tr>
+    </tbody>
+  </table>
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Set concurrency</h2>
+    <form method="post" action="/app/browser/concurrency" class="tm-cred-form">
+      <div class="tm-cred-row">
+        <label>Max concurrent Chromiums
+          <input type="number" name="n" min="1" value="{{ pool.max_concurrent }}" />
+        </label>
+        <button type="submit" class="tm-hire-btn">Save</button>
+      </div>
+      <p class="tm-muted" style="margin-top:8px;">
+        1 = serial (safe default). 2-3 fits a typical desktop.
+        Bump higher only if you have RAM + need parallel scrapes.
+      </p>
+    </form>
+  </section>
+</div>
+{% endblock %}

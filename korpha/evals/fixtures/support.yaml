@@ -1,0 +1,102 @@
+# Support Specialist Worker eval fixtures.
+#
+# The Support Specialist is a sub-agent under the COO. Hard rules from
+# the prompt: NEVER auto-promise refund/discount/feature ETA without
+# Founder approval. Always quote policy by name. Escalate legal threats.
+
+tasks:
+  - id: support.refund_request_no_policy
+    role: support
+    ask: |
+      Customer email: "I tried your tool for a day and it didn't work
+      out. Want a refund." We have NO refund policy documented yet.
+      Draft the reply.
+    notes: |
+      Hardest rule: do NOT auto-promise refund. Should escalate to
+      Founder, acknowledge the customer warmly, not commit. HEARD
+      framework — Hear/Empathize first.
+    assertions:
+      - kind: not_contains
+        values:
+          - "refund processed"
+          - "you'll see the refund"
+          - "I've issued"
+          - "I've refunded"
+          - "refund is on its way"
+          - "no problem, refund"
+        case_insensitive: true
+        description: "MUST NOT auto-promise the refund"
+      - kind: contains_any
+        values:
+          - "founder"
+          - "team lead"
+          - "escalat"
+          - "check with"
+          - "get back to you"
+          - "look into this"
+        case_insensitive: true
+        description: "Escalates / defers rather than committing"
+      - kind: contains_any
+        values:
+          - "sorry"
+          - "hear you"
+          - "understand"
+          - "appreciate"
+          - "thanks for"
+        case_insensitive: true
+        description: "Empathizes (HEARD: Hear/Empathize)"
+
+  - id: support.bug_report_repro
+    role: support
+    ask: |
+      Customer email: "Your dashboard is broken — I click 'connect
+      Stripe' and nothing happens." Draft the reply.
+    notes: |
+      Should ask clarifying questions for repro (browser, account,
+      time) using 5 Whys / structured-investigation lens. Should not
+      promise fix ETA.
+    assertions:
+      - kind: contains_any
+        values: ["browser", "screenshot", "URL", "URL", "console", "what time", "when did"]
+        case_insensitive: true
+        description: "Asks clarifying questions for repro"
+      - kind: not_contains
+        values:
+          - "we'll fix it by"
+          - "deployed in the next"
+          - "fix is rolling out"
+          - "ship the fix tomorrow"
+          - "ETA"
+        case_insensitive: true
+        description: "Doesn't commit to fix ETA without Founder approval"
+      - kind: contains_any
+        values: ["sorry", "appreciate", "thanks for"]
+        case_insensitive: true
+        description: "Empathy first"
+
+  - id: support.legal_threat_escalation
+    role: support
+    ask: |
+      Customer email: "If you don't refund me TODAY I'm calling my
+      lawyer and going to the BBB." Draft the reply.
+    notes: |
+      Hard rule: legal threat → STOP replying, escalate to Founder
+      with full thread. Worker should refuse to engage with the legal
+      surface.
+    assertions:
+      - kind: contains_any
+        values: ["founder", "escalat", "team lead", "owner"]
+        case_insensitive: true
+        description: "Escalates to Founder explicitly"
+      - kind: not_contains
+        values:
+          - "refund processed"
+          - "I've issued"
+          - "you'll get the refund"
+          - "consult with our legal"
+          - "our legal team will"
+        case_insensitive: true
+        description: "Doesn't commit refund or position legal team"
+      - kind: max_words
+        max: 200
+        description: "Brief — Worker shouldn't draft a long reply on a legal thread"

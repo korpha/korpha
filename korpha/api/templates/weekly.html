@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% block title %}This week · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}This week{% endblock %}
+{% block body %}
+  <div class="wk-shell">
+    <div class="wk-header">
+      <h1 class="wk-title">{{ greeting }}</h1>
+      <p class="wk-subtitle">
+        Week of {{ window_start.strftime("%b %d") }} —
+        {{ window_end.strftime("%b %d, %Y") }}
+      </p>
+    </div>
+
+    <div class="wk-kpi-grid">
+      <div class="wk-kpi">
+        <div class="wk-kpi-value">{{ shipped_count }}</div>
+        <div class="wk-kpi-label">cards shipped</div>
+        <div class="wk-kpi-delta">{{ shipped_delta }}</div>
+      </div>
+      <div class="wk-kpi">
+        <div class="wk-kpi-value">${{ '%.2f' | format(spend_total) }}</div>
+        <div class="wk-kpi-label">spent</div>
+        <div class="wk-kpi-delta">
+          {{ spend_breakdown.workhorse_pct }}% workhorse
+        </div>
+      </div>
+      <div class="wk-kpi">
+        <div class="wk-kpi-value">{{ pending_approvals }}</div>
+        <div class="wk-kpi-label">awaiting your call</div>
+        <div class="wk-kpi-delta">
+          {% if pending_approvals %}
+            <a href="/app/approvals" class="wk-kpi-link">review →</a>
+          {% else %}
+            none open
+          {% endif %}
+        </div>
+      </div>
+      <div class="wk-kpi">
+        <div class="wk-kpi-value">{{ open_blockers }}</div>
+        <div class="wk-kpi-label">blockers</div>
+        <div class="wk-kpi-delta">
+          {% if open_blockers %}
+            <a href="/app/issues" class="wk-kpi-link">view →</a>
+          {% else %}
+            clear
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if shipped_cards %}
+      <section class="wk-section">
+        <h2 class="wk-section-title">Shipped to DONE</h2>
+        <ul class="wk-list">
+          {% for c in shipped_cards %}
+            <li class="wk-list-item">
+              {% if c.owner_role %}
+                <span class="wk-pill wk-pill-{{ c.owner_role }}">
+                  {{ c.owner_role|upper }}
+                </span>
+              {% endif %}
+              <span class="wk-list-title">{{ c.title }}</span>
+              <span class="wk-list-meta">
+                {{ c.moved_at.strftime("%a %b %d") }}
+              </span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    {% if in_progress_cards %}
+      <section class="wk-section">
+        <h2 class="wk-section-title">Currently working on</h2>
+        <ul class="wk-list">
+          {% for c in in_progress_cards %}
+            <li class="wk-list-item">
+              {% if c.owner_role %}
+                <span class="wk-pill wk-pill-{{ c.owner_role }}">
+                  {{ c.owner_role|upper }}
+                </span>
+              {% endif %}
+              <span class="wk-list-title">{{ c.title }}</span>
+              <span class="wk-list-meta">claimed</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    {% if review_cards %}
+      <section class="wk-section">
+        <h2 class="wk-section-title">
+          Awaiting your review ({{ review_cards|length }})
+        </h2>
+        <p class="wk-section-blurb">
+          The agents say these are done — verify the evidence + accept,
+          or kick back for rework.
+        </p>
+        <ul class="wk-list">
+          {% for c in review_cards %}
+            <li class="wk-list-item">
+              {% if c.owner_role %}
+                <span class="wk-pill wk-pill-{{ c.owner_role }}">
+                  {{ c.owner_role|upper }}
+                </span>
+              {% endif %}
+              <span class="wk-list-title">{{ c.title }}</span>
+              <span class="wk-list-meta">
+                <a href="/app/kanban" class="wk-list-link">on board</a>
+              </span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    {% if stuck_signals %}
+      <section class="wk-section wk-stuck">
+        <h2 class="wk-section-title">
+          Stuck work
+          {% if stuck_critical_count %}
+            <span class="wk-pill wk-pill-high">
+              {{ stuck_critical_count }} critical
+            </span>
+          {% endif %}
+        </h2>
+        <p class="wk-section-blurb">
+          Cards that haven't moved past their thresholds. The
+          first column says <em>why</em>: idle = director wedged,
+          overdue = waiting on you, loop = same flaw shipped
+          twice. Decide and unblock.
+        </p>
+        <ul class="wk-list">
+          {% for s in stuck_signals %}
+            <li class="wk-list-item">
+              <span class="wk-pill wk-pill-{{ 'high' if s.severity == 'critical' else 'medium' }}">
+                {{ s.kind.value.replace('_', ' ') }}
+              </span>
+              <span class="wk-list-title">{{ s.summary }}</span>
+              <span class="wk-list-meta">
+                {{ s.age_hours }}h
+              </span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    {% if top_blockers %}
+      <section class="wk-section">
+        <h2 class="wk-section-title">Top blockers</h2>
+        <ul class="wk-list">
+          {% for b in top_blockers %}
+            <li class="wk-list-item">
+              <span class="wk-pill wk-pill-{{ b.urgency.value }}">
+                {{ b.urgency.value }}
+              </span>
+              <span class="wk-list-title">{{ b.title }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    <section class="wk-section wk-spend">
+      <h2 class="wk-section-title">Where the spend went</h2>
+      <table class="wk-spend-table">
+        <thead>
+          <tr>
+            <th>Tier</th>
+            <th class="wk-num">Calls</th>
+            <th class="wk-num">Tokens</th>
+            <th class="wk-num">Spend</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in spend_by_tier %}
+            <tr>
+              <td>{{ row.tier }}</td>
+              <td class="wk-num">{{ row.calls }}</td>
+              <td class="wk-num">{{ row.tokens }}</td>
+              <td class="wk-num">${{ '%.2f' | format(row.cost) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {% if not shipped_cards and not in_progress_cards
+          and not review_cards and pending_approvals == 0 %}
+      <section class="wk-section wk-empty">
+        <h2 class="wk-section-title">Quiet week</h2>
+        <p class="wk-empty-blurb">
+          Nothing landed. If that's intentional (you're heads-down on
+          something the agents can't help with), great. If not — open
+          the chat and ask the cofounder what it's stuck on.
+        </p>
+      </section>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .wk-shell { display: flex; flex-direction: column; gap: 24px; max-width: 980px; }
+  .wk-header { display: flex; flex-direction: column; gap: 4px; }
+  .wk-title { font-size: 28px; font-weight: 500; margin: 0; }
+  .wk-subtitle { color: var(--text-faint); font-size: 13px; margin: 0; }
+
+  .wk-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .wk-kpi {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .wk-kpi-value {
+    font-size: 28px;
+    font-weight: 500;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .wk-kpi-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-faint);
+  }
+  .wk-kpi-delta {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-top: 4px;
+  }
+  .wk-kpi-link {
+    color: var(--accent, #e7c14b);
+    text-decoration: none;
+  }
+  .wk-kpi-link:hover { text-decoration: underline; }
+
+  .wk-section {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+  }
+  .wk-section-title {
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    margin: 0 0 10px;
+  }
+  .wk-section-blurb {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin: 0 0 10px;
+  }
+  .wk-list { list-style: none; padding: 0; margin: 0; }
+  .wk-list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .wk-list-item:last-child { border-bottom: 0; }
+  .wk-list-title { flex: 1; color: var(--text); }
+  .wk-list-meta { color: var(--text-faint); font-size: 11px; }
+  .wk-list-link {
+    color: var(--accent, #e7c14b);
+    text-decoration: none;
+    font-size: 11px;
+  }
+  .wk-list-link:hover { text-decoration: underline; }
+
+  .wk-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .wk-pill-cto { background: rgba(80, 140, 220, 0.2); color: #5cf; }
+  .wk-pill-cmo { background: rgba(231, 193, 75, 0.2); color: #e7c14b; }
+  .wk-pill-coo { background: rgba(160, 220, 120, 0.2); color: #9ec46a; }
+  .wk-pill-high { background: rgba(204, 51, 102, 0.2); color: #c25; }
+  .wk-pill-medium { background: rgba(231, 193, 75, 0.2); color: #e7c14b; }
+  .wk-pill-low { background: rgba(160, 160, 160, 0.2); color: var(--text-faint); }
+
+  .wk-spend-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .wk-spend-table th {
+    text-align: left;
+    padding: 6px 8px;
+    color: var(--text-faint);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+  }
+  .wk-spend-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .wk-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .wk-empty .wk-empty-blurb {
+    color: var(--text-faint);
+    font-size: 13px;
+    margin: 0;
+  }
+</style>
+{% endblock %}

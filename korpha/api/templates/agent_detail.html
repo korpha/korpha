@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}{{ agent.title }} · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}<a href="/app/agents">Agents</a> › {{ agent.title }}{% endblock %}
+{% block body %}
+  <div class="agent-detail-head">
+    <span class="agent-avatar agent-avatar-lg">{{ agent.title[0] }}</span>
+    <div class="agent-detail-meta">
+      <h1 class="agent-detail-name">{{ agent.title }}</h1>
+      <div class="agent-detail-role">
+        {{ agent.role_type }}
+        {% if agent.specialty %} · {{ agent.specialty }}{% endif %}
+        · tier <code>{{ agent.inference_tier_default }}</code>
+      </div>
+    </div>
+    <span class="pill pill-{{ agent.status_class }} pill-lg">{{ agent.status_label }}</span>
+  </div>
+
+  {% if agent.current_task %}
+    <div class="card current-task">
+      <div class="card-title">Currently working on</div>
+      <a class="current-task-link" href="/app/issues/{{ agent.current_task.ref }}">
+        <span class="issue-ref">{{ agent.current_task.ref }}</span>
+        <span class="current-task-title">{{ agent.current_task.title }}</span>
+      </a>
+    </div>
+  {% endif %}
+
+  <section class="dash-section">
+    <div class="dash-section-title">Run activity <span class="chart-sub">last 14 days</span></div>
+    <div class="card">
+      {% set _max = agent_run_chart|map(attribute='value')|max %}
+      <svg class="bar-chart" viewBox="0 0 280 60" preserveAspectRatio="none">
+        {% for row in agent_run_chart %}
+          {% set h = (row.value / _max * 50)|round|int if _max else 0 %}
+          <rect x="{{ loop.index0 * 20 + 2 }}" y="{{ 55 - h }}" width="16" height="{{ h or 1 }}"
+                fill="var(--accent)" opacity="0.85" />
+        {% endfor %}
+      </svg>
+      <div class="chart-foot">
+        <span>{{ agent_run_chart[0].label }}</span>
+        <span>{{ agent_run_chart|map(attribute='value')|sum }} runs</span>
+        <span>{{ agent_run_chart[-1].label }}</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="agent-grid">
+    <div class="agent-col">
+      <div class="dash-section-title">Assigned issues</div>
+      {% if assigned_issues %}
+        <div class="issues-list">
+          {% for issue in assigned_issues %}
+            <a class="issue-row" href="/app/issues/{{ issue.ref }}">
+              <span class="issue-ref">{{ issue.ref }}</span>
+              <span class="pill pill-{{ issue.status_class }}">{{ issue.status_label }}</span>
+              <span class="issue-title">{{ issue.title }}</span>
+              <span class="issue-time">{{ issue.created_label }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="card chart-empty">No issues assigned to this agent yet.</div>
+      {% endif %}
+    </div>
+
+    <div class="agent-col">
+      <div class="dash-section-title">Recent activity</div>
+      {% if agent_events %}
+        <div class="activity-list">
+          {% for e in agent_events %}
+            <div class="activity-row">
+              <span class="activity-event">{{ e.event_label }}</span>
+              <span class="activity-time">{{ e.time_label }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="card chart-empty">No activity recorded yet.</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="dash-section">
+    <div class="dash-section-title">Costs</div>
+    <div class="kpi-grid">
+      <div class="card">
+        <div class="card-title">Calls</div>
+        <div class="kpi-amount">{{ agent_costs.calls }}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Input tokens</div>
+        <div class="kpi-amount">{{ agent_costs.input_tokens }}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Output tokens</div>
+        <div class="kpi-amount">{{ agent_costs.output_tokens }}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Total</div>
+        <div class="kpi-amount">${{ "%.4f"|format(agent_costs.total) }}</div>
+        {% if agent_costs.saved_vs_sonnet > 0 %}
+          <div class="card-sub" style="color: var(--green);">saved ${{ "%.2f"|format(agent_costs.saved_vs_sonnet) }} vs Sonnet</div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <details class="advanced-meta operator-only">
+    <summary>Advanced</summary>
+    <div class="card">
+      <div class="settings-row"><span class="settings-key">Agent ID</span><code>{{ agent.id }}</code></div>
+      <div class="settings-row"><span class="settings-key">Hired</span><span>{{ agent.hired_label }}</span></div>
+      <div class="settings-row"><span class="settings-key">Default tier</span><code>{{ agent.inference_tier_default }}</code></div>
+      <div class="settings-row"><span class="settings-key">Active</span><span>{{ 'yes' if agent.is_active else 'no' }}</span></div>
+    </div>
+  </details>
+{% endblock %}
+{% block scripts %}
+<style>
+.agent-detail-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.agent-detail-meta { flex: 1; }
+.agent-avatar-lg { width: 44px; height: 44px; border-radius: 10px; font-size: 18px; background: var(--bg-active); display: inline-flex; align-items: center; justify-content: center; font-weight: 600; }
+.agent-detail-name { margin: 0; font-size: 22px; font-weight: 600; }
+.agent-detail-role { color: var(--text-dim); font-size: 12.5px; }
+.agent-detail-role code { font-family: ui-monospace, Menlo, monospace; padding: 1px 5px; background: var(--bg-elev); border-radius: 4px; }
+.pill-lg { font-size: 12px; padding: 3px 12px; }
+
+.current-task { margin-bottom: 18px; }
+.current-task-link { display: flex; align-items: center; gap: 10px; padding: 10px 0 0; }
+.current-task-link:hover .current-task-title { color: var(--accent); }
+.issue-ref { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--text-faint); }
+.current-task-title { color: var(--text); font-size: 14px; transition: color 80ms; }
+
+.dash-section { margin-bottom: 22px; }
+.dash-section-title { font-size: 11px; font-weight: 600; color: var(--text-faint); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+.bar-chart { width: 100%; height: 60px; display: block; }
+.chart-foot { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); margin-top: 4px; }
+.chart-sub { font-size: 11.5px; color: var(--text-faint); font-weight: 400; margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.chart-empty { color: var(--text-faint); font-style: italic; padding: 16px; text-align: center; font-size: 12.5px; }
+
+.agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-bottom: 22px; }
+.agent-col { min-width: 0; }
+
+.issues-list { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.issue-row { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--bg-elev); }
+.issue-row + .issue-row { border-top: 1px solid var(--border); }
+.issue-row:hover { background: var(--bg-hover); }
+.issue-title { flex: 1; color: var(--text); font-size: 13px; }
+.issue-time { color: var(--text-faint); font-size: 11.5px; }
+
+.activity-list { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.activity-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--bg-elev); }
+.activity-row + .activity-row { border-top: 1px solid var(--border); }
+.activity-event { flex: 1; color: var(--text-dim); font-size: 12.5px; }
+.activity-time { color: var(--text-faint); font-size: 11.5px; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.kpi-amount { font-size: 22px; font-weight: 600; color: var(--text); margin-top: 4px; }
+
+.advanced-meta summary { color: var(--text-dim); font-size: 12.5px; cursor: pointer; padding: 4px 0; margin-bottom: 8px; }
+.settings-row { display: flex; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.settings-row:last-child { border-bottom: 0; }
+.settings-key { color: var(--text-dim); min-width: 140px; }
+code { font-family: ui-monospace, Menlo, monospace; }
+
+@media (max-width: 800px) {
+  .agent-grid { grid-template-columns: 1fr; }
+}
+</style>
+{% endblock %}

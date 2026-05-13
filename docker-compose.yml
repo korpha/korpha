@@ -1,0 +1,50 @@
+# Single-service compose file for Korpha. Run with:
+#
+#   docker compose up -d
+#
+# State (DB, config, themes) persists in the named volume `korpha-data`.
+# Provider keys go in a .env file alongside this compose file:
+#
+#   echo 'OPENCODE_GO_API_KEY=...' >> .env
+#   echo 'RANKMYANSWER_API_KEY=...' >> .env
+#
+# First-run setup (interactive wizard) — exec into the container:
+#
+#   docker compose exec korpha korpha init
+#   docker compose exec korpha korpha config
+
+services:
+  korpha:
+    image: ghcr.io/korpha/korpha:latest
+    # OR build locally:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+
+    container_name: korpha
+    restart: unless-stopped
+
+    ports:
+      - "8765:8765"
+
+    volumes:
+      - korpha-data:/home/korpha/.korpha
+
+    # Provider keys are passed via .env (gitignored)
+    env_file:
+      - .env
+
+    environment:
+      # Override if you want different paths inside the container
+      KORPHA_DATA_DIR: /home/korpha/.korpha
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8765/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  korpha-data:
+    driver: local

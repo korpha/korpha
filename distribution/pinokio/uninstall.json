@@ -1,0 +1,25 @@
+{
+  "version": "3.0",
+  "run": [
+    {
+      "id": "uninstall_tool",
+      "method": "shell.run",
+      "params": {
+        "message": [
+          "echo Removing Korpha tool install...",
+          "{{cwd}}/.uv-bin/uv tool uninstall korpha || true"
+        ]
+      }
+    },
+    {
+      "id": "remove_data",
+      "method": "shell.run",
+      "params": {
+        "message": [
+          "echo NOTE: ~/.korpha/ is preserved (DB + config + themes).",
+          "echo To wipe state too, run: rm -rf ~/.korpha"
+        ]
+      }
+    }
+  ]
+}
