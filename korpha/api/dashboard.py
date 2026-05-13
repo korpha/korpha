@@ -3299,18 +3299,44 @@ def build_dashboard_router(
         return HTMLResponse(f'<div class="card">{"".join(rows)}</div>')
 
     # Recommended presets — the short list Mike sees up-front. Hosted
-    # cloud providers with sensible cost-ascending defaults. Everything
-    # else (self-hosted, custom endpoints, Anthropic/OpenAI direct) is
-    # tucked under the Advanced expander so the main form stays tidy.
+    # cloud providers with sensible cost-ascending defaults + local
+    # Ollama as the OSS-first $0 path. Everything else (self-hosted
+    # variants, custom endpoints, regional providers) lives under the
+    # Advanced expander so the main form stays tidy.
     _RECOMMENDED_PRESETS: tuple[str, ...] = (
         "opencode-go",
         "ollama-cloud",
         "openrouter",
         "nvidia-nim",
         "deepseek",
+        "local-ollama",
         "codex-cli",
         "claude-code-cli",
     )
+
+    # Per-preset hint shown under the picker so Mike understands what
+    # he's signing up for. Empty string = no hint.
+    _PRESET_HINTS: dict[str, str] = {
+        "local-ollama": (
+            "Free, but needs ~24 GB VRAM (Linux/Windows GPU) "
+            "or a Mac with at least 24 GB unified RAM for usable "
+            "quality. Install Ollama first: https://ollama.com"
+        ),
+        "lm-studio": (
+            "Free, but needs ~24 GB VRAM or a Mac with at least "
+            "24 GB unified RAM. Install LM Studio and start its "
+            "Local Server first: https://lmstudio.ai"
+        ),
+        "codex-cli": (
+            "No API key needed — uses your existing ChatGPT login "
+            "via Codex CLI. Install + log in first: https://docs.openai.com/codex"
+        ),
+        "claude-code-cli": (
+            "No API key needed — uses your existing Anthropic login "
+            "via Claude Code CLI. Install + log in first: "
+            "https://docs.claude.com/en/docs/claude-code/setup"
+        ),
+    }
 
     @router.get("/settings/providers/new", response_class=HTMLResponse)
     def provider_form_partial(
@@ -3387,6 +3413,13 @@ def build_dashboard_router(
             host_hint = "http://localhost:1234"
 
         scope_hidden = f'<input type="hidden" name="scope" value="{scope}" />'
+        preset_hint = _PRESET_HINTS.get(chosen, "")
+        preset_hint_html = (
+            f'<div class="provider-form-hint" '
+            f'style="grid-column:2;margin-top:-4px;color:var(--text-faint);">'
+            f'{preset_hint}</div>'
+            if preset_hint else ""
+        )
 
         endpoint_fields = ""
         if needs_endpoint:
@@ -3432,6 +3465,7 @@ def build_dashboard_router(
                       hx-trigger="change">
                 {options}
               </select>
+              {preset_hint_html}
 
               <label class="provider-form-label" for="label">Label</label>
               <input name="label" id="label" class="provider-form-input"
