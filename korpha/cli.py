@@ -16,6 +16,7 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
+from uuid import UUID  # noqa: F401 -- used in _bootstrap_database return type
 
 import typer
 
@@ -599,40 +600,27 @@ def _ensure_founder_and_business(session: Session) -> tuple[Founder, Business]:
     return founder, business
 
 
-@app.command()
-def init(
-    email: Annotated[
-        str | None, typer.Option(help="Founder email address.")
-    ] = None,
-    name: Annotated[str | None, typer.Option(help="Founder display name.")] = None,
-    business: Annotated[
-        str | None, typer.Option(help="Business name.")
-    ] = None,
-    description: Annotated[
-        str | None, typer.Option(help="Business description.")
-    ] = None,
-) -> None:
-    """Initialize the local Korpha config and database."""
-    _ensure_load_env()
+def _bootstrap_database(
+    *,
+    email: str,
+    name: str,
+    business: str,
+    description: str,
+) -> tuple[str, str, str, "UUID"]:
+    """Create the DB + schema + Founder + Business + root BusinessUnit + CEO.
+
+    Idempotent: re-running with the same identity is a no-op except for
+    the schema/CEO bits, which are already idempotent. Returns the
+    display labels used by both `init` (prints them) and `server`
+    (auto-bootstrap path, doesn't print).
+
+    Returns (founder_label, business_name, ceo_title, ceo_id).
+    """
     db = _db_path()
     db.parent.mkdir(parents=True, exist_ok=True)
-
-    if email is None:
-        email = typer.prompt("Founder email")
-    if name is None:
-        name = typer.prompt("Founder display name", default="")
-    if business is None:
-        business = typer.prompt("Business name")
-    if description is None:
-        description = typer.prompt("Business description", default="")
-
     engine = _engine()
     SQLModel.metadata.create_all(engine)
-    # Stamp the alembic version table so future `korpha migrate` calls
-    # don't try to re-apply the initial migration on top of an existing schema.
     _stamp_alembic_head_if_possible(db)
-    # Build the FTS5 virtual table + sync triggers (no-op on Postgres /
-    # missing FTS5 build of SQLite).
     from korpha.cofounder.fts import ensure_fts_index
 
     with Session(engine) as fts_session:
@@ -663,18 +651,12 @@ def init(
         else:
             biz = existing_business
 
-        # Founder must point at the active business — downstream
-        # routing (dashboard, chat, CEO ask) reads this pointer.
         if founder.active_business_id != biz.id:
             founder.active_business_id = biz.id
             session.add(founder)
             session.commit()
             session.refresh(founder)
 
-        # Every Business needs a root BusinessUnit so kanban /
-        # approvals / activity have somewhere to attach. Existing
-        # installs got this via PR2's Alembic backfill; fresh init
-        # needs the same.
         existing_unit = session.exec(
             select(BusinessUnit).where(BusinessUnit.business_id == biz.id)
         ).first()
@@ -691,12 +673,61 @@ def init(
 
         hiring = HiringService(session)
         ceo = hiring.ensure_ceo(biz.id)
-        # Capture display values BEFORE the session closes (otherwise SQLAlchemy
-        # detaches the instances and attribute access raises DetachedInstanceError).
-        founder_label = founder.display_name or founder.email
-        business_name = biz.name
-        ceo_title = ceo.title
-        ceo_id = ceo.id
+        return (
+            founder.display_name or founder.email,
+            biz.name,
+            ceo.title,
+            ceo.id,
+        )
+
+
+# Sentinel value the dashboard recognizes as "founder identity not yet
+# captured — show the /app/welcome step before the brief textarea."
+_BOOTSTRAP_PLACEHOLDER_EMAIL = "founder@localhost.invalid"
+_BOOTSTRAP_PLACEHOLDER_BUSINESS = "My Business"
+
+
+def _system_username_or(fallback: str = "Founder") -> str:
+    """Best-effort guess at the founder's display name from the OS."""
+    import getpass
+    try:
+        return getpass.getuser() or fallback
+    except Exception:  # noqa: BLE001
+        return fallback
+
+
+@app.command()
+def init(
+    email: Annotated[
+        str | None, typer.Option(help="Founder email address.")
+    ] = None,
+    name: Annotated[str | None, typer.Option(help="Founder display name.")] = None,
+    business: Annotated[
+        str | None, typer.Option(help="Business name.")
+    ] = None,
+    description: Annotated[
+        str | None, typer.Option(help="Business description.")
+    ] = None,
+) -> None:
+    """Initialize the local Korpha config and database."""
+    _ensure_load_env()
+    db = _db_path()
+
+    if email is None:
+        email = typer.prompt("Founder email")
+    if name is None:
+        name = typer.prompt("Founder display name", default="")
+    if business is None:
+        business = typer.prompt("Business name")
+    if description is None:
+        description = typer.prompt("Business description", default="")
+
+    founder_label, business_name, ceo_title, ceo_id = _bootstrap_database(
+        email=email,
+        name=name,
+        business=business,
+        description=description,
+    )
 
     typer.echo(_bold("Korpha initialized."))
     typer.echo(f"  Data dir:  {_data_dir()}")
@@ -3216,8 +3247,23 @@ def server(
 
     _ensure_load_env()
     if not _db_path().exists():
-        typer.echo(_yellow("Korpha not initialized. Run `korpha init`."))
-        raise typer.Exit(code=1)
+        # Auto-bootstrap with placeholder identity. The dashboard's
+        # /app/welcome route detects the placeholder + redirects new
+        # users into a Mike-friendly identity-capture form, so a fresh
+        # `pip install korpha && korpha server` Just Works — no
+        # separate `korpha init` step required.
+        typer.echo(_yellow(
+            "No database found — bootstrapping a fresh install."
+        ))
+        typer.echo(_dim(
+            "  Open the dashboard to finish setup in your browser."
+        ))
+        _bootstrap_database(
+            email=_BOOTSTRAP_PLACEHOLDER_EMAIL,
+            name=_system_username_or("Founder"),
+            business=_BOOTSTRAP_PLACEHOLDER_BUSINESS,
+            description="",
+        )
     # Install the structured-log file handler so `korpha logs`
     # has something to tail. Stderr stays on too — uvicorn forwards
     # its own access logs there.

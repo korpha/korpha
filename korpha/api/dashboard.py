@@ -214,6 +214,25 @@ def _needs_onboarding(business: Business) -> bool:
     return not str(brief.get("goal") or "").strip()
 
 
+# Placeholder sentinel matching cli._BOOTSTRAP_PLACEHOLDER_EMAIL. Kept
+# in sync by hand — the alternative is a config import that pulls all
+# of typer into the dashboard module, which isn't worth it for two
+# string constants.
+_BOOTSTRAP_PLACEHOLDER_EMAIL = "founder@localhost.invalid"
+
+
+def _needs_identity_setup(founder: Founder, business: Business) -> bool:
+    """True when `korpha server` auto-bootstrapped the DB but the
+    Founder hasn't filled in their real identity yet via the web
+    wizard. We gate on the placeholder email — once it's a real
+    address we trust the user finished the welcome step.
+
+    Empty email also counts: an upgrade path where someone wiped
+    their identity but didn't set anything new lands here too."""
+    email = (founder.email or "").strip().lower()
+    return not email or email == _BOOTSTRAP_PLACEHOLDER_EMAIL
+
+
 def build_dashboard_router(
     require_session: Callable[[], Session],
     founder_business: Callable[[Session], tuple[Founder, Business]],
@@ -286,6 +305,15 @@ def build_dashboard_router(
         try:
             ctx = _ctx(session)
             biz = ctx["business"]
+            founder = ctx["founder"]
+            # First-first-run gate: `korpha server` auto-bootstrapped
+            # with placeholder identity, but the founder hasn't filled
+            # in their real name/email/business yet via the welcome
+            # form. Send them there before the brief textarea.
+            if _needs_identity_setup(founder, biz):
+                return RedirectResponse(
+                    "/app/welcome", status_code=status.HTTP_303_SEE_OTHER
+                )
             # First-run gate: if Day-0 intake hasn't been captured yet
             # the dashboard would just be empty noise. Send the Founder
             # to the onboard flow instead.
@@ -309,15 +337,111 @@ def build_dashboard_router(
         finally:
             session.close()
 
-    @router.get("/onboard", response_class=HTMLResponse)
+    @router.get("/welcome", response_class=HTMLResponse, response_model=None)
+    def welcome_form(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse | RedirectResponse:
+        """First-first-run identity capture. Shown automatically when
+        `korpha server` auto-bootstrapped the DB with placeholder
+        identity — once the founder enters a real email we redirect
+        to the brief screen. Manual revisits after setup land on
+        /app/settings instead."""
+        try:
+            ctx = _ctx(session, active="welcome")
+            founder = ctx["founder"]
+            biz = ctx["business"]
+            if not _needs_identity_setup(founder, biz):
+                # Already set up — don't show the wizard a second time.
+                return RedirectResponse(
+                    "/app/dashboard", status_code=status.HTTP_303_SEE_OTHER
+                )
+            ctx["existing_name"] = founder.display_name or ""
+            ctx["existing_email"] = (
+                "" if (founder.email or "").lower() == _BOOTSTRAP_PLACEHOLDER_EMAIL
+                else (founder.email or "")
+            )
+            ctx["existing_business"] = (
+                "" if biz.name == "My Business" else biz.name
+            )
+            return templates.TemplateResponse(request, "welcome.html", ctx)
+        finally:
+            session.close()
+
+    @router.post("/welcome", response_class=HTMLResponse, response_model=None)
+    def welcome_submit(
+        request: Request,
+        founder_name: Annotated[str, Form()] = "",
+        founder_email: Annotated[str, Form()] = "",
+        business_name: Annotated[str, Form()] = "",
+        session: Annotated[Session, Depends(require_session)] = None,  # type: ignore[assignment]
+    ) -> HTMLResponse | RedirectResponse:
+        """Capture real founder identity. Validates email looks
+        plausible; re-renders the form with an error otherwise so
+        we don't silently accept a typo."""
+        try:
+            founder, business = founder_business(session)
+            n = founder_name.strip()
+            e = founder_email.strip()
+            b = business_name.strip()
+
+            def _render_error(msg: str) -> HTMLResponse:
+                ctx = _ctx(session, active="welcome")
+                ctx["existing_name"] = n
+                ctx["existing_email"] = e
+                ctx["existing_business"] = b
+                ctx["error"] = msg
+                return templates.TemplateResponse(
+                    request, "welcome.html", ctx,
+                )
+
+            if not n:
+                return _render_error("Your name is required.")
+            if not e or "@" not in e or "." not in e.split("@", 1)[-1]:
+                return _render_error(
+                    "That doesn't look like a valid email address."
+                )
+            if not b:
+                return _render_error("Your business name is required.")
+
+            founder.display_name = n
+            founder.email = e
+            business.name = b
+            # Update the root DEFAULT BusinessUnit name to match so
+            # the org tree label tracks the business.
+            from korpha.business_units.model import BusinessUnit as _BU
+            root = session.exec(
+                select(_BU)
+                .where(_BU.business_id == business.id)
+                .where(_BU.parent_id.is_(None))  # type: ignore[attr-defined]
+            ).first()
+            if root is not None:
+                root.name = b
+                session.add(root)
+            session.add(founder)
+            session.add(business)
+            session.commit()
+            return RedirectResponse(
+                "/app/onboard", status_code=status.HTTP_303_SEE_OTHER
+            )
+        finally:
+            session.close()
+
+    @router.get("/onboard", response_class=HTMLResponse, response_model=None)
     def onboard_form(
         request: Request,
         session: Annotated[Session, Depends(require_session)],
-    ) -> HTMLResponse:
+    ) -> HTMLResponse | RedirectResponse:
         """Day-0 intake screen. Shown automatically when business.founder_brief
         is empty; reachable manually from /app/settings to re-do the brief."""
         try:
             ctx = _ctx(session, active="onboard")
+            # If the founder hit /onboard directly without finishing
+            # the identity step, bounce them.
+            if _needs_identity_setup(ctx["founder"], ctx["business"]):
+                return RedirectResponse(
+                    "/app/welcome", status_code=status.HTTP_303_SEE_OTHER
+                )
             existing = ctx["business"].founder_brief or {}
             ctx["existing_brief"] = existing
             ctx["existing_answer"] = existing.get("raw_answer", "")

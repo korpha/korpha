@@ -219,6 +219,7 @@ class CreateWatchdogSkill(Skill):
         )
         approval = Approval(
             business_id=ctx.business.id,
+            business_unit_id=ctx.business_unit_id,
             agent_role_id=role_id,
             action_class=ActionClass.CODE_CHANGE,
             platform="cron",
