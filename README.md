@@ -32,10 +32,10 @@ drafts. **521 tests, mypy --strict clean, 100% on the eval harness**
 
 ## How we know the agents actually work
 
-Most "AI cofounder" projects ship a prompt and call it done. We score
-the prompts against a deterministic [ClawEval](https://github.com/Korpha/ClawEval)-style
-harness — exact substring / regex / word-count assertions, no
-LLM-as-judge — across 50 founder-asks per role.
+Most "AI cofounder" projects ship a prompt and call it done. We built
+an internal eval harness — exact substring / regex / word-count
+assertions, no LLM-as-judge — and score every role prompt against
+50 founder-asks. Same code, same fixtures, same scoring. Reproducible.
 
 **Canonical baseline (3-run averaged, open-weights frontier model):**
 
@@ -49,7 +49,9 @@ covering hard rules from their prompt (no auto-promised refunds,
 no marketing fluff, mobile-first specs, etc.).
 
 Reproduce yourself: `korpha eval --tier pro --runs 3` after
-configuring any provider. Full report: [docs/eval-baselines/](docs/eval-baselines/README.md).
+configuring any provider. Full report (including the historical
+baseline run under the project's previous name, AIgenteur):
+[docs/eval-baselines/](docs/eval-baselines/README.md).
 
 ---
 
