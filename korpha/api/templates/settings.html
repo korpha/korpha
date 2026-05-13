@@ -84,6 +84,23 @@
       + Add provider
     </button>
     <div id="provider-form"></div>
+
+    <details class="settings-advanced" style="margin-top: 12px;">
+      <summary>Advanced — self-hosted / custom endpoint / LM Studio / Ollama local</summary>
+      <p class="tm-blurb" style="margin: 8px 0;">
+        Wire your own OpenAI-compatible endpoint, point at a local
+        Ollama daemon, or connect LM Studio. For users coming from
+        Hermes / OpenClaw — same dialect, same providers, just
+        configured via this form instead of YAML.
+      </p>
+      <button class="settings-add-btn"
+              hx-get="/app/settings/providers/new?scope=advanced"
+              hx-target="#provider-form-advanced"
+              hx-swap="innerHTML">
+        + Add advanced / self-hosted provider
+      </button>
+      <div id="provider-form-advanced"></div>
+    </details>
   </div>
 
   <details class="settings-advanced">

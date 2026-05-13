@@ -451,6 +451,17 @@ def local_ollama_provider(host: str = "http://localhost:11434") -> OpenAICompati
     )
 
 
+# Convenience preset: LM Studio local server (OpenAI-compat at
+# localhost:1234 by default — LM Studio's "Local Server" feature
+# exposes the OpenAI chat completions API for any model you've
+# downloaded inside the app).
+def lm_studio_provider(host: str = "http://localhost:1234") -> OpenAICompatibleProvider:
+    return OpenAICompatibleProvider(
+        name="lm-studio",
+        base_url=f"{host}/v1",
+    )
+
+
 # Convenience preset: Together AI
 def together_provider() -> OpenAICompatibleProvider:
     return OpenAICompatibleProvider(
@@ -554,6 +565,7 @@ def xiaomi_mimo_provider() -> OpenAICompatibleProvider:
 PROVIDER_PRESETS: dict[str, Callable[[], OpenAICompatibleProvider]] = {
     "deepseek": deepseek_provider,
     "local-ollama": local_ollama_provider,
+    "lm-studio": lm_studio_provider,
     "ollama-cloud": ollama_cloud_provider,
     "opencode-go": opencode_go_provider,
     "opencode-zen": opencode_zen_provider,
