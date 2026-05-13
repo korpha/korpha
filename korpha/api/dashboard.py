@@ -324,10 +324,11 @@ def build_dashboard_router(
                 )
             # First-run gate: if Day-0 intake hasn't been captured yet
             # the dashboard would just be empty noise. Send the Founder
-            # to the onboard flow instead.
+            # to the upfront chooser ("I have ideas" vs "discover with
+            # me"). The chooser is responsible for routing them on.
             if _needs_onboarding(biz):
                 return RedirectResponse(
-                    "/app/onboard", status_code=status.HTTP_303_SEE_OTHER
+                    "/app/start", status_code=status.HTTP_303_SEE_OTHER
                 )
             ctx["all_agents"] = _agents_with_status(session, biz, ctx["agents"])
             ctx["kpis"] = _compute_kpis(session, biz.id)
@@ -373,6 +374,34 @@ def build_dashboard_router(
                 "" if biz.name == "My Business" else biz.name
             )
             return templates.TemplateResponse(request, "welcome.html", ctx)
+        finally:
+            session.close()
+
+    @router.get("/start", response_class=HTMLResponse, response_model=None)
+    def start_chooser(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse | RedirectResponse:
+        """Upfront fork between the two onboarding paths:
+        - "I have ideas already" → POST /app/onboard/skip → /app/chat
+          (paste your roster, CEO bundles into Lines + spawns VPs)
+        - "Discover with me" → /app/onboard (brief textarea + niche
+          discovery + pick one)
+        Identity must be captured first (the welcome step)."""
+        try:
+            ctx = _ctx(session, active="start")
+            if _needs_identity_setup(ctx["founder"], ctx["business"]):
+                return RedirectResponse(
+                    "/app/welcome", status_code=status.HTTP_303_SEE_OTHER
+                )
+            # Already past intake — don't gate them again.
+            biz = ctx["business"]
+            brief = biz.founder_brief or {}
+            if brief.get("goal") or brief.get("skipped_intake"):
+                return RedirectResponse(
+                    "/app/dashboard", status_code=status.HTTP_303_SEE_OTHER
+                )
+            return templates.TemplateResponse(request, "start.html", ctx)
         finally:
             session.close()
 
@@ -430,7 +459,7 @@ def build_dashboard_router(
             session.add(business)
             session.commit()
             return RedirectResponse(
-                "/app/onboard", status_code=status.HTTP_303_SEE_OTHER
+                "/app/start", status_code=status.HTTP_303_SEE_OTHER
             )
         finally:
             session.close()

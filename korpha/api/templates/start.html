@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Choose your start · Korpha{% endblock %}
+{% block breadcrumbs %}Start{% endblock %}
+{% block body %}
+  <div class="start">
+    <div class="start-eyebrow">One quick choice — 5 seconds</div>
+    <h1 class="start-h1">How are you starting?</h1>
+    <p class="start-sub">
+      Two paths. Pick the one that sounds like you. You can switch
+      later from settings.
+    </p>
+
+    <div class="start-cards">
+      <form method="post" action="/app/onboard/skip" class="start-card start-card-ideas">
+        <div class="start-card-icon">📋</div>
+        <h2 class="start-card-title">I already have ideas</h2>
+        <p class="start-card-body">
+          Paste your roster — YouTube transcript, list of niches,
+          partial business plan — straight into chat. The CEO reads
+          all of it, bundles related items into Lines (POD / KDP /
+          Info / SaaS / Affiliate / Agency), spawns a VP per Line,
+          and delegates the work in parallel.
+        </p>
+        <p class="start-card-note">
+          Best for: you've watched the YouTube video, you already
+          know what you want to test, you want speed over discovery.
+        </p>
+        <button type="submit" class="start-card-cta">
+          Open chat — I'll paste my roster →
+        </button>
+      </form>
+
+      <a href="/app/onboard" class="start-card start-card-discover">
+        <div class="start-card-icon">🔭</div>
+        <h2 class="start-card-title">Discover ideas with me</h2>
+        <p class="start-card-body">
+          One paragraph about you — what you're good at, how many
+          hours you have, what you've thought about. The cofounder
+          proposes 3–5 specific micro-niches scored against your
+          constraints. You pick one to start with; the rest stay as
+          tickets for later.
+        </p>
+        <p class="start-card-note">
+          Best for: you don't have a fixed direction yet, you want
+          the cofounder to help narrow it down before you commit.
+        </p>
+        <span class="start-card-cta">
+          Take the survey →
+        </span>
+      </a>
+    </div>
+
+    <div class="start-footer">
+      Either way, your identity ({{ founder.display_name or founder.email }} ·
+      {{ business.name }}) is saved. Both paths end up at the same
+      dashboard once a Line is running.
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+.start { max-width: 920px; }
+.start-eyebrow {
+  font-size: 11px;
+  color: var(--accent, #e7c14b);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.start-h1 {
+  font-size: 28px;
+  color: var(--text, #f4f4f4);
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+.start-sub {
+  color: var(--text-dim, #9aa0a6);
+  font-size: 14px;
+  margin: 0 0 28px;
+  line-height: 1.5;
+}
+.start-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+@media (max-width: 720px) {
+  .start-cards { grid-template-columns: 1fr; }
+}
+.start-card {
+  background: var(--bg-elev, #1a1c20);
+  border: 1px solid var(--border, #2a2c33);
+  border-radius: 10px;
+  padding: 22px 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.05s;
+  margin: 0;
+}
+.start-card:hover {
+  border-color: var(--accent, #e7c14b);
+}
+.start-card:active { transform: translateY(1px); }
+.start-card-icon { font-size: 28px; line-height: 1; }
+.start-card-title {
+  color: var(--text, #f4f4f4);
+  font-size: 19px;
+  margin: 0;
+  font-weight: 600;
+}
+.start-card-body {
+  color: var(--text-dim, #9aa0a6);
+  font-size: 13.5px;
+  line-height: 1.55;
+  margin: 0;
+}
+.start-card-note {
+  color: var(--text-faint, #888);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  font-style: italic;
+}
+.start-card-cta {
+  margin-top: auto;
+  align-self: flex-start;
+  background: transparent;
+  color: var(--accent, #e7c14b);
+  border: 1px solid var(--accent, #e7c14b);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-block;
+  text-decoration: none;
+}
+.start-card:hover .start-card-cta {
+  background: var(--accent, #e7c14b);
+  color: var(--bg, #15161a);
+}
+.start-footer {
+  color: var(--text-faint, #888);
+  font-size: 12px;
+  line-height: 1.5;
+  border-top: 1px solid var(--border, #2a2c33);
+  padding-top: 14px;
+}
+</style>
+{% endblock %}
