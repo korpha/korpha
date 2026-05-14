@@ -52,6 +52,7 @@ Same code, same 80 assertions, 3 runs averaged.
 | Kimi K2.6 (Moonshot, 256k ctx) | cloud | 100% | 100% | 100% | 82% | 89%‡ | **92.5%** |
 | Gemma-4-31B (Q4_K_M, 262k ctx) | **local RTX 3090** | 100% | 90% | 100% | 91% | 87%‡ | **92.5%** |
 | GLM 5.1 (Zhipu, 200k ctx) | cloud | 88% | 100% | 100% | 91% | 86%‡ | **91.2%** |
+| Ministral-3-14B (Q4_K_M, 32k ctx) | **local 3090 (11 GB)** | 81% | 90% | 92% | 100% | 87%‡ | **88.8%** |
 
 † Designer / Copywriter / Support Workers each have a fixture set
 covering hard rules from their prompt (no auto-promised refunds,
