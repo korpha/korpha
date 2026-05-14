@@ -218,7 +218,11 @@ def configure_offdisk(
 
     # litestream config
     db_path = root / "korpha.db"
-    endpoint_line = f"      endpoint: {endpoint}\n" if endpoint else ""
+    # 8-space indent so endpoint: aligns with region: / access-key-id:
+    # under the replica list item. Misaligning by 2 spaces (the older
+    # bug) breaks litestream YAML parse with "did not find expected
+    # '-' indicator".
+    endpoint_line = f"        endpoint: {endpoint}\n" if endpoint else ""
     region_norm = region.strip() or "auto"
     config_path.write_text(
         "dbs:\n"
