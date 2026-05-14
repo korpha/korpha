@@ -352,6 +352,16 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
         from korpha.browser.pool import hydrate_from_db
         hydrate_from_db()
 
+    # Off-disk backup replicator: if Mike has B2 / R2 / etc configured
+    # but the daemon isn't running (post-reboot / post-poweroutage),
+    # auto-start it. Without this the founder's "everything's backed
+    # up" mental model silently breaks after every reboot until they
+    # notice and click Start on the dashboard — exactly the window
+    # where they most need the backup.
+    with contextlib.suppress(Exception):
+        from korpha.backup.offdisk import ensure_replicator_running
+        ensure_replicator_running()
+
     yield
 
 

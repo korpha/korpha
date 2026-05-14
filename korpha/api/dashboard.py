@@ -2902,6 +2902,55 @@ def build_dashboard_router(
             session.close()
 
     @router.post(
+        "/backups/offdisk/restore",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def backups_offdisk_restore(
+        session: Annotated[Session, Depends(require_session)],
+    ) -> RedirectResponse:
+        """Disaster-recovery: pull latest snapshot+WAL from off-disk
+        replica back into korpha.db. Used when the live DB is lost
+        or corrupted but the off-disk replica is intact.
+
+        Builds a fresh OffDiskConfig from the persisted status file
+        (same path the toggle/Start handler uses) so this works even
+        when the replicator daemon isn't currently running.
+        """
+        try:
+            from korpha.backup.offdisk import (
+                OffDiskConfig, current_status, restore_from_offdisk,
+            )
+            import os as _os
+            status_dict = current_status()
+            if status_dict is None:
+                return RedirectResponse(
+                    "/app/backups?error=Off-disk+not+configured+yet",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            data_dir = Path(
+                _os.getenv("KORPHA_DATA_DIR")
+                or _os.path.expanduser("~/.korpha")
+            )
+            cfg = OffDiskConfig(
+                provider=status_dict["provider"],
+                bucket=status_dict["bucket"],
+                endpoint=status_dict.get("endpoint", ""),
+                region=status_dict.get("region", ""),
+                creds_path=data_dir / "secrets" / "litestream-s3.creds.enc",
+                config_path=data_dir / "litestream.yml",
+                runner_path=data_dir / "litestream-run.sh",
+            )
+            ok, msg = restore_from_offdisk(cfg, data_dir=data_dir)
+            key = "flash" if ok else "error"
+            return RedirectResponse(
+                f"/app/backups?{key}={msg[:120]}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    @router.post(
         "/backups/offdisk/toggle",
         response_class=HTMLResponse,
         response_model=None,

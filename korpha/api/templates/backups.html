@@ -80,6 +80,18 @@
             onsubmit="return confirm('Disconnect off-disk push? Local snapshots keep running.')">
         <button type="submit" class="tm-hire-btn">Disconnect</button>
       </form>
+      <form method="post" action="/app/backups/offdisk/restore"
+            style="display:inline; margin-top:8px;"
+            onsubmit="return confirm('Replace your live korpha.db with the latest snapshot+WAL from {{ offdisk_status.bucket }}? A safety copy of the current DB is saved as korpha.db.pre-restore-&lt;timestamp&gt; first. After restore, the server must be restarted to load the recovered DB.')">
+        <button type="submit" class="tm-hire-btn">Recover from backup</button>
+      </form>
+      <p class="tm-muted" style="margin-top:8px; font-size:12.5px;">
+        Use <strong>Recover from backup</strong> if your local DB
+        is corrupted, accidentally wiped, or you're rebuilding on a
+        new machine that's pointed at the same bucket. Pulls the
+        latest snapshot + WAL segments from {{ offdisk_status.provider_label }}
+        via litestream restore.
+      </p>
     {% else %}
       <p class="tm-blurb">
         Not configured yet. Pick a provider below — takes about

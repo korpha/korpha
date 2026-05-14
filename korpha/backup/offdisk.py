@@ -398,6 +398,167 @@ def start_replicator(cfg: OffDiskConfig) -> tuple[bool, str, int | None]:
     return (True, f"started (pid {proc.pid})", proc.pid)
 
 
+def restore_from_offdisk(
+    cfg: OffDiskConfig,
+    *,
+    data_dir: Path | None = None,
+) -> tuple[bool, str]:
+    """Restore korpha.db from off-disk replica (litestream restore).
+
+    Disaster-recovery path: DB is corrupt / accidentally wiped / on
+    a fresh machine. Mike clicks this; we:
+      1. Stop the live replicator (can't run litestream restore + replicate
+         against the same target at once).
+      2. Save the current korpha.db as korpha.db.pre-restore-<ts> so
+         Mike can roll back if the restored snapshot is older than he
+         wanted.
+      3. Run ``litestream restore -config litestream.yml -o <db_path>``
+         which streams the latest snapshot + WAL segments from B2.
+      4. Tell the caller to restart the server (SQLite connections
+         the server held are stale against the new DB file).
+
+    Returns (ok, message). The caller renders message to its surface.
+    """
+    import subprocess as _sp
+    from datetime import datetime as _dt
+
+    root = data_dir or _data_dir()
+    db_path = root / "korpha.db"
+    if not cfg.config_path.is_file():
+        return (False, "no off-disk config — set it up first")
+
+    # 1. Stop replicator if running
+    pid_file = root / "litestream.pid"
+    if pid_file.is_file():
+        try:
+            pid = int(pid_file.read_text().strip())
+            import signal as _sig
+            os.kill(pid, _sig.SIGTERM)
+            # Wait briefly for it to shut down
+            import time as _time
+            for _ in range(20):
+                try:
+                    os.kill(pid, 0)
+                    _time.sleep(0.1)
+                except ProcessLookupError:
+                    break
+            pid_file.unlink(missing_ok=True)
+        except (ValueError, ProcessLookupError, PermissionError):
+            pid_file.unlink(missing_ok=True)
+
+    # 2. Safety-snapshot the current DB
+    if db_path.is_file():
+        ts = _dt.now().strftime("%Y%m%dT%H%M%S")
+        safety_path = root / f"korpha.db.pre-restore-{ts}"
+        try:
+            import shutil as _sh
+            _sh.copy2(db_path, safety_path)
+        except Exception as exc:  # noqa: BLE001
+            return (False, f"couldn't safety-copy current DB: {exc}")
+
+    # 3. Decrypt creds + run litestream restore
+    try:
+        from korpha.secrets.crypto import (
+            decrypt_bytes, load_master_key,
+        )
+        master = load_master_key(cfg.creds_path.parent / "master.key")
+        creds = json.loads(
+            decrypt_bytes(cfg.creds_path.read_bytes(), master).decode()
+        )
+    except Exception as exc:  # noqa: BLE001
+        return (False, f"couldn't decrypt creds: {exc}")
+
+    env = {
+        **os.environ,
+        "LITESTREAM_ACCESS_KEY_ID": str(creds.get("access_key_id") or "").strip(),
+        "LITESTREAM_SECRET_ACCESS_KEY": str(
+            creds.get("secret_access_key") or ""
+        ).strip(),
+    }
+    # Restore to a temp path then atomically rename, so we never leave
+    # the DB in a half-written state if litestream errors mid-stream.
+    restored_path = root / "korpha.db.restoring"
+    restored_path.unlink(missing_ok=True)
+    try:
+        result = _sp.run(
+            [
+                "litestream", "restore",
+                "-config", str(cfg.config_path),
+                "-o", str(restored_path),
+                str(db_path),
+            ],
+            env=env, capture_output=True, text=True, timeout=600,
+        )
+    except subprocess.TimeoutExpired:
+        return (False, "litestream restore timed out after 10 min")
+    except FileNotFoundError:
+        return (False, "litestream binary not on PATH — install first")
+
+    if result.returncode != 0:
+        restored_path.unlink(missing_ok=True)
+        stderr = (result.stderr or "")[:200].strip()
+        return (False, f"litestream restore failed: {stderr}")
+
+    if not restored_path.is_file():
+        return (False, "litestream returned 0 but no output file")
+
+    # 4. Atomically swap restored → live
+    try:
+        restored_path.replace(db_path)
+    except Exception as exc:  # noqa: BLE001
+        return (False, f"swap failed: {exc}")
+
+    # 5. Restart the replicator so the off-disk push picks up where
+    # the restore left off — Mike shouldn't have to click Start
+    # again after recovering.
+    start_ok, start_msg, _pid = start_replicator(cfg)
+    suffix = (
+        "" if start_ok
+        else f" (replicator restart failed: {start_msg[:80]} — start manually)"
+    )
+
+    return (
+        True,
+        "restored from off-disk replica — restart the server to load "
+        f"the recovered DB{suffix}",
+    )
+
+
+def ensure_replicator_running(data_dir: Path | None = None) -> tuple[bool, str]:
+    """Boot-time hook: if off-disk backup is configured and the
+    replicator is NOT running, start it.
+
+    Mike's laptop reboots (power-out, kernel update, whatever).
+    Without this, the off-disk replicator stays stopped until he
+    notices on /app/backups and clicks Start. Meanwhile every DB
+    change since boot isn't being pushed to B2 — exactly the window
+    where he most needs the backup.
+
+    Returns (ok, message) — message is for logs only; the server
+    boot doesn't depend on this succeeding.
+    """
+    root = data_dir or _data_dir()
+    status_dict = current_status(root)
+    if status_dict is None:
+        return (True, "off-disk not configured")
+
+    replicator = replicator_status(root)
+    if replicator["running"]:
+        return (True, f"already running (pid {replicator['pid']})")
+
+    cfg = OffDiskConfig(
+        provider=status_dict["provider"],
+        bucket=status_dict["bucket"],
+        endpoint=status_dict.get("endpoint", ""),
+        region=status_dict.get("region", ""),
+        creds_path=root / "secrets" / "litestream-s3.creds.enc",
+        config_path=root / "litestream.yml",
+        runner_path=root / "litestream-run.sh",
+    )
+    ok, msg, pid = start_replicator(cfg)
+    return (ok, msg)
+
+
 def stop_replicator(data_dir: Path | None = None) -> tuple[bool, str]:
     """Kill the running litestream subprocess if any."""
     import signal
