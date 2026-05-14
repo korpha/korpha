@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Restore from cloud backup · Korpha{% endblock %}
+{% block breadcrumbs %}Restore{% endblock %}
+{% block body %}
+  <div class="onboard">
+    <div class="onboard-eyebrow">Rebuilding on a new install</div>
+    <h1 class="onboard-h1">Restore from cloud backup</h1>
+    <p class="onboard-sub">
+      Point at the same bucket you were backing up to before. Korpha
+      will pull the latest snapshot + WAL from your replica back into
+      this install, so your businesses, units, kanban cards, memory,
+      and chat history all come back as they were at the last
+      replication tick.
+    </p>
+
+    <div class="restore-warning">
+      <strong>⚠ About your API keys:</strong>
+      Your business <strong>data</strong> (businesses, units, kanban,
+      memory, chat) restores fully — that's all inside the DB. Your
+      <strong>API keys</strong> (Stripe / Resend / etc.) are
+      encrypted with a per-install <code>master.key</code> that lived
+      on your old machine. Without it, the encrypted vault can't be
+      decrypted. After restore, re-enter those keys via Settings →
+      Credentials. You'll pull them again from each provider's
+      dashboard (Stripe console, Resend console, etc.) — they're
+      always recoverable from the source.
+      <br><br>
+      <strong>Next time:</strong> save your <code>master.key</code>
+      (~/.korpha/secrets/master.key) somewhere safe (password
+      manager) so the next restore is fully automatic.
+    </div>
+
+    {% if error %}
+      <div class="onboard-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/app/restore-from-cloud" class="restore-form">
+      <label class="welcome-field">
+        <span class="welcome-label">Provider</span>
+        <select name="provider" required class="welcome-input">
+          <option value="">— pick the same provider you used —</option>
+          <option value="backblaze_b2">Backblaze B2</option>
+          <option value="cloudflare_r2">Cloudflare R2</option>
+          <option value="aws_s3">AWS S3</option>
+          <option value="minio">MinIO (self-hosted)</option>
+        </select>
+      </label>
+
+      <label class="welcome-field">
+        <span class="welcome-label">Bucket name</span>
+        <input type="text" name="bucket" required
+               value="{{ existing.bucket or '' }}"
+               placeholder="e.g. korpha-backup"
+               class="welcome-input" />
+      </label>
+
+      <label class="welcome-field">
+        <span class="welcome-label">Region</span>
+        <input type="text" name="region"
+               value="{{ existing.region or '' }}"
+               placeholder="e.g. us-east-005 (B2) or auto (R2)"
+               class="welcome-input" />
+      </label>
+
+      <label class="welcome-field">
+        <span class="welcome-label">Cloudflare account ID (R2 only)</span>
+        <input type="text" name="account_id"
+               value=""
+               placeholder="only required for Cloudflare R2"
+               class="welcome-input" />
+      </label>
+
+      <label class="welcome-field">
+        <span class="welcome-label">Endpoint URL (MinIO only)</span>
+        <input type="text" name="endpoint_override"
+               value=""
+               placeholder="e.g. https://minio.your-host.com"
+               class="welcome-input" />
+      </label>
+
+      <label class="welcome-field">
+        <span class="welcome-label">Access key ID</span>
+        <input type="text" name="access_key_id" required
+               autocomplete="off"
+               placeholder="paste here — encrypted before saving"
+               class="welcome-input" />
+      </label>
+
+      <label class="welcome-field">
+        <span class="welcome-label">Secret access key</span>
+        <input type="password" name="secret_access_key" required
+               autocomplete="off"
+               placeholder="paste here — encrypted before saving"
+               class="welcome-input" />
+      </label>
+
+      <div class="onboard-actions">
+        <a href="/app/start" class="onboard-skip">← back</a>
+        <button type="submit" class="onboard-submit">
+          Pull my data from the cloud →
+        </button>
+      </div>
+    </form>
+
+    <div class="onboard-footer">
+      How long this takes depends on your DB size. Most installs
+      finish in under a minute. The page will redirect to a status
+      message; if it doesn't show up after 5 minutes, check the
+      litestream log at <code>~/.korpha/logs/litestream.log</code>.
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+.restore-form { display: flex; flex-direction: column; gap: 16px; max-width: 540px; }
+.restore-warning {
+  background: var(--yellow-soft, rgba(233, 196, 106, 0.12));
+  border: 1px solid var(--yellow, #e9c46a);
+  color: var(--text, #f4f4f4);
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.55;
+  margin-bottom: 20px;
+}
+.restore-warning code {
+  background: var(--bg, #15161a);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.welcome-field { display: flex; flex-direction: column; gap: 6px; }
+.welcome-label { font-size: 13px; font-weight: 500; color: var(--text, #f4f4f4); }
+.welcome-input {
+  background: var(--bg, #15161a);
+  border: 1px solid var(--border, #2a2c33);
+  color: var(--text, #f4f4f4);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.welcome-input:focus {
+  outline: none;
+  border-color: var(--accent, #e7c14b);
+}
+</style>
+{% endblock %}
