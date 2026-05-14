@@ -377,6 +377,125 @@ def build_dashboard_router(
         finally:
             session.close()
 
+    @router.get(
+        "/restore-from-cloud",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def restore_from_cloud_form(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse | RedirectResponse:
+        """Form for the fresh-install / rebuilding scenario: founder
+        has B2 (or R2/S3/MinIO) credentials, lost their old machine,
+        wants to pull their data back into this install. Different
+        from /app/backups/offdisk/configure because this runs BEFORE
+        off-disk is set up, and chains configure + restore in one
+        click."""
+        try:
+            ctx = _ctx(session, active="restore")
+            if _needs_identity_setup(ctx["founder"], ctx["business"]):
+                return RedirectResponse(
+                    "/app/welcome", status_code=status.HTTP_303_SEE_OTHER
+                )
+            # Pre-populate from existing off-disk config if Mike got
+            # this far before (maybe he configured backup, then wants
+            # to test restore without retyping creds).
+            from korpha.backup.offdisk import current_status
+            existing = current_status() or {}
+            ctx["existing"] = existing
+            ctx["error"] = request.query_params.get("error") or ""
+            return templates.TemplateResponse(
+                request, "restore_from_cloud.html", ctx,
+            )
+        finally:
+            session.close()
+
+    @router.post(
+        "/restore-from-cloud",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def restore_from_cloud_submit(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+        provider: Annotated[str, Form()] = "",
+        bucket: Annotated[str, Form()] = "",
+        region: Annotated[str, Form()] = "",
+        account_id: Annotated[str, Form()] = "",
+        endpoint_override: Annotated[str, Form()] = "",
+        access_key_id: Annotated[str, Form()] = "",
+        secret_access_key: Annotated[str, Form()] = "",
+    ) -> RedirectResponse:
+        """Two-step in one handler: configure off-disk with the
+        provided creds (so future syncs work too), then pull the
+        latest snapshot + WAL down via litestream restore."""
+        try:
+            from korpha.backup.install import (
+                install_litestream, litestream_path,
+            )
+            from korpha.backup.offdisk import (
+                configure_offdisk, restore_from_offdisk,
+                verify_credentials,
+            )
+
+            try:
+                cfg = configure_offdisk(
+                    provider=provider,
+                    bucket=bucket,
+                    region=region,
+                    access_key_id=access_key_id,
+                    secret_access_key=secret_access_key,
+                    account_id=account_id or None,
+                    endpoint_override=endpoint_override or None,
+                )
+            except ValueError as exc:
+                return RedirectResponse(
+                    f"/app/restore-from-cloud?error={str(exc)[:120]}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            # Optional creds check — non-fatal if awscli isn't on PATH;
+            # litestream will surface its own errors otherwise.
+            ok, vmsg = verify_credentials(
+                cfg,
+                access_key_id=access_key_id,
+                secret_access_key=secret_access_key,
+            )
+            if not ok:
+                return RedirectResponse(
+                    f"/app/restore-from-cloud?error="
+                    f"Bucket+creds+rejected:+{vmsg[:80]}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            # Install litestream if it's not on PATH — same one-click
+            # path the dashboard backup setup uses.
+            if litestream_path() is None:
+                inst_res = install_litestream()
+                if not inst_res.ok:
+                    return RedirectResponse(
+                        f"/app/restore-from-cloud?error="
+                        f"litestream+install+failed:+{inst_res.message[:80]}",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
+
+            ok, msg = restore_from_offdisk(cfg)
+            if not ok:
+                return RedirectResponse(
+                    f"/app/restore-from-cloud?error={msg[:120]}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            return RedirectResponse(
+                f"/app/backups?flash=Restored+from+{bucket}+—+"
+                f"restart+the+server+now+to+load+your+recovered+data."
+                f"+API+keys+(Stripe/Resend/etc)+need+re-entry+from+each+"
+                f"provider's+dashboard.",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
     @router.get("/start", response_class=HTMLResponse, response_model=None)
     def start_chooser(
         request: Request,

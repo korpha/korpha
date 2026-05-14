@@ -50,6 +50,12 @@
       </a>
     </div>
 
+    <div class="start-restore">
+      <a href="/app/restore-from-cloud" class="start-restore-link">
+        ↺ I'm rebuilding — restore from a cloud backup I made earlier
+      </a>
+    </div>
+
     <div class="start-footer">
       Either way, your identity ({{ founder.display_name or founder.email }} ·
       {{ business.name }}) is saved. Both paths end up at the same
@@ -144,6 +150,23 @@
 .start-card:hover .start-card-cta {
   background: var(--accent, #e7c14b);
   color: var(--bg, #15161a);
+}
+.start-restore {
+  margin: 22px 0 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border, #2a2c33);
+  text-align: center;
+}
+.start-restore-link {
+  color: var(--text-dim, #9aa0a6);
+  font-size: 13px;
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+}
+.start-restore-link:hover {
+  color: var(--text, #f4f4f4);
+  background: var(--bg-elev, #1a1c20);
 }
 .start-footer {
   color: var(--text-faint, #888);
