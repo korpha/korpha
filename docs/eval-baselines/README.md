@@ -66,29 +66,41 @@ after `korpha config`.
 
 ## The headline
 
-Five model deployments, all clearing 90% on the same 7-role /
-80-assertion test set. One of them runs **entirely on a single
-RTX 3090** — no cloud, no API key, no subscription. Korpha works
-with any of them; pick the one that fits your hardware and budget:
+Six model deployments tested on the same 7-role / 80-assertion
+fixture set — four cloud, two running on a single RTX 3090. Korpha
+works with any of them; pick what fits your hardware and budget:
 
 | Model | Where it runs | Pass | Total | Overall | Wall time |
 | ----- | ------------- | ---- | ----- | ------- | --------- |
 | DeepSeek V4 Pro | OpenCode Go (cloud, DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
 | DeepSeek V4 Flash (workhorse) | OpenCode Go (cloud, DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
 | Kimi K2.6 | OpenCode Go (cloud, Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
-| **Gemma-4-31B (Q4_K_M)** | **Local RTX 3090, llama.cpp + TurboQuant** | **74** | **80** | **92.5%** | **25 min** |
+| **Gemma-4-31B (Q4_K_M)** | **Local RTX 3090, TurboQuant fork** | **74** | **80** | **92.5%** | **25 min** |
 | GLM 5.1   | OpenCode Go (cloud, Zhipu AI)    | 73 | 80 | **91.2%** | 18 min |
+| **Ministral-3-14B (Q4_K_M)** | **Local RTX 3090, llama.cpp upstream** | **71** | **80** | **88.8%** | **6 min** |
 
-**Local Gemma matches cloud Kimi.** A single consumer GPU (24 GB
-VRAM, Q4 quantization, 262k context via TurboQuant) hits 92.5% —
-tied with cloud-served Kimi K2.6 and 1.3 pts ahead of cloud-served
-GLM 5.1. Korpha runs fully offline with no quality penalty for
-founders who want to keep their cofounder under their own roof.
+**Two local options for two different budgets:**
 
-DeepSeek Pro and Flash tied at 96.2% on the harder test set — Pro
-and Flash trade individual assertions but hit the same overall
-count. Validates that you can run Korpha on either tier and get
-equivalent quality, just with different latency profiles.
+- **Gemma-4-31B** — 22.9 GB VRAM, 262k context, 25 min eval. Best
+  local quality, ties cloud Kimi on prompt adherence. Needs a 24 GB
+  card (3090 / 4090 / 7900 XTX).
+- **Ministral-3-14B** — 10.8 GB VRAM, 32k context, 6 min eval. Runs
+  comfortably on a 12 GB card (3060 12GB / 4070 / 7700 XT). Below
+  the 90% adherence bar but fast, predictable, and good enough for
+  Workhorse-tier dispatch / format / draft work where Korpha's
+  prompt does most of the structural heavy lifting.
+
+Read this as: **Korpha runs fully offline on consumer hardware.**
+Pick the 14B model if you want a small footprint or speed; pick the
+31B model if you want maximum prompt-adherence quality locally; pair
+either with a cloud Pro model via split-tier routing if you want a
+frontier brain doing the planning while the local model handles
+the bulk drip work.
+
+DeepSeek Pro and Flash tied at 96.2% — they trade individual
+assertions but hit the same overall count, validating split-tier
+routing (Pro for plan/score/decide, Workhorse for dispatch/format/
+draft).
 
 ---
 
@@ -224,6 +236,48 @@ GPU at 92.5% — the same score as Moonshot AI's frontier Kimi K2.6
 served from the cloud. Pair this with the Stripe + (your CRM) +
 (your email tool) integrations and you have a fully local AI
 cofounder. No vendor lock-in, no data leaves your machine.
+
+---
+
+## Ministral-3-14B local (3-run averaged, 7 roles)
+
+Mistral's smaller instruct model (non-thinking), served entirely
+locally on a single RTX 3090 with plenty of VRAM headroom. Q4_K_M
+quantization (10.8 GB / 24.6 GB VRAM), upstream llama.cpp, 32k
+context window. No reasoning_content layer = cleaner, more
+predictable outputs.
+
+| Role        | Pass | Total | %          |
+| ----------- | ---- | ----- | ---------- |
+| CTO         | 11   | 11    | **100.0%** |
+| DESIGNER    | 10   | 10    | **100.0%** |
+| COO         | 12   | 13    | 92.3%      |
+| CMO         |  9   | 10    | 90.0%      |
+| COPYWRITER  |  9   | 11    | 81.8%      |
+| CEO         | 13   | 16    | 81.2%      |
+| SUPPORT     |  7   |  9    | 77.8%      |
+| **Overall** | **71** | **80** | **88.8%** |
+
+Cost: $0.0000 (local compute).
+Raw: [`ministral-3-14b-local.txt`](ministral-3-14b-local.txt)
+
+**Where Ministral loses points**: CEO has the deepest miss — 29
+bullet lines for `ceo.first_plan` (vs 12-bullet cap), and it leads
+with `No.** Here's why:` on pushback (forbidden dead-end `no.`).
+Worker roles miss on the same brevity caps as everyone else.
+
+**Why it still matters**: 6-minute eval wall time, runs on a 12 GB
+card, and **scores 100% on CTO + DESIGNER**. Even with the overall
+88.8%, this is the right model for:
+
+- **Workhorse-tier dispatch** when paired with a cloud Pro model
+- **Fully offline founders on a budget GPU** (3060 12 GB / 4070)
+- **Drip work where Korpha's prompt does the heavy lifting** —
+  format, draft, simple-yes-no, single-skill dispatch
+
+Pair Ministral as Workhorse + DeepSeek V4 Pro as Pro via the
+split-tier provider chain and you get cloud-quality planning with
+local-quality bulk execution at near-zero marginal cost per call.
 
 ---
 
