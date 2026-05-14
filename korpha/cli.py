@@ -6718,6 +6718,31 @@ def backup_prune(
     )
 
 
+@backups_app.command("install-litestream")
+def backup_install_litestream() -> None:
+    """Download the pinned litestream binary into ~/.local/bin.
+
+    Idempotent. Verifies SHA-256 on supported platforms. Mike-friendly
+    alternative to the manual curl-and-tar dance in the litestream
+    docs. The dashboard's /app/backups page invokes the same logic
+    via POST /app/backups/install-litestream.
+    """
+    from korpha.backup.install import install_litestream
+
+    typer.echo(_dim("downloading litestream release..."))
+    result = install_litestream()
+    if result.ok:
+        typer.echo(_green(f"✓ {result.message}"))
+        if result.path is not None:
+            typer.echo(_dim(
+                f"  add this to your shell rc if not already there:\n"
+                f"    export PATH=\"$HOME/.local/bin:$PATH\""
+            ))
+    else:
+        typer.echo(_red(f"✗ {result.message}"))
+        raise typer.Exit(code=1)
+
+
 @backups_app.command("setup-litestream")
 def backup_setup_litestream(
     bucket: Annotated[str, typer.Option(

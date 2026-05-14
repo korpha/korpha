@@ -32,6 +32,20 @@
   {# ------------------ Off-disk status panel ------------------ #}
   <section class="tm-section">
     <h2 class="tm-section-title">Off-disk backup</h2>
+    {% if not litestream_installed %}
+      <div class="tm-flash tm-flash-warn" style="display:flex; align-items:center; gap:12px; justify-content:space-between;">
+        <div>
+          <strong>Litestream binary missing.</strong>
+          Off-disk backup needs <code>litestream</code> on PATH to
+          stream your DB to the cloud. One click installs the pinned
+          release into <code>~/.local/bin/litestream</code> (SHA-256
+          verified).
+        </div>
+        <form method="post" action="/app/backups/install-litestream" style="margin:0;">
+          <button type="submit" class="tm-btn">Install litestream</button>
+        </form>
+      </div>
+    {% endif %}
     {% if offdisk_status %}
       <div class="tm-blurb" style="display:flex; align-items:center; gap:12px;">
         {% if replicator.running %}
