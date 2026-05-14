@@ -66,36 +66,52 @@ after `korpha config`.
 
 ## The headline
 
-Six model deployments tested on the same 7-role / 80-assertion
-fixture set — four cloud, two running on a single RTX 3090. Korpha
+Seven model deployments tested on the same 7-role / 80-assertion
+fixture set — four cloud, three running on a single RTX 3090. Korpha
 works with any of them; pick what fits your hardware and budget:
 
 | Model | Where it runs | Pass | Total | Overall | Wall time |
 | ----- | ------------- | ---- | ----- | ------- | --------- |
 | DeepSeek V4 Pro | OpenCode Go (cloud, DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
 | DeepSeek V4 Flash (workhorse) | OpenCode Go (cloud, DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
+| **Ministral-3-14B-Reasoning (Q4_K_M)** | **Local RTX 3090, 11 GB VRAM** | **75** | **80** | **93.8%** | **6 min** |
 | Kimi K2.6 | OpenCode Go (cloud, Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
-| **Gemma-4-31B (Q4_K_M)** | **Local RTX 3090, TurboQuant fork** | **74** | **80** | **92.5%** | **25 min** |
+| **Gemma-4-31B (Q4_K_M)** | **Local RTX 3090, TurboQuant, 23 GB** | **74** | **80** | **92.5%** | **25 min** |
 | GLM 5.1   | OpenCode Go (cloud, Zhipu AI)    | 73 | 80 | **91.2%** | 18 min |
-| **Ministral-3-14B (Q4_K_M)** | **Local RTX 3090, llama.cpp upstream** | **71** | **80** | **88.8%** | **6 min** |
+| **Ministral-3-14B-Instruct (Q4_K_M)** | **Local RTX 3090, 11 GB VRAM, non-thinking** | **71** | **80** | **88.8%** | **6 min** |
 
-**Two local options for two different budgets:**
+**Three local options across the quality spectrum:**
 
-- **Gemma-4-31B** — 22.9 GB VRAM, 262k context, 25 min eval. Best
-  local quality, ties cloud Kimi on prompt adherence. Needs a 24 GB
+- **Ministral-3-14B-Reasoning** — 10.8 GB VRAM, 32k context, 6 min
+  eval, **93.8%**. Tops cloud Kimi + cloud Gemma-31B on prompt
+  adherence. Runs on a 12 GB card (3060 12GB / 4070 / 7700 XT).
+  Reasoning layer adds 5pp over the Instruct variant on the same
+  base — the model uses CoT to self-check brevity caps before
+  responding. **Best local Pro-tier pick.**
+- **Gemma-4-31B** — 22.9 GB VRAM, 262k context (via TurboQuant
+  turbo3), 25 min eval, **92.5%**. Bigger model = much longer
+  context for multi-turn cofounder conversation. Needs a 24 GB
   card (3090 / 4090 / 7900 XTX).
-- **Ministral-3-14B** — 10.8 GB VRAM, 32k context, 6 min eval. Runs
-  comfortably on a 12 GB card (3060 12GB / 4070 / 7700 XT). Below
-  the 90% adherence bar but fast, predictable, and good enough for
-  Workhorse-tier dispatch / format / draft work where Korpha's
-  prompt does most of the structural heavy lifting.
+- **Ministral-3-14B-Instruct** — 10.8 GB VRAM, 32k context, 6 min
+  eval, **88.8%**. Same base as the Reasoning variant but no
+  thinking layer. Faster, more predictable, slightly lower
+  adherence. Useful for Workhorse-tier dispatch / format / draft
+  work where Korpha's prompt does the structural heavy lifting.
+
+**Same-base A/B (Reasoning vs Instruct, both Ministral-3-14B):**
+The reasoning variant gains +5pp overall (88.8% → 93.8%) at
+essentially the same wall time. The lift comes almost entirely
+from word-cap and format compliance — Reasoning hits 100% on
+CMO + COPYWRITER + CTO + DESIGNER, where Instruct misses
+brevity caps in 2 of 3 runs. Reasoning costs you slightly higher
+per-token latency but for cofounder workloads the trade is worth
+it.
 
 Read this as: **Korpha runs fully offline on consumer hardware.**
-Pick the 14B model if you want a small footprint or speed; pick the
-31B model if you want maximum prompt-adherence quality locally; pair
-either with a cloud Pro model via split-tier routing if you want a
-frontier brain doing the planning while the local model handles
-the bulk drip work.
+A 12 GB card and the Reasoning variant gets you 93.8% — beating
+two of the four cloud options. Pair either local model with a
+cloud Pro model via split-tier routing for a frontier brain doing
+planning + local doing bulk drip work.
 
 DeepSeek Pro and Flash tied at 96.2% — they trade individual
 assertions but hit the same overall count, validating split-tier
@@ -239,13 +255,49 @@ cofounder. No vendor lock-in, no data leaves your machine.
 
 ---
 
-## Ministral-3-14B local (3-run averaged, 7 roles)
+## Ministral-3-14B-Reasoning local (3-run averaged, 7 roles)
 
-Mistral's smaller instruct model (non-thinking), served entirely
-locally on a single RTX 3090 with plenty of VRAM headroom. Q4_K_M
-quantization (10.8 GB / 24.6 GB VRAM), upstream llama.cpp, 32k
-context window. No reasoning_content layer = cleaner, more
-predictable outputs.
+Mistral's 14B reasoning variant, served locally. Same base as the
+Instruct version below + a thinking layer. Q4_K_M, 10.8 GB / 24.6 GB
+VRAM, 32k context, upstream llama.cpp. Recipe: max_tokens 8000,
+reasoning_budget_tokens 2000.
+
+| Role        | Pass | Total | %          |
+| ----------- | ---- | ----- | ---------- |
+| CMO         | 10   | 10    | **100.0%** |
+| COPYWRITER  | 11   | 11    | **100.0%** |
+| CTO         | 11   | 11    | **100.0%** |
+| DESIGNER    | 10   | 10    | **100.0%** |
+| COO         | 12   | 13    | 92.3%      |
+| CEO         | 14   | 16    | 87.5%      |
+| SUPPORT     |  7   |  9    | 77.8%      |
+| **Overall** | **75** | **80** | **93.8%** |
+
+Cost: $0.0000 (local compute).
+Raw: [`ministral-3-14b-reasoning-local.txt`](ministral-3-14b-reasoning-local.txt)
+
+**Why this matters**: a 14B model in 10.8 GB VRAM, running on a
+$300-used 3060 12GB-class card, **outperforms** cloud Kimi K2.6
+and cloud Gemma-4-31B and ties a Pro-tier subscription cost-wise
+at $0. The reasoning layer pulls it 5pp above the Instruct variant
+of the same base (88.8% → 93.8%) — visible specifically on
+brevity and format checks (COPYWRITER 100% vs Instruct's 81.8%,
+CMO 100% vs 90%, CEO 87.5% vs 81.2%). The model uses CoT to
+self-check word counts before responding.
+
+**Where it still loses points**: CEO writes 26-bullet plans (vs
+12-bullet cap), uses 'no.' on pushback (forbidden dead-end),
+SUPPORT writes 373-word legal-thread reply (vs 200-word cap) and
+mentions ETA in bug reports. Same uniform pattern as all the other
+models.
+
+---
+
+## Ministral-3-14B-Instruct local (3-run averaged, 7 roles)
+
+Same base as the Reasoning variant above, but **without** the
+thinking layer. Non-reasoning instruct model. Q4_K_M, 10.8 GB
+VRAM, 32k context, upstream llama.cpp.
 
 | Role        | Pass | Total | %          |
 | ----------- | ---- | ----- | ---------- |
