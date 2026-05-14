@@ -67,6 +67,7 @@ def _autoload_builtins() -> None:
     """Eagerly import built-in skill modules so they self-register."""
     from korpha.skills import (  # noqa: F401  -- side-effect: register
         analytics,
+        bootstrap,
         business_units,
         calendar,
         channel,

@@ -305,6 +305,85 @@ def _skill_synth_prompt(founder_message: str, skill_result: SkillResult) -> str:
     )
 
 
+_LINE_KIND_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "kdp": (
+        "kdp", "kindle direct", "kindle publishing", "self-publish",
+        "self publish", "ebook", "e-book", "amazon book",
+        "scavenger hunt", "learn to draw", "learn-to-draw",
+        "activity book", "coloring book", "journal", "workbook",
+    ),
+    "pod": (
+        "print on demand", "print-on-demand", "printify", "printful",
+        "t-shirt", "tshirt", "t shirt", "mug", "tote", "hoodie",
+        "merch", "etsy shirt", "amazon merch",
+    ),
+    "info": (
+        "online course", "info product", "membership site",
+        "ebook course", "mini-course", "info pack",
+    ),
+    "saas": (
+        "saas", "web app", "mobile app", "micro saas",
+    ),
+    "affiliate": (
+        "affiliate site", "affiliate marketing", "review site",
+        "comparison hub",
+    ),
+    "agency": (
+        "done-for-you", "dfy service", "productized service",
+    ),
+    # Not a canonical kind but a strong "media" signal — the
+    # bootstrap planner can map this into info/affiliate at parse
+    # time, and seeing it alongside another kind is a multi-line tell.
+    "media": (
+        "youtube channel", "youtube shorts", "tiktok channel",
+        "instagram channel", "reels channel", "video channel",
+    ),
+}
+
+_MULTI_LINE_IMPERATIVES = (
+    "build me", "build us", "set up", "set them up",
+    "spawn", "execute these", "execute those", "launch these",
+    "launch those", "kick off", "start these", "start those",
+    "run all of", "run each of",
+)
+
+_MULTI_LINE_COUNTERS = (
+    "method 1", "method 2", "method 3",
+    "business 1", "business 2",
+    "all of those", "every one", "each one of",
+)
+
+
+def _looks_like_multi_line_brief(msg: str) -> bool:
+    """Heuristic: does this founder message clearly ask to spawn
+    MULTIPLE business lines at once? Used by ``handle_stream()`` to
+    bypass the router LLM and force-route to
+    ``business.bootstrap_from_brief``.
+
+    Triggers when:
+      - the message mentions ≥2 distinct line-kind keyword families,
+        OR
+      - the message has an imperative AND ≥1 line-kind family AND is
+        long enough to be a real brief.
+
+    Conservative on purpose — false positives would send short
+    'tell me about KDP' messages to the bootstrap skill which would
+    then fail in the planner. Better to miss than misroute.
+    """
+    if not msg or len(msg) < 200:
+        return False
+    low = msg.lower()
+    distinct_kinds = sum(
+        1 for kws in _LINE_KIND_KEYWORDS.values()
+        if any(kw in low for kw in kws)
+    )
+    if distinct_kinds >= 2:
+        return True
+    has_imperative = any(p in low for p in _MULTI_LINE_IMPERATIVES)
+    has_counter = any(p in low for p in _MULTI_LINE_COUNTERS)
+    return (has_imperative or has_counter) and distinct_kinds >= 1
+
+
 def _parse_router_decision(content: str) -> _RouterDecision | None:
     parsed = extract_json_dict(content)
     if parsed is None:
@@ -642,6 +721,74 @@ class CEO:
             ceo_role = self.hiring.ensure_ceo(business.id)
             digest = self._maybe_digest(business.id)
             skill_specs = registry.list_specs()
+
+            # Pre-router heuristic: if the founder message clearly
+            # asks to spawn MULTIPLE business lines at once, skip the
+            # router LLM call and dispatch directly to
+            # ``business.bootstrap_from_brief``. The router LLM has
+            # been observed to prefer writing a markdown plan over
+            # picking a skill on these messages, so a deterministic
+            # bypass is the only way to make multi-line briefs
+            # actually execute.
+            if (
+                max_skill_calls > 0
+                and "business.bootstrap_from_brief" in registry.skills
+                and _looks_like_multi_line_brief(founder_message)
+            ):
+                yield {
+                    "type": "phase", "phase": "skill",
+                    "skill_name": "business.bootstrap_from_brief",
+                }
+                skill_ctx = SkillContext(
+                    business=business,
+                    founder=founder,
+                    session=self.session,
+                    cost_tracker=self.cost_tracker,
+                    invoking_agent_role_id=ceo_role.id,
+                    browser=self.browser,
+                )
+                skill_result = await registry.run(
+                    "business.bootstrap_from_brief",
+                    ctx=skill_ctx,
+                    args={"brief": founder_message},
+                )
+
+                yield {"type": "phase", "phase": "synth"}
+                synth_msg = _skill_synth_prompt(
+                    founder_message, skill_result,
+                )
+                synth_request = CompletionRequest(
+                    messages=self._build_messages(
+                        business=business,
+                        founder=founder,
+                        history=history or [],
+                        user_message=synth_msg,
+                        digest=digest,
+                    ),
+                    tier=self.default_tier,
+                    session_key=f"ceo-handle-{ceo_role.id}",
+                    max_tokens=self.default_max_tokens or agent_max_tokens(),
+                    timeout_seconds=self.default_timeout_seconds or agent_timeout(),
+                )
+                buf: list[str] = []
+                async for chunk in self.cost_tracker.stream(
+                    synth_request,
+                    session=self.session,
+                    business_id=business.id,
+                    agent_role_id=ceo_role.id,
+                    thread_id=thread_id,
+                ):
+                    if chunk.delta_content:
+                        buf.append(chunk.delta_content)
+                        yield {"type": "content", "text": chunk.delta_content}
+                    if chunk.delta_reasoning:
+                        yield {"type": "reasoning", "text": chunk.delta_reasoning}
+                yield {
+                    "type": "done",
+                    "skills_used": [skill_result.skill_name],
+                    "content": "".join(buf),
+                }
+                return
 
             yield {"type": "phase", "phase": "router"}
 
