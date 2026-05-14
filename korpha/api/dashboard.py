@@ -2780,6 +2780,13 @@ def build_dashboard_router(
             ctx["providers"] = PROVIDERS
             ctx["offdisk_status"] = current_status()
             ctx["replicator"] = replicator_status()
+            # Surface whether the litestream binary is available so
+            # the page can render a one-click install button instead
+            # of failing silently when the founder hits Start.
+            from korpha.backup.install import litestream_path
+            _ls = litestream_path()
+            ctx["litestream_installed"] = _ls is not None
+            ctx["litestream_path"] = str(_ls) if _ls else ""
             return templates.TemplateResponse(
                 request, "backups.html", ctx,
             )
@@ -2852,6 +2859,32 @@ def build_dashboard_router(
             return RedirectResponse(
                 f"/app/backups?flash=Off-disk+backup+active"
                 f"+→+{cfg.bucket}{verified_msg}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    @router.post(
+        "/backups/install-litestream",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def backups_install_litestream(
+        session: Annotated[Session, Depends(require_session)],
+    ) -> RedirectResponse:
+        """Mike-friendly one-click install for the litestream binary.
+
+        Off-disk backup requires litestream on PATH. Rather than make
+        the founder hunt for the install command, we download the
+        pinned release directly into ~/.local/bin and verify the
+        SHA-256. The next 'Start replicator' click then Just Works.
+        """
+        try:
+            from korpha.backup.install import install_litestream
+            result = install_litestream()
+            key = "flash" if result.ok else "error"
+            return RedirectResponse(
+                f"/app/backups?{key}={result.message[:120]}",
                 status_code=status.HTTP_303_SEE_OTHER,
             )
         finally:

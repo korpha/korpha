@@ -378,7 +378,16 @@ def stop_replicator(data_dir: Path | None = None) -> tuple[bool, str]:
 
 
 def replicator_status(data_dir: Path | None = None) -> dict[str, Any]:
-    """Return (pid, running) for the replicator daemon."""
+    """Return (pid, running) for the replicator daemon.
+
+    Zombie / dead processes count as NOT running, even though their
+    PID is still in the process table. ``os.kill(pid, 0)`` succeeds
+    against a zombie which caused the dashboard to render ACTIVE
+    after a crash (real bug observed during B2 setup). We additionally
+    read ``/proc/<pid>/status`` and treat State ``Z`` (zombie) or
+    ``X`` (dead) as gone — and clean up the stale pidfile so the
+    next "Start replicator" click actually spawns a fresh process.
+    """
     root = data_dir or _data_dir()
     pid_file = root / "litestream.pid"
     if not pid_file.is_file():
@@ -386,10 +395,32 @@ def replicator_status(data_dir: Path | None = None) -> dict[str, Any]:
     try:
         pid = int(pid_file.read_text().strip())
         os.kill(pid, 0)
-        return {"running": True, "pid": pid}
     except (ValueError, ProcessLookupError, PermissionError):
         pid_file.unlink(missing_ok=True)
         return {"running": False, "pid": None}
+
+    # Process exists in the table — but check it isn't a zombie.
+    proc_status = Path(f"/proc/{pid}/status")
+    if proc_status.is_file():
+        try:
+            for line in proc_status.read_text().splitlines():
+                if line.startswith("State:"):
+                    state_code = line.split()[1] if len(line.split()) > 1 else ""
+                    if state_code in ("Z", "X"):
+                        # Reap if we can — best-effort, may fail if we
+                        # aren't the parent. Then unlink the pidfile so
+                        # the dashboard stops lying.
+                        try:
+                            os.waitpid(pid, os.WNOHANG)
+                        except (ChildProcessError, OSError):
+                            pass
+                        pid_file.unlink(missing_ok=True)
+                        return {"running": False, "pid": None}
+                    break
+        except OSError:
+            # /proc not readable — fall through and trust os.kill(0).
+            pass
+    return {"running": True, "pid": pid}
 
 
 __all__ = [
