@@ -14,21 +14,53 @@ latency and cost.
 **Run with**: `korpha eval --tier pro --runs 3 --max-tokens 64000`
 after `korpha config`.
 
-> **⚠ What this is and isn't.** This eval measures
-> **instruction-following + Korpha role-prompt compatibility** — does
-> the model write under the word cap, lead with the recommendation,
-> avoid forbidden phrases, hit required substrings. It does **not**
-> measure reasoning power, factual accuracy, or general intelligence.
+> ## What this eval is and isn't — read before quoting the numbers
 >
-> All four models in the table below produce correct content for
-> every fixture — they just differ on whether they obey the brevity
-> and format rules. A model scoring 91% isn't "weaker"; it's writing
-> a 95-word headline when the prompt caps at 80. Pick the model you
-> like for everyday tasks; the eval just tells you which one's
-> phrasing fits Korpha's prompt scaffolding out-of-the-box.
+> **What it measures:** *instruction-following compliance with Korpha's
+> role-prompt scaffolding.* Does the model write under the word cap,
+> lead with the recommendation, hit required substrings, avoid
+> forbidden phrases (`ETA`, marketing fluff, dead-end `no`), and
+> match the format the dashboard expects. It's an **adherence test**
+> with a fairly low ceiling — any modern instruction-tuned model can
+> read "write under 80 words, end with a number" and execute it. This
+> is why a Q4-quantized 31B model running on a single consumer GPU
+> scores the same as a frontier ~1T-parameter cloud model. Both can
+> follow simple format rules; that's the whole bar this eval sets.
 >
-> For raw model capability, look at MMLU / GSM8K / HumanEval / SWE-Bench
-> on each model's HuggingFace card — those measure something different.
+> **What it does NOT measure:**
+>
+> - **Deep reasoning on novel problems.** Fixture prompts are
+>   single-turn, scoped, and have clear right-answer *shapes* the
+>   model only has to dress correctly. No multi-step decomposition,
+>   no genuine planning, no hard math/logic chains. The big-vs-small
+>   model gap shows up there — not here.
+> - **Multi-step agentic execution.** Whether the model correctly
+>   picks the right skill from 60+ available, handles partial
+>   failures, recovers from a botched tool call, threads context
+>   across 20 turns — none of that is in the fixture set.
+> - **Factual accuracy.** Many assertions are format-based; the
+>   model can hit them with confidently-worded nonsense.
+> - **Tool-use quality.** No skill invocation, no JSON-schema
+>   argument generation, no retry-on-error.
+> - **Memory + context handling.** Each call is independent.
+> - **Real founder outcomes.** Does the cofounder actually help you
+>   ship a business? Not measured. That's what the live-API e2e
+>   probe is for, and it's why we dogfood with Marketro.
+>
+> **What it IS useful for:** picking a model that will *work* inside
+> Korpha's prompt scaffolding out of the box. A model that bombs
+> this eval will produce ugly cofounder responses (over-long, missing
+> the format the dashboard expects) even if it's brilliant on hard
+> benchmarks. A model that passes will give you clean, well-shaped
+> responses — but on a 50-step business plan, a complex code-edit
+> task, or a thorny multi-day decision tree, the bigger model
+> typically still wins on substance.
+>
+> **TL;DR — small local model tying big cloud model here ≠ they're
+> equivalent cofounders.** It means both can follow Korpha's prompt
+> rules. For raw capability, see each model's MMLU / GSM8K / HumanEval
+> / SWE-Bench / MATH scores on its HuggingFace card; those measure
+> what most people mean when they ask "is this model good."
 
 ---
 

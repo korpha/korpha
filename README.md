@@ -38,17 +38,19 @@ drafts. **521 tests, mypy --strict clean, 100% on the eval harness**
 
 Most "AI cofounder" projects ship a prompt and call it done. We built
 an internal eval harness — exact substring / regex / word-count
-assertions, no LLM-as-judge — and score every role prompt against
-50 founder-asks. Same code, same fixtures, same scoring. Reproducible.
+assertions, no LLM-as-judge — that tests whether each model can
+**follow Korpha's role-prompt scaffolding** (word caps, required
+substrings, lead-with-recommendation format, no forbidden phrases).
+Same code, same 80 assertions, 3 runs averaged.
 
-**Open-weights baselines (3-run averaged, same 80-assertion 7-role fixture set):**
+**Prompt-compatibility scores (NOT raw capability — see below):**
 
 | Model | Where it runs | CEO | CMO | COO | CTO | Workers† | Overall |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | DeepSeek V4 Pro | cloud | 100% | 100% | 100% | 91% | 94%‡ | **96.2%** |
 | DeepSeek V4 Flash (workhorse) | cloud | 100% | 90% | 100% | 100% | 93%‡ | **96.2%** |
 | Kimi K2.6 (Moonshot, 256k ctx) | cloud | 100% | 100% | 100% | 82% | 89%‡ | **92.5%** |
-| **Gemma-4-31B (Q4_K_M, 262k ctx)** | **local RTX 3090** | **100%** | **90%** | **100%** | **91%** | **87%‡** | **92.5%** |
+| Gemma-4-31B (Q4_K_M, 262k ctx) | **local RTX 3090** | 100% | 90% | 100% | 91% | 87%‡ | **92.5%** |
 | GLM 5.1 (Zhipu, 200k ctx) | cloud | 88% | 100% | 100% | 91% | 86%‡ | **91.2%** |
 
 † Designer / Copywriter / Support Workers each have a fixture set
@@ -57,12 +59,33 @@ no marketing fluff, mobile-first specs, etc.).
 
 ‡ Worker scores averaged across Designer / Copywriter / Support roles.
 
-**All three frontier open-weights models clear 90%.** Korpha isn't
-tied to one. Pick the model you trust — Kimi if you want the longest
-context, GLM if you want the fastest eval turnaround, DeepSeek if
-you want the tightest brevity discipline. The remaining ~8% miss is
-uniform across models: brevity caps and "lead with the recommendation"
-formatting — prompt-tuning targets, not capability gaps.
+> **⚠ Read this before quoting the numbers.** This eval measures
+> **prompt-rule adherence**, not raw model capability. A small
+> Q4-quantized 31B local model can hit the same score as a frontier
+> ~1T-parameter cloud model because *both* can read "write under 80
+> words, lead with the answer, end with a number" and execute it.
+> That's the entire ceiling this test sets.
+>
+> What this does **NOT** measure: deep reasoning on novel problems,
+> multi-step agentic execution, factual accuracy, tool-use quality,
+> 50-turn context handling, or actual founder outcomes. On those,
+> the big cloud models still typically outperform the small local
+> ones by a wide margin.
+>
+> What it **IS** useful for: picking a model that will produce
+> clean, well-shaped responses inside Korpha's prompt scaffolding
+> without you having to retune the prompts. A model that bombs
+> this eval will hand you ugly cofounder output; one that passes
+> will give you clean output (but on hard tasks, the bigger model
+> typically still wins on substance). For raw model capability,
+> see each model's MMLU / GSM8K / HumanEval / SWE-Bench scores.
+>
+> **Practical guidance:** use a cloud frontier model (DeepSeek V4
+> Pro / Kimi K2.6 / Claude / GPT) for hard reasoning, planning,
+> and code work. Use a local 31B-class model for the dispatch /
+> format / draft work where Korpha's prompt already does the
+> heavy lifting. The [split-tier provider chain](#split-tier-provider-chain)
+> below routes per-task — you don't have to choose just one.
 
 Reproduce yourself: `korpha eval --tier pro --runs 3 --max-tokens 64000`
 after configuring any provider. Full per-role breakdowns + raw output:
