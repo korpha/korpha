@@ -2849,13 +2849,24 @@ def build_dashboard_router(
 
             ok, msg, pid = start_replicator(cfg)
             if not ok:
-                # Configured but couldn't start (e.g. litestream binary
-                # missing). Tell the user; they can click Start later.
-                return RedirectResponse(
-                    f"/app/backups?error=Saved+but+couldn%27t+start:"
-                    f"+{msg[:80]}",
-                    status_code=status.HTTP_303_SEE_OTHER,
+                # Auto-recover the common "binary missing" first-time
+                # case. New founders haven't installed litestream yet;
+                # rather than make them click around, install in-line
+                # then retry start. Other errors (config, perms,
+                # network) bubble up as before.
+                from korpha.backup.install import (
+                    install_litestream, litestream_path,
                 )
+                if litestream_path() is None:
+                    install_res = install_litestream()
+                    if install_res.ok:
+                        ok, msg, pid = start_replicator(cfg)
+                if not ok:
+                    return RedirectResponse(
+                        f"/app/backups?error=Saved+but+couldn%27t+start:"
+                        f"+{msg[:80]}",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
             return RedirectResponse(
                 f"/app/backups?flash=Off-disk+backup+active"
                 f"+→+{cfg.bucket}{verified_msg}",
