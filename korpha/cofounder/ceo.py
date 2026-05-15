@@ -318,6 +318,101 @@ def _skill_synth_prompt(founder_message: str, skill_result: SkillResult) -> str:
     )
 
 
+def _skill_chain_prompt(
+    founder_message: str,
+    skills_used: list[SkillResult],
+    skill_specs: list[Any],
+) -> str:
+    """Ask the CEO 'do you need another skill, or are you done?'
+    after a skill has already run. Same router JSON schema as
+    ``_skill_router_prompt`` — so the LLM can pick another skill
+    (chains the loop) or return ``respond`` (the synth happens
+    next, NOT inside this call).
+
+    Used by ``handle_stream``'s multi-skill chain loop so a single
+    founder turn can call N skills in sequence — needed for
+    requests like 'reassign these cards and then fire them' which
+    take two skill calls.
+    """
+    from korpha.limits import serialize_for_prompt
+
+    catalog_lines = [
+        f"- {spec.name}: {spec.description}"
+        for spec in skill_specs
+        if spec.name not in {
+            "meta.author_skill", "meta.author_python_skill",
+        }
+    ]
+    catalog = "\n".join(catalog_lines) if catalog_lines else "(none)"
+    chain_log_parts = []
+    for i, sr in enumerate(skills_used, 1):
+        payload = serialize_for_prompt(sr.payload)
+        # Trim long payloads to keep the chain prompt cheap.
+        if len(payload) > 800:
+            payload = payload[:800] + " …[truncated]"
+        chain_log_parts.append(
+            f"{i}. {sr.skill_name} → {sr.summary}\n"
+            f"   payload: {payload}"
+        )
+    chain_log = "\n".join(chain_log_parts)
+    return (
+        f"Founder's original message:\n\n{founder_message}\n\n"
+        f"Skills run so far ({len(skills_used)}):\n{chain_log}\n\n"
+        f"Available skills (you may pick another):\n{catalog}\n\n"
+        "Decide what to do next. Output strict JSON only:\n\n"
+        "- If you need ANOTHER skill to fulfill the founder's "
+        "request (e.g. you ran reassign and now want to fire_sprint "
+        "the same cards), return:\n"
+        '  {"action":"use_skill","skill_name":"<one from above>",'
+        '"skill_args":{"<param>":"<value>"}}\n\n'
+        "- If all needed skills are done and you can now answer "
+        "the founder directly, return:\n"
+        '  {"action":"respond"}\n\n'
+        "NEVER claim past-tense actions in this decision — those "
+        "happen in the next phase. Pick another skill ONLY if it "
+        "is strictly required by the founder's original ask. If "
+        "in doubt, return `respond` and let the synth phase "
+        "summarize what's done."
+    )
+
+
+def _skill_synth_prompt_multi(
+    founder_message: str,
+    skills_used: list[SkillResult],
+) -> str:
+    """Multi-skill version of ``_skill_synth_prompt``. Renders the
+    final founder-facing message from a chain of skill results."""
+    from korpha.limits import persist_if_oversized, serialize_for_prompt
+
+    if len(skills_used) == 1:
+        return _skill_synth_prompt(founder_message, skills_used[0])
+    parts = []
+    for i, sr in enumerate(skills_used, 1):
+        payload = serialize_for_prompt(sr.payload)
+        payload = persist_if_oversized(
+            payload, ref_id=f"skill-{sr.skill_name}-{i}",
+        )
+        parts.append(
+            f"### Skill {i}: `{sr.skill_name}`\n"
+            f"Summary: {sr.summary}\n"
+            f"Payload:\n{payload}"
+        )
+    chain_text = "\n\n".join(parts)
+    return (
+        f"Founder's original message:\n\n{founder_message}\n\n"
+        f"You ran {len(skills_used)} skill(s) in this turn:\n\n"
+        f"{chain_text}\n\n"
+        "Produce your cofounder reply. Weave the skill outputs "
+        "together naturally — don't list them one by one unless "
+        "the founder needs the breakdown. Highlight the net "
+        "outcome, what's now true in the business, and end with a "
+        "clear next-step question. Direct, specific, no marketing "
+        "fluff. Anti-hallucination rule: only state actions that "
+        "are reflected in the skill summaries above — anything "
+        "else, mark as 'pending' or 'will require'."
+    )
+
+
 _LINE_KIND_KEYWORDS: dict[str, tuple[str, ...]] = {
     "kdp": (
         "kdp", "kindle direct", "kindle publishing", "self-publish",
@@ -885,7 +980,7 @@ class CEO:
         founder_message: str,
         history: list[Message] | None = None,
         thread_id: UUID | None = None,
-        max_skill_calls: int = 1,
+        max_skill_calls: int = 5,
     ) -> Any:  # AsyncIterator[StreamEvent] — typed as Any to avoid runtime import cost in tests
         """Streaming variant of handle().
 
@@ -1266,8 +1361,11 @@ class CEO:
                 yield {"type": "done", "skills_used": [], "content": fallback}
                 return
 
-            yield {"type": "phase", "phase": "skill", "skill_name": decision.skill_name}
-
+            # Multi-skill chain loop. The router has picked the first
+            # skill — run it, then ask the LLM 'another skill, or are
+            # you done?'. Loop up to max_skill_calls. Mirrors Hermes's
+            # tool-use loop but stays on the existing JSON router
+            # protocol so providers without native tool_use still work.
             skill_ctx = SkillContext(
                 business=business,
                 founder=founder,
@@ -1276,13 +1374,79 @@ class CEO:
                 invoking_agent_role_id=ceo_role.id,
                 browser=self.browser,
             )
-            skill_result = await registry.run(
-                decision.skill_name, ctx=skill_ctx, args=decision.skill_args or {}
-            )
+            skills_used: list[SkillResult] = []
+            current_decision = decision
+
+            while True:
+                yield {
+                    "type": "phase", "phase": "skill",
+                    "skill_name": current_decision.skill_name,
+                }
+                try:
+                    result = await registry.run(
+                        current_decision.skill_name,
+                        ctx=skill_ctx,
+                        args=current_decision.skill_args or {},
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    import logging
+                    logging.getLogger(__name__).exception(
+                        "chain skill failed: %s",
+                        current_decision.skill_name,
+                    )
+                    # Build a synthetic 'error' result so the
+                    # final synth can mention what failed instead
+                    # of just hanging.
+                    result = SkillResult(
+                        skill_name=current_decision.skill_name,
+                        summary=f"FAILED: {type(exc).__name__}: {exc}",
+                        payload={"error": str(exc)},
+                        cost_usd=0.0,
+                    )
+                skills_used.append(result)
+
+                if len(skills_used) >= max_skill_calls:
+                    break
+
+                # Chain check: ask LLM if another skill is needed.
+                chain_prompt = _skill_chain_prompt(
+                    founder_message, skills_used, skill_specs,
+                )
+                chain_request = CompletionRequest(
+                    messages=await self._build_messages(
+                        business=business,
+                        founder=founder,
+                        history=history or [],
+                        user_message=chain_prompt,
+                        digest=digest,
+                    ),
+                    tier=self.default_tier,
+                    session_key=f"ceo-handle-{ceo_role.id}",
+                    max_tokens=self.default_max_tokens or agent_max_tokens(),
+                    timeout_seconds=self.default_timeout_seconds or agent_timeout(),
+                )
+                chain_response = await self.cost_tracker.complete(
+                    chain_request,
+                    session=self.session,
+                    business_id=business.id,
+                    agent_role_id=ceo_role.id,
+                    thread_id=thread_id,
+                )
+                next_decision = _parse_router_decision(chain_response.content)
+                if next_decision is None or next_decision.action != "use_skill":
+                    break
+                if (
+                    next_decision.skill_name is None
+                    or registry.skills.get(next_decision.skill_name) is None
+                ):
+                    break
+                current_decision = next_decision
 
             yield {"type": "phase", "phase": "synth"}
 
-            synth_msg = _skill_synth_prompt(founder_message, skill_result)
+            synth_msg = _skill_synth_prompt_multi(
+                founder_message, skills_used,
+            )
             synth_request = CompletionRequest(
                 messages=await self._build_messages(
                     business=business,
@@ -1313,7 +1477,7 @@ class CEO:
 
             yield {
                 "type": "done",
-                "skills_used": [skill_result.skill_name],
+                "skills_used": [r.skill_name for r in skills_used],
                 "content": "".join(buf),
             }
 
@@ -1396,7 +1560,7 @@ class CEO:
         founder_message: str,
         history: list[Message] | None = None,
         thread_id: UUID | None = None,
-        max_skill_calls: int = 1,
+        max_skill_calls: int = 5,
     ) -> HandleResult:
         """Skill-aware response.
 
