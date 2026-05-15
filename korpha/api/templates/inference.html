@@ -24,6 +24,40 @@
     <div class="tm-flash tm-flash-warn">{{ request.query_params.get('error') }}</div>
   {% endif %}
 
+  {% if codex_runtime %}
+    <section class="tm-section codex-runtime-card">
+      <h2 class="tm-section-title">
+        Codex runtime
+        <span class="tm-muted">
+          {% if codex_runtime.enabled %}— ON, top-priority{% else %}— OFF{% endif %}
+        </span>
+      </h2>
+      <p class="tm-blurb">
+        Route the whole agent loop through your ChatGPT Plus / Pro / Max
+        subscription — no OpenAI API key. When ON, the cascade tries
+        <code>codex-cli</code> first and falls back to the rest of your
+        accounts on any error. When OFF, the cascade is unchanged.
+      </p>
+      <div class="codex-runtime-status">
+        <strong>Status:</strong> {{ codex_runtime.detail }}
+      </div>
+      <form method="post" action="/app/inference/codex-runtime/toggle" class="codex-runtime-form">
+        {% if codex_runtime.enabled %}
+          <input type="hidden" name="action" value="off" />
+          <button type="submit" class="codex-runtime-btn codex-runtime-btn-off">
+            Turn off
+          </button>
+        {% else %}
+          <input type="hidden" name="action" value="on" />
+          <button type="submit" class="codex-runtime-btn codex-runtime-btn-on"
+                  {% if not codex_runtime.codex_binary_ok %}disabled title="Install Codex CLI + run `codex login` first"{% endif %}>
+            Turn on
+          </button>
+        {% endif %}
+      </form>
+    </section>
+  {% endif %}
+
   <p class="tm-muted">Source: <code>{{ source }}</code></p>
 
   {% if not accounts %}
@@ -84,4 +118,36 @@
     </p>
   </section>
 </div>
+<style>
+  .codex-runtime-card { border-left: 3px solid var(--accent, #e7c14b); }
+  .codex-runtime-status {
+    background: var(--bg);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin: 8px 0 10px 0;
+  }
+  .codex-runtime-form { display: inline-block; }
+  .codex-runtime-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .codex-runtime-btn-on {
+    background: rgba(40, 180, 99, 0.2);
+    border-color: rgba(40, 180, 99, 0.5);
+    color: #28b463;
+  }
+  .codex-runtime-btn-on:hover:not(:disabled) { background: rgba(40, 180, 99, 0.3); }
+  .codex-runtime-btn-on:disabled { opacity: 0.4; cursor: not-allowed; }
+  .codex-runtime-btn-off {
+    background: rgba(204, 51, 102, 0.15);
+    border-color: rgba(204, 51, 102, 0.4);
+    color: #c25;
+  }
+  .codex-runtime-btn-off:hover { background: rgba(204, 51, 102, 0.25); }
+</style>
 {% endblock %}

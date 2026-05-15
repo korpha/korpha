@@ -1604,6 +1604,44 @@ def pending() -> None:
         typer.echo(f"    {summary}")
 
 
+@app.command("codex-runtime")
+def codex_runtime_cmd(
+    state: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "on / off / status (default: status). 'on' prepends a "
+                "codex-cli entry to providers.yaml at top priority; 'off' "
+                "removes it. Mirrors Hermes /codex-runtime."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Toggle the Codex runtime — route inference through your ChatGPT
+    Plus / Pro / Max subscription with one command. No API key required."""
+    _ensure_load_env()
+    from korpha.inference.codex_runtime import disable, enable, status
+
+    cmd = (state or "status").strip().lower()
+    if cmd in ("on", "enable", "true"):
+        result = enable()
+    elif cmd in ("off", "disable", "false"):
+        result = disable()
+    elif cmd in ("status", ""):
+        result = status()
+    else:
+        typer.echo(_red(
+            f"Unknown command {state!r}. Use one of: on, off, status."
+        ))
+        raise typer.Exit(code=1)
+
+    label = "ON" if result.enabled else "OFF"
+    typer.echo(_bold(f"Codex runtime: {label}"))
+    typer.echo(f"  {result.detail}")
+    if result.codex_version:
+        typer.echo(_dim(f"  codex binary: {result.codex_version}"))
+
+
 @app.command()
 def blockers(
     show_all: Annotated[
