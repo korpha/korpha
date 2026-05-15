@@ -345,10 +345,12 @@ class Workforce:
             # the kwarg for Director/Worker executors.
             from korpha.cofounder.director import Director as _Director
             from korpha.cofounder.director import Worker as _WorkerCls
+            card_id_for_blockers = handle.card_id if handle is not None else None
             if isinstance(executor, (_Director, _WorkerCls)):
                 coro = executor.attempt(
                     business=business, founder=founder, task=task_text,
                     business_unit_id=card_unit_id,
+                    kanban_card_id=card_id_for_blockers,
                 )
             else:
                 coro = executor.attempt(

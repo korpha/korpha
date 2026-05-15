@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+{% block title %}{{ card.title }} · Kanban{% endblock %}
+{% block breadcrumbs %}<a href="/app/kanban">Kanban</a> · {{ card.title[:60] }}{% endblock %}
+{% block body %}
+  <div class="kb-detail">
+    {% if request.query_params.get('unblocked') %}
+      <div class="kb-flash">
+        ✓ Unblocked. The next "go" turn will re-fire this card with your answer.
+      </div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+      <div class="kb-flash kb-flash-warn">
+        {{ request.query_params.get('error') }}
+      </div>
+    {% endif %}
+
+    <div class="kb-detail-header">
+      <div class="kb-detail-status">
+        <span class="kb-pill kb-pill-col-{{ card.column.value }}">{{ card.column.value|replace('_', ' ') }}</span>
+        {% if card.owner_role %}
+          <span class="kb-pill kb-pill-owner">{{ card.owner_role|upper }}</span>
+        {% endif %}
+        {% if card.priority.value != 'normal' %}
+          <span class="kb-pill kb-pill-{{ card.priority.value }}">{{ card.priority.value }}</span>
+        {% endif %}
+        <code class="tm-muted">{{ card.id|string|truncate(8, true, '') }}</code>
+      </div>
+      <h2 class="kb-detail-title">{{ card.title }}</h2>
+      {% if card.body %}
+        <div class="kb-detail-body">{{ card.body }}</div>
+      {% endif %}
+    </div>
+
+    {% if open_blockers %}
+      <section class="kb-section kb-section-blockers">
+        <h3>Waiting for you ({{ open_blockers|length }})</h3>
+        <p class="kb-section-blurb">
+          The agent stopped because it needs a decision or piece of info
+          from you. Type the answer and the card will be queued to re-fire
+          on your next <code>go</code>.
+        </p>
+        {% for b in open_blockers %}
+          <div class="kb-blocker">
+            <div class="kb-blocker-head">
+              <span class="kb-pill kb-pill-kind-{{ b.kind.value }}">{{ b.kind.value }}</span>
+              {% if b.urgency.value != 'normal' %}
+                <span class="kb-pill kb-pill-urg-{{ b.urgency.value }}">{{ b.urgency.value }}</span>
+              {% endif %}
+              <strong>{{ b.title }}</strong>
+            </div>
+            {% if b.detail %}
+              <div class="kb-blocker-detail">{{ b.detail }}</div>
+            {% endif %}
+            {% if b.options %}
+              <div class="kb-blocker-options">
+                <span class="kb-blocker-options-label">Options:</span>
+                {% for opt in b.options %}
+                  <span class="kb-blocker-option">{{ opt }}</span>
+                {% endfor %}
+              </div>
+            {% endif %}
+            <form method="post" action="/app/kanban/{{ card.id }}/blockers/{{ b.id }}/respond"
+                  class="kb-blocker-form">
+              <textarea name="response" rows="3" required
+                        placeholder="Your answer / decision / info…"
+                        class="kb-blocker-textarea"></textarea>
+              <button type="submit" class="kb-quick-btn">Unblock this</button>
+            </form>
+          </div>
+        {% endfor %}
+      </section>
+    {% else %}
+      <section class="kb-section">
+        <h3>Status</h3>
+        <p class="kb-section-blurb">
+          No open blockers. {% if card.column.value == 'ready' %}
+            Type <code>go</code> in chat to fire this card.
+          {% elif card.column.value == 'in_progress' %}
+            An agent is working on this card now.
+          {% elif card.column.value == 'review' %}
+            Output is in REVIEW — check the evidence below.
+          {% endif %}
+        </p>
+      </section>
+    {% endif %}
+
+    {% if card.acceptance_criteria %}
+      <section class="kb-section">
+        <h3>Acceptance criteria</h3>
+        <ul class="kb-criteria">
+          {% for c in card.acceptance_criteria %}
+            <li>{{ c }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    {% if card.review_evidence %}
+      <section class="kb-section kb-section-evidence">
+        <h3>Review evidence</h3>
+        <pre class="kb-evidence">{{ card.review_evidence }}</pre>
+        {% if card.review_verdict %}
+          <div class="kb-verdict">Verdict: <strong>{{ card.review_verdict }}</strong></div>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    {% if artifacts %}
+      <section class="kb-section">
+        <h3>Artifacts ({{ artifacts|length }})</h3>
+        <div class="kb-artifacts-list">
+          {% for art in artifacts %}
+            <div class="kb-artifact kb-art-{{ art.kind.value }}">
+              <span class="kb-art-kind">{{ art.kind.value }}</span>
+              {% if art.location.startswith("http") %}
+                <a href="{{ art.location }}" target="_blank" rel="noopener" class="kb-art-link">
+                  {{ art.label }}
+                </a>
+              {% else %}
+                <span class="kb-art-label">{{ art.label }}</span>
+              {% endif %}
+              {% if art.is_primary %}<span class="kb-pill kb-pill-spec">primary</span>{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% if resolved_blockers %}
+      <section class="kb-section kb-section-resolved">
+        <h3>Resolved ({{ resolved_blockers|length }})</h3>
+        {% for b in resolved_blockers %}
+          <div class="kb-resolved">
+            <div><strong>{{ b.title }}</strong></div>
+            {% if b.resolution %}
+              <div class="kb-resolution">→ {{ b.resolution }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    {% if comments %}
+      <section class="kb-section">
+        <h3>Comments ({{ comments|length }})</h3>
+        {% for cm in comments %}
+          <div class="kb-comment kb-comment-{{ cm.author_kind }}">
+            <div class="kb-comment-head">
+              <span class="kb-pill kb-pill-{{ cm.author_kind }}">{{ cm.author_kind }}</span>
+              <span class="tm-muted">{{ cm.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            </div>
+            <div class="kb-comment-body">{{ cm.body }}</div>
+          </div>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    <div class="kb-detail-actions">
+      <a href="/app/kanban" class="kb-btn">← back to board</a>
+      <a href="/app/chat" class="kb-btn">type 'go' to fire</a>
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .kb-detail { display: flex; flex-direction: column; gap: 18px; max-width: 880px; }
+
+  .kb-flash {
+    background: var(--bg-elev);
+    border: 1px solid var(--accent, #e7c14b);
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+  }
+  .kb-flash-warn { border-color: #c25; }
+
+  .kb-detail-header {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .kb-detail-status { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .kb-detail-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text);
+    margin: 0 0 8px 0;
+  }
+  .kb-detail-body {
+    color: var(--text-faint);
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+
+  .kb-section {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .kb-section h3 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+  }
+  .kb-section-blurb {
+    color: var(--text-faint);
+    font-size: 12px;
+    margin: 0 0 10px 0;
+  }
+  .kb-section-blockers { border-left: 3px solid #c25; }
+  .kb-section-evidence { border-left: 3px solid #28b463; }
+  .kb-section-resolved { opacity: 0.75; }
+
+  .kb-blocker {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+  .kb-blocker-head {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .kb-blocker-detail {
+    color: var(--text-faint);
+    font-size: 12px;
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+  }
+  .kb-blocker-options {
+    display: flex; gap: 4px; flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .kb-blocker-options-label {
+    color: var(--text-faint);
+    font-size: 11px;
+    margin-right: 4px;
+  }
+  .kb-blocker-option {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 11px;
+  }
+  .kb-blocker-form { display: flex; flex-direction: column; gap: 6px; }
+  .kb-blocker-textarea {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    resize: vertical;
+    font-family: inherit;
+  }
+
+  .kb-criteria {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--text-faint);
+    font-size: 13px;
+  }
+  .kb-criteria li { margin-bottom: 4px; }
+
+  .kb-evidence {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 12px;
+    white-space: pre-wrap;
+    margin: 0 0 8px 0;
+    font-family: ui-monospace, monospace;
+    color: var(--text);
+  }
+  .kb-verdict { font-size: 12px; color: var(--text-faint); }
+
+  .kb-artifacts-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .kb-resolved {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .kb-resolved:last-child { border-bottom: none; }
+  .kb-resolution {
+    color: var(--text-faint);
+    margin-top: 2px;
+    margin-left: 12px;
+    white-space: pre-wrap;
+  }
+
+  .kb-comment {
+    border-left: 2px solid var(--border);
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .kb-comment-founder { border-left-color: var(--accent, #e7c14b); }
+  .kb-comment-agent { border-left-color: #5cf; }
+  .kb-comment-system { border-left-color: var(--text-faint); opacity: 0.6; }
+  .kb-comment-head {
+    display: flex; gap: 6px; align-items: center;
+    margin-bottom: 3px;
+  }
+  .kb-comment-body { color: var(--text); white-space: pre-wrap; }
+
+  .kb-detail-actions { display: flex; gap: 8px; }
+
+  .kb-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .kb-pill-owner { background: rgba(231, 193, 75, 0.18); color: #e7c14b; }
+  .kb-pill-high { background: rgba(204, 51, 102, 0.2); color: #c25; }
+  .kb-pill-low { background: rgba(160, 160, 160, 0.2); color: var(--text-faint); }
+  .kb-pill-spec { background: rgba(80, 140, 220, 0.2); color: #5cf; }
+  .kb-pill-founder { background: rgba(231, 193, 75, 0.18); color: #e7c14b; }
+  .kb-pill-agent { background: rgba(80, 140, 220, 0.2); color: #5cf; }
+  .kb-pill-system { background: var(--bg); color: var(--text-faint); }
+  .kb-pill-col-backlog { background: var(--bg); color: var(--text-faint); }
+  .kb-pill-col-specify { background: rgba(80, 140, 220, 0.18); color: #5cf; }
+  .kb-pill-col-ready { background: rgba(231, 193, 75, 0.18); color: #e7c14b; }
+  .kb-pill-col-in_progress { background: rgba(40, 180, 99, 0.2); color: #28b463; }
+  .kb-pill-col-review { background: rgba(80, 140, 220, 0.2); color: #5cf; }
+  .kb-pill-col-done { background: rgba(40, 180, 99, 0.25); color: #28b463; }
+  .kb-pill-col-blocked { background: rgba(204, 51, 102, 0.25); color: #c25; }
+  .kb-pill-col-archived { background: var(--bg); color: var(--text-faint); opacity: 0.5; }
+  .kb-pill-kind-decision { background: rgba(231, 193, 75, 0.18); color: #e7c14b; }
+  .kb-pill-kind-info { background: rgba(80, 140, 220, 0.18); color: #5cf; }
+  .kb-pill-kind-approval { background: rgba(40, 180, 99, 0.18); color: #28b463; }
+  .kb-pill-kind-permission { background: rgba(204, 51, 102, 0.18); color: #c25; }
+  .kb-pill-kind-resource { background: rgba(204, 51, 102, 0.18); color: #c25; }
+  .kb-pill-kind-clarification { background: rgba(160, 160, 160, 0.18); color: var(--text-faint); }
+  .kb-pill-kind-other { background: var(--bg); color: var(--text-faint); }
+  .kb-pill-urg-high { background: rgba(204, 51, 102, 0.2); color: #c25; }
+  .kb-pill-urg-urgent { background: #c25; color: white; }
+  .kb-pill-urg-low { background: rgba(160, 160, 160, 0.2); color: var(--text-faint); }
+
+  .kb-quick-btn {
+    background: var(--accent, #e7c14b);
+    color: var(--bg);
+    padding: 6px 14px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+  .kb-quick-btn:hover { filter: brightness(1.1); }
+
+  .kb-btn {
+    background: var(--bg-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .kb-btn:hover { background: var(--bg); }
+</style>
+{% endblock %}

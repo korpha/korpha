@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Blockers · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Blockers{% endblock %}
+{% block body %}
+  <div class="bl-shell">
+    <div class="bl-header">
+      <h2>{{ total_open }} open blocker{% if total_open != 1 %}s{% endif %}</h2>
+      <p class="bl-blurb">
+        Every question the team has stopped on. Click into the card to
+        answer — the next <code>go</code> turn re-fires it.
+      </p>
+    </div>
+
+    {% if grouped_attached %}
+      <section class="bl-section">
+        <h3>By card</h3>
+        {% for grp in grouped_attached %}
+          <div class="bl-card-group">
+            <div class="bl-card-head">
+              <a href="/app/kanban/{{ grp.card.id }}" class="bl-card-link">
+                <strong>{{ grp.card.title }}</strong>
+              </a>
+              <span class="bl-pill bl-pill-col-{{ grp.card.column.value }}">{{ grp.card.column.value|replace('_', ' ') }}</span>
+              {% if grp.card.owner_role %}
+                <span class="bl-pill bl-pill-owner">{{ grp.card.owner_role|upper }}</span>
+              {% endif %}
+            </div>
+            {% for b in grp.blockers %}
+              <div class="bl-row">
+                <span class="bl-pill bl-pill-kind-{{ b.kind.value }}">{{ b.kind.value }}</span>
+                {% if b.urgency.value != 'normal' %}
+                  <span class="bl-pill bl-pill-urg-{{ b.urgency.value }}">{{ b.urgency.value }}</span>
+                {% endif %}
+                <span class="bl-row-title">{{ b.title }}</span>
+                <a href="/app/kanban/{{ grp.card.id }}#blocker-{{ b.id }}"
+                   class="bl-respond-btn">respond →</a>
+              </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    {% if unattached %}
+      <section class="bl-section bl-section-unattached">
+        <h3>Not attached to any card ({{ unattached|length }})</h3>
+        <p class="bl-blurb">
+          These blockers came from older agent turns before we wired the
+          card-blocker link. They need triage in chat with the CEO.
+        </p>
+        {% for b in unattached %}
+          <div class="bl-row">
+            <span class="bl-pill bl-pill-kind-{{ b.kind.value }}">{{ b.kind.value }}</span>
+            {% if b.urgency.value != 'normal' %}
+              <span class="bl-pill bl-pill-urg-{{ b.urgency.value }}">{{ b.urgency.value }}</span>
+            {% endif %}
+            <span class="bl-row-title">{{ b.title }}</span>
+            {% if b.detail %}
+              <div class="bl-row-detail">{{ b.detail[:240] }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    {% if not grouped_attached and not unattached %}
+      <div class="bl-empty">
+        Nothing waiting on you. 🎉
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<style>
+  .bl-shell { display: flex; flex-direction: column; gap: 18px; max-width: 880px; }
+  .bl-header h2 { margin: 0 0 4px 0; font-size: 18px; font-weight: 500; }
+  .bl-blurb { color: var(--text-faint); font-size: 13px; margin: 0; }
+  .bl-blurb code {
+    background: var(--bg-elev);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+
+  .bl-section {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .bl-section h3 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+  }
+  .bl-section-unattached { opacity: 0.8; border-left: 3px solid var(--text-faint); }
+
+  .bl-card-group {
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .bl-card-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .bl-card-head {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .bl-card-link { color: var(--text); text-decoration: none; }
+  .bl-card-link:hover { text-decoration: underline; }
+
+  .bl-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    margin-left: 12px;
+    margin-bottom: 4px;
+    background: var(--bg);
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .bl-row-title { color: var(--text); flex: 1; min-width: 0; }
+  .bl-row-detail {
+    width: 100%;
+    color: var(--text-faint);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .bl-respond-btn {
+    color: var(--accent, #e7c14b);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .bl-respond-btn:hover { text-decoration: underline; }
+
+  .bl-empty {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 40px;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 14px;
+  }
+
+  .bl-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .bl-pill-owner { background: rgba(231, 193, 75, 0.18); color: #e7c14b; }
+  .bl-pill-col-ready { background: rgba(231, 193, 75, 0.18); color: #e7c14b; }
+  .bl-pill-col-in_progress { background: rgba(40, 180, 99, 0.2); color: #28b463; }
+  .bl-pill-col-review { background: rgba(80, 140, 220, 0.2); color: #5cf; }
+  .bl-pill-col-blocked { background: rgba(204, 51, 102, 0.25); color: #c25; }
+  .bl-pill-col-backlog { background: var(--bg); color: var(--text-faint); }
+  .bl-pill-col-specify { background: rgba(80, 140, 220, 0.18); color: #5cf; }
+  .bl-pill-col-done { background: rgba(40, 180, 99, 0.25); color: #28b463; }
+  .bl-pill-kind-decision { background: rgba(231, 193, 75, 0.18); color: #e7c14b; }
+  .bl-pill-kind-info { background: rgba(80, 140, 220, 0.18); color: #5cf; }
+  .bl-pill-kind-approval { background: rgba(40, 180, 99, 0.18); color: #28b463; }
+  .bl-pill-kind-permission { background: rgba(204, 51, 102, 0.18); color: #c25; }
+  .bl-pill-kind-resource { background: rgba(204, 51, 102, 0.18); color: #c25; }
+  .bl-pill-kind-clarification { background: rgba(160, 160, 160, 0.18); color: var(--text-faint); }
+  .bl-pill-kind-other { background: var(--bg); color: var(--text-faint); }
+  .bl-pill-urg-high { background: rgba(204, 51, 102, 0.2); color: #c25; }
+  .bl-pill-urg-urgent { background: #c25; color: white; }
+  .bl-pill-urg-low { background: rgba(160, 160, 160, 0.2); color: var(--text-faint); }
+</style>
+{% endblock %}

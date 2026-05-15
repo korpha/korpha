@@ -522,6 +522,7 @@ class Director:
         founder: Founder,
         task: str,
         business_unit_id: UUID | None = None,
+        kanban_card_id: UUID | None = None,
     ) -> AttemptResult:
         """Try to execute a task. Either ship (status=shipped) or surface
         structured blockers (status=blocked).
@@ -563,7 +564,10 @@ class Director:
         blocker_ids: list[UUID] = []
         if status == "blocked":
             for raw in parsed.get("blockers", []) or []:
-                submission = _to_blocker_submission(raw, business.id, role_id)
+                submission = _to_blocker_submission(
+                    raw, business.id, role_id,
+                    kanban_card_id=kanban_card_id,
+                )
                 if submission is None:
                     continue
                 blocker = self.queue.submit(submission)
@@ -687,6 +691,7 @@ class Worker:
         founder: Founder,
         task: str,
         business_unit_id: UUID | None = None,
+        kanban_card_id: UUID | None = None,
     ) -> AttemptResult:
         prompt = _build_attempt_prompt(task)
         request = CompletionRequest(
@@ -715,7 +720,10 @@ class Worker:
         blocker_ids: list[UUID] = []
         if status == "blocked":
             for raw in parsed.get("blockers", []) or []:
-                submission = _to_blocker_submission(raw, business.id, self.role_id)
+                submission = _to_blocker_submission(
+                    raw, business.id, self.role_id,
+                    kanban_card_id=kanban_card_id,
+                )
                 if submission is None:
                     continue
                 blocker = self.queue.submit(submission)
@@ -814,6 +822,8 @@ def _to_blocker_submission(
     raw: Any,
     business_id: UUID,
     role_id: UUID,
+    *,
+    kanban_card_id: UUID | None = None,
 ) -> BlockerSubmission | None:
     if not isinstance(raw, dict):
         return None
@@ -843,4 +853,5 @@ def _to_blocker_submission(
         urgency=urgency,
         detail=detail,
         options=options,
+        kanban_card_id=kanban_card_id,
     )
