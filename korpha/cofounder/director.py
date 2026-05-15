@@ -604,6 +604,18 @@ class Director:
                 + f"\nFounder: {founder.display_name or founder.email}"
             ),
         ]
+        # Capabilities preamble: list configured skills + their defaults
+        # so the LLM stops inventing tool-choice questions for things
+        # the system already has a policy for (image gen, voice, etc.).
+        try:
+            from korpha.cofounder.capabilities import (
+                build_capabilities_preamble,
+            )
+            cap_block = build_capabilities_preamble()
+            if cap_block:
+                parts.append(cap_block)
+        except Exception:  # noqa: BLE001
+            pass
         # Optional founder deep-profile (Debriefeur). When present, the
         # Director picks up how Mike thinks so plans land in his style.
         try:
@@ -751,6 +763,16 @@ class Worker:
                 + f"\nFounder: {founder.display_name or founder.email}"
             ),
         ]
+        # Capabilities preamble — same as Director._system_prompt.
+        try:
+            from korpha.cofounder.capabilities import (
+                build_capabilities_preamble,
+            )
+            cap_block = build_capabilities_preamble()
+            if cap_block:
+                parts.append(cap_block)
+        except Exception:  # noqa: BLE001
+            pass
         # Optional founder deep-profile (Debriefeur).
         try:
             from korpha.config import get_settings
