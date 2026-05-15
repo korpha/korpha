@@ -790,29 +790,59 @@ class Worker:
 def _build_attempt_prompt(task: str) -> str:
     return (
         f"Assignment: {task}\n\n"
-        "Either ship it or report blockers. Respond with strict JSON only:\n\n"
-        "If shipping (you have everything you need):\n"
+        "Your job is to SHIP this task. You are an AI cofounder team member, "
+        "not an assistant. The Founder hired you so they don't have to do "
+        "this work themselves.\n\n"
+        "Respond with strict JSON only.\n\n"
+        "**Default action: SHIP.**\n\n"
+        "If you have the information to produce the deliverable, produce it:\n"
         '{\n'
         '  "status": "shipped",\n'
         '  "summary": "<one-sentence what got done>",\n'
-        '  "detail": "<2-3 sentences of what specifically you produced>"\n'
+        '  "detail": "<2-3 sentences of what specifically you produced — '
+        'inline the actual content (titles, copy, list, draft, etc.) so '
+        'it lands in REVIEW for the Founder to accept/revise/reject>"\n'
         '}\n\n'
-        "If blocked (you genuinely cannot proceed without Founder input):\n"
+        "Examples of work you SHIP yourself (never block on these):\n"
+        "- 'list 30 drawing-tutorial subjects' → you write the list\n"
+        "- 'pick an illustration style' → you pick one and commit\n"
+        "- 'draft KDP listing copy' → you write the copy\n"
+        "- 'choose categories/tags' → you research and choose\n"
+        "- 'design a t-shirt concept' → you describe the concept\n"
+        "- 'name the book' → you propose a title (you can offer 3 in detail)\n"
+        "- 'plan the launch sequence' → you write the plan\n"
+        "If the answer is creative, editorial, organizational, or research-"
+        "driven, you OWN it. The Founder reviews your output at the "
+        "REVIEW column — they don't supply the input.\n\n"
+        "**Only block when the input is something only the Founder physically "
+        "controls and you genuinely cannot proceed without it.** The valid "
+        "blocker categories are:\n"
+        "- credentials / API keys / account logins the Founder holds\n"
+        "- explicit greenlight to spend money over a threshold\n"
+        "- legal / brand / strategic decisions (real-name vs pen-name, "
+        "  trademark calls, irreversible pivots)\n"
+        "- account-creation authorization on Founder's behalf\n"
+        "Never block on 'I need creative input', 'pick a style', 'choose "
+        "a topic', 'what subjects should we cover'. Those are YOUR job.\n\n"
+        "If you need a specialist you don't have (a 'children's book "
+        "consultant', 'Etsy SEO specialist', etc.), prefer status='shipped' "
+        "with the work produced under your own best judgment plus a note "
+        "in detail like 'next step: hire a Children's Book Specialist via "
+        "hr.hire_worker for refinement'. Don't surface it as a blocker.\n\n"
+        "Block JSON shape (use sparingly, only for the categories above):\n"
         '{\n'
         '  "status": "blocked",\n'
         '  "summary": "<one-sentence what is blocking>",\n'
         '  "blockers": [\n'
         '    {\n'
         '      "title": "<short, specific>",\n'
-        '      "detail": "<why blocked>",\n'
+        '      "detail": "<why blocked + which valid category this fits>",\n'
         '      "kind": "decision|info|approval|permission|resource|clarification",\n'
         '      "urgency": "low|normal|high|urgent",\n'
         '      "options": ["<option 1>", "<option 2>", "..."]\n'
         '    }\n'
         '  ]\n'
-        '}\n\n'
-        "Default to shipping. Block only when you'd be guessing at something "
-        "that needs a real Founder choice (budget, brand voice, hard tradeoff)."
+        '}\n'
     )
 
 
