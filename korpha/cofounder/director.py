@@ -536,7 +536,19 @@ class Director:
         on a unit-scoped kanban card — costs attribute to that Line so
         per-line BudgetPolicy.BUSINESS_UNIT caps actually fire."""
         role_id = self.role_id_for(business.id)
+        # Pre-research: if the task looks research-shaped, run a web
+        # search and prepend the top results as inline context. Lets
+        # the Director draft with current data instead of guessing.
+        try:
+            from korpha.cofounder.pre_research import (
+                build_pre_research_block,
+            )
+            research_block = await build_pre_research_block(task)
+        except Exception:  # noqa: BLE001
+            research_block = ""
         prompt = _build_attempt_prompt(task)
+        if research_block:
+            prompt = f"{research_block}\n\n{prompt}"
 
         request = CompletionRequest(
             messages=[
@@ -720,7 +732,16 @@ class Worker:
         business_unit_id: UUID | None = None,
         kanban_card_id: UUID | None = None,
     ) -> AttemptResult:
+        try:
+            from korpha.cofounder.pre_research import (
+                build_pre_research_block,
+            )
+            research_block = await build_pre_research_block(task)
+        except Exception:  # noqa: BLE001
+            research_block = ""
         prompt = _build_attempt_prompt(task)
+        if research_block:
+            prompt = f"{research_block}\n\n{prompt}"
         request = CompletionRequest(
             messages=[
                 Message(role=Role.SYSTEM, content=self._system_prompt(business, founder)),

@@ -1604,6 +1604,70 @@ def pending() -> None:
         typer.echo(f"    {summary}")
 
 
+web_app = typer.Typer(
+    name="web",
+    help=(
+        "Web search + extract — agent-callable + manual. 15 providers "
+        "cascade (Tavily/Exa/Perplexity/Gemini/Brave/Firecrawl/etc. "
+        "→ DDG free fallback). Set provider keys in env to enable."
+    ),
+)
+app.add_typer(web_app)
+
+
+@web_app.command("status")
+def web_status_cmd() -> None:
+    """List configured / available web search providers."""
+    _ensure_load_env()
+    from korpha.web.search import list_available
+
+    rows = list_available()
+    configured = [n for n, ok in rows if ok]
+    typer.echo(_bold(f"Web search cascade: {len(configured)}/{len(rows)} configured\n"))
+    for name, ok in rows:
+        mark = _green("✓") if ok else _dim("·")
+        line = f"  {mark} {name}"
+        typer.echo(line if ok else _dim(line))
+    if not configured:
+        typer.echo(_yellow(
+            "\nNo providers wired. Easiest fix: `pip install ddgs` for "
+            "the free DDG fallback (zero key required). For better "
+            "quality set BRAVE_SEARCH_API_KEY (2k/mo free) or any of: "
+            "TAVILY/EXA/FIRECRAWL/PERPLEXITY/GEMINI/GROK/KIMI/MINIMAX/"
+            "PARALLEL/SEARXNG_URL/OLLAMA_WEB_URL/ANTHROPIC keys."
+        ))
+
+
+@web_app.command("search")
+def web_search_cmd(
+    query: Annotated[str, typer.Argument(help="What to search for.")],
+    max_results: Annotated[int, typer.Option("--max", "-n")] = 5,
+    site: Annotated[str | None, typer.Option(help="Restrict to one domain.")] = None,
+    recency_days: Annotated[int | None, typer.Option("--recency", help="Last N days only.")] = None,
+) -> None:
+    """Run a web search via the configured cascade and print results."""
+    _ensure_load_env()
+    import asyncio
+
+    from korpha.web.search import web_search
+
+    results = asyncio.run(web_search(
+        query, max_results=max_results, site=site, recency_days=recency_days,
+    ))
+    if not results:
+        typer.echo(_yellow(
+            "No results. Check `korpha web status` to confirm a "
+            "provider is wired."
+        ))
+        return
+    for i, r in enumerate(results, 1):
+        typer.echo(_bold(f"\n{i}. {r.title}"))
+        typer.echo(_dim(f"   {r.url}"))
+        if r.snippet:
+            typer.echo(f"   {r.snippet[:240]}")
+        typer.echo(_dim(f"   via {r.provider}"))
+
+
 @app.command("codex-runtime")
 def codex_runtime_cmd(
     state: Annotated[
