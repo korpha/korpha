@@ -104,7 +104,9 @@ def _autoload_builtins() -> None:
         research,
         support,
         validate,
+        web_search,
     )
+    web_search.register_skills()
 
 
 def load_user_yaml_skills(

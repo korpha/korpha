@@ -92,18 +92,35 @@ def _video_capability_line() -> str:
 
 
 def _search_capability_line() -> str:
-    """Intentionally not surfaced to Directors today.
+    """Surface web search to the team — wired via the CEO router /
+    chain layer (not from inside Director.attempt). When a research-
+    heavy task is dispatched, the chain pre-runs web.search and
+    injects results as context before the Director drafts.
 
-    Director.attempt() generates JSON text — it does NOT invoke skills.
-    Telling Directors "you have web search" caused them to emit
-    ``<search>...</search>`` Responses-API tool-call tags that go
-    nowhere through the current subprocess transport. Until we port
-    the codex Responses API path (follow-up PR), the Director
-    pretends the team has done research and drafts from training
-    data. Skill invocation happens in the CEO router layer, not
-    here.
-    """
-    return ""
+    Cascade: paid providers (Tavily/Exa/Perplexity/Gemini/...) first
+    when keyed → Brave free → SearXNG/Ollama if self-hosted → DDG
+    (always-on free fallback). 15 providers total."""
+    try:
+        from korpha.web.search import list_available
+        configured = [name for name, ok in list_available() if ok]
+    except Exception:  # noqa: BLE001
+        configured = []
+    if not configured:
+        return (
+            "- Web search: web.search (none configured — `pip install "
+            "ddgs` for the free fallback or set BRAVE/TAVILY/EXA/"
+            "etc. keys for keyed providers)"
+        )
+    primary = configured[0]
+    extras = len(configured) - 1
+    detail = primary
+    if extras > 0:
+        detail = f"{primary} + {extras} more"
+    return (
+        f"- Web search: web.search (configured: {detail}). Returns "
+        "live URL + snippet results. The CEO router calls this when "
+        "your card needs current info — you'll see results inline."
+    )
 
 
 def build_capabilities_preamble() -> str:
