@@ -906,6 +906,75 @@ class KanbanReassignCardsSkill(Skill):
         )
 
 
+class KanbanHeartbeatSkill(Skill):
+    """Extend the claim on a card the executor is still working on.
+
+    Mirrors Hermes's ``kanban_heartbeat`` tool. Long-running
+    executors that exceed ``Settings.kanban_claim_ttl_seconds``
+    (default 15 min) get their claim reclaimed by the dispatcher
+    unless they call this skill periodically to refresh the
+    ``claimed_at`` timestamp.
+
+    Idempotent + safe: only refreshes claims on cards that are
+    currently IN_PROGRESS with an active claim. Stale calls return
+    success=False rather than raising.
+    """
+
+    spec = SkillSpec(
+        name="kanban.heartbeat",
+        description=(
+            "Extend the claim on a card you are still actively "
+            "working on. Resets the claim TTL so the dispatcher "
+            "doesn't reclaim it mid-run. Use when an LLM call or "
+            "external API request will take more than a few "
+            "minutes. Args: card_id (UUID or 8-char prefix)."
+        ),
+        parameters={
+            "card_id": "Full UUID or 8-char hex prefix of the card.",
+        },
+        default_tier=InferenceTier.WORKHORSE,
+        provenance=SkillProvenance.BUILTIN,
+    )
+
+    async def run(
+        self, *, ctx: SkillContext, args: dict[str, Any],
+    ) -> SkillResult:
+        from korpha.kanban.dispatcher import heartbeat_claim
+
+        cid_ref = args.get("card_id")
+        if not cid_ref:
+            raise SkillError(
+                "kanban.heartbeat: card_id is required"
+            )
+        card = _resolve_card(ctx.session, cid_ref, ctx.business.id)
+        if card is None:
+            raise SkillError(
+                f"kanban.heartbeat: card {cid_ref!r} not found"
+            )
+        # Use the dispatcher helper which opens its own session so
+        # the refresh is visible across processes / threads.
+        from korpha.db._session import get_engine
+        ok = heartbeat_claim(engine=get_engine(), card_id=card.id)
+        return SkillResult(
+            skill_name=self.spec.name,
+            summary=(
+                f"refreshed claim on {str(card.id)[:8]}"
+                if ok else
+                f"no active claim on {str(card.id)[:8]} (not IN_PROGRESS or no claim)"
+            ),
+            payload={
+                "card_id": str(card.id),
+                "refreshed": ok,
+                "column": (
+                    card.column.value
+                    if hasattr(card.column, "value")
+                    else str(card.column)
+                ),
+            },
+            cost_usd=0.0,
+        )
+
+
 register(KanbanCreateCardSkill())
 register(KanbanSpecifyCardSkill())
 register(KanbanMoveCardSkill())
@@ -914,6 +983,7 @@ register(KanbanSubmitEvidenceSkill())
 register(KanbanListBoardSkill())
 register(KanbanFireSprintSkill())
 register(KanbanReassignCardsSkill())
+register(KanbanHeartbeatSkill())
 
 
 __all__ = [

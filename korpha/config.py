@@ -153,6 +153,44 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ---- Hermes-style kanban dispatcher ----
+    # Embedded watcher that runs every N seconds. Reclaims claims
+    # whose TTL has expired (executor crashed / hung) and auto-blocks
+    # cards that have failed too many times. Ports the safety core
+    # of hermes/hermes_cli/kanban_db.dispatch_once.
+    kanban_dispatcher_enabled: bool = Field(
+        default=True,
+        description=(
+            "Run the embedded kanban dispatcher inside the FastAPI "
+            "process. Reclaims stale claims and auto-blocks "
+            "crash-looping cards. Set false to manage externally."
+        ),
+    )
+    kanban_dispatch_interval_seconds: int = Field(
+        default=60,
+        description=(
+            "How often the dispatcher tick fires. Trade latency vs "
+            "DB load. 60s is Hermes's default."
+        ),
+    )
+    kanban_claim_ttl_seconds: int = Field(
+        default=900,
+        description=(
+            "A claim older than this is considered stale and gets "
+            "reclaimed back to READY. Default 15 min (Hermes's "
+            "DEFAULT_CLAIM_TTL_SECONDS). Long-running executors "
+            "should call kanban.heartbeat to extend."
+        ),
+    )
+    kanban_failure_limit: int = Field(
+        default=3,
+        description=(
+            "After this many failed dispatch attempts, a card "
+            "auto-blocks to break crash-loops. Mirrors Hermes's "
+            "DEFAULT_SPAWN_FAILURE_LIMIT."
+        ),
+    )
+
     @model_validator(mode="after")
     def _derive_db_url(self) -> "Settings":
         if not self.db_url:

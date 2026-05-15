@@ -12,6 +12,8 @@ annotations``. FastAPI relies on *runtime* type introspection to detect
 import, the Annotated metadata isn't seen and dependency injection
 silently breaks (parameters get treated as query/body fields).
 """
+import asyncio
+import contextlib
 import logging
 import os
 import time
@@ -380,7 +382,26 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
         )
         register_post_skill_hook()
 
-    yield
+    # Hermes-style kanban dispatcher — reclaims stale claims (TTL
+    # expired) and auto-blocks crash-looping cards. Replaces the
+    # 'cards stuck IN_PROGRESS overnight' failure mode the auto-
+    # dispatch path alone couldn't fix.
+    dispatcher_task: asyncio.Task[None] | None = None
+    with contextlib.suppress(Exception):
+        from korpha.kanban.dispatcher import dispatch_loop
+        from korpha.db._session import get_engine
+        dispatcher_task = asyncio.create_task(
+            dispatch_loop(get_engine()),
+            name="kanban-dispatcher",
+        )
+
+    try:
+        yield
+    finally:
+        if dispatcher_task is not None and not dispatcher_task.done():
+            dispatcher_task.cancel()
+            with contextlib.suppress(Exception):
+                await dispatcher_task
 
 
 def build_app() -> FastAPI:
