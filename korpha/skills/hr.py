@@ -277,13 +277,122 @@ class ListTeamSkill(Skill):
         )
 
 
+class SpawnExecutivesSkill(Skill):
+    """Spawn C-suite executives (CTO / CMO / COO) for the business.
+
+    Idempotent — if a role already exists active, returns the
+    existing one. Used when the founder says 'spawn CTO + CMO',
+    'hire a CTO', 'I need a CMO', etc. Replaces the CEO's
+    hallucinated 'I'll spawn both now' that never actually fired
+    the hire — this skill makes 'spawn' do real DB writes.
+    """
+
+    spec = SkillSpec(
+        name="hr.spawn_executives",
+        description=(
+            "Spawn one or more C-suite executives (CTO, CMO, COO) "
+            "for the business. USE THIS when the founder asks to "
+            "'spawn CTO', 'spawn CMO', 'hire a CTO', 'I need a "
+            "CMO', 'spawn CTO and CMO', etc. Idempotent: existing "
+            "active roles are returned, not duplicated. Args: "
+            "roles=[<list of: cto|cmo|coo>]."
+        ),
+        parameters={
+            "roles": (
+                "List of c-suite role types to spawn. Each must "
+                "be one of: cto | cmo | coo. e.g. ['cto', 'cmo']."
+            ),
+        },
+        default_tier=InferenceTier.WORKHORSE,
+        provenance=SkillProvenance.BUILTIN,
+    )
+
+    async def run(
+        self, *, ctx: SkillContext, args: dict[str, Any],
+    ) -> SkillResult:
+        raw_roles = args.get("roles") or []
+        if isinstance(raw_roles, str):
+            # Tolerate 'cto,cmo' or 'cto cmo' strings.
+            raw_roles = [
+                r.strip().lower() for r in raw_roles
+                .replace(",", " ").split() if r.strip()
+            ]
+        if not isinstance(raw_roles, list) or not raw_roles:
+            raise SkillError(
+                "hr.spawn_executives: roles=<list> required"
+            )
+        normalized: list[RoleType] = []
+        invalid: list[str] = []
+        for r in raw_roles:
+            key = str(r).strip().lower()
+            if key in _VALID_C_SUITE:
+                rt = _VALID_C_SUITE[key]
+                if rt not in normalized:
+                    normalized.append(rt)
+            else:
+                invalid.append(key)
+        if not normalized:
+            raise SkillError(
+                "hr.spawn_executives: no valid roles in "
+                f"{raw_roles!r}. Valid: cto, cmo, coo."
+            )
+
+        hiring = HiringService(ctx.session)
+        spawned: list[dict[str, Any]] = []
+        for rt in normalized:
+            existing = hiring.get_active_role(ctx.business.id, rt)
+            was_already_there = existing is not None
+            role = hiring.hire(
+                ctx.business.id, rt,
+                source="hr.spawn_executives",
+            )
+            spawned.append({
+                "role_type": rt.value,
+                "agent_role_id": str(role.id),
+                "title": role.title,
+                "already_existed": was_already_there,
+            })
+
+        new_hires = [s for s in spawned if not s["already_existed"]]
+        existing_hits = [s for s in spawned if s["already_existed"]]
+        parts = []
+        if new_hires:
+            parts.append(
+                "spawned " + ", ".join(
+                    s["role_type"].upper() for s in new_hires
+                )
+            )
+        if existing_hits:
+            parts.append(
+                "(already active: " + ", ".join(
+                    s["role_type"].upper() for s in existing_hits
+                ) + ")"
+            )
+        summary = "; ".join(parts) if parts else "no changes"
+        if invalid:
+            summary += f". Ignored invalid: {invalid}"
+
+        return SkillResult(
+            skill_name=self.spec.name,
+            summary=summary,
+            payload={
+                "spawned": spawned,
+                "invalid_roles": invalid,
+                "new_count": len(new_hires),
+            },
+            cost_usd=0.0,
+        )
+
+
 register(HireWorkerSkill())
 register(FireWorkerSkill())
 register(ListTeamSkill())
+register(SpawnExecutivesSkill())
 
 
 __all__ = [
     "FireWorkerSkill",
     "HireWorkerSkill",
     "ListTeamSkill",
+    "SpawnExecutivesSkill",
 ]

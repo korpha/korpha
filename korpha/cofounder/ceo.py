@@ -274,6 +274,18 @@ def _skill_router_prompt(skill_specs: list[Any], founder_message: str) -> str:
         "meta.author_python_skill (real I/O) per the rules above, "
         "(3) genuine fork that needs founder input → clarify, "
         "(4) chat / discussion → respond.\n\n"
+        "**CRITICAL — no fake actions in `respond`:** If your "
+        "response text would contain past-tense claims like "
+        "'I spawned X', 'I created Y', 'I approved Z', 'I queued', "
+        "'I hired', 'I added a card', 'I set up', 'I configured' — "
+        "STOP. Those are actions you cannot perform inside a "
+        "`respond` reply; they happen only via skills. You MUST "
+        "pick a `use_skill` for any imperative the Founder asked "
+        "you to do. If no listed skill fits the request, return "
+        "`clarify` to ask the Founder what to call the new "
+        "skill, or `meta.author_python_skill` to build one. The "
+        "Founder treats your past-tense words as truth — claiming "
+        "an action you didn't take is the worst kind of failure.\n\n"
         "Output strict JSON only. No surrounding prose."
     )
 
@@ -352,6 +364,50 @@ _MULTI_LINE_COUNTERS = (
     "business 1", "business 2",
     "all of those", "every one", "each one of",
 )
+
+
+_SPAWN_VERBS = (
+    "spawn", "spawn a", "spawn an", "spawn the",
+    "hire", "hire a", "hire an", "hire the",
+    "add a", "add an", "i need a", "i need an",
+    "create a", "create an",
+    "bring on", "stand up",
+)
+
+_CSUITE_TOKENS = {
+    "cto": "cto",
+    "c.t.o": "cto",
+    "chief technology": "cto",
+    "chief tech": "cto",
+    "cmo": "cmo",
+    "c.m.o": "cmo",
+    "chief marketing": "cmo",
+    "coo": "coo",
+    "c.o.o": "coo",
+    "chief operating": "coo",
+    "chief operations": "coo",
+}
+
+
+def _detect_spawn_csuite(msg: str) -> list[str] | None:
+    """Return list of c-suite role-strings the founder asked to
+    spawn (e.g. ['cto', 'cmo']), or None if no spawn intent.
+
+    Triggers on imperative + c-suite-token co-occurrence. Tolerates
+    'spawn CTO and CMO', 'hire a CTO', 'I need a CMO', 'spawn cto +
+    cmo', etc. False-positives are caught by the skill (idempotent
+    if role already active)."""
+    if not msg:
+        return None
+    low = msg.lower()
+    has_spawn_verb = any(v in low for v in _SPAWN_VERBS)
+    if not has_spawn_verb:
+        return None
+    found: list[str] = []
+    for token, role in _CSUITE_TOKENS.items():
+        if token in low and role not in found:
+            found.append(role)
+    return found if found else None
 
 
 def _looks_like_multi_line_brief(msg: str) -> bool:
@@ -721,6 +777,74 @@ class CEO:
             ceo_role = self.hiring.ensure_ceo(business.id)
             digest = self._maybe_digest(business.id)
             skill_specs = registry.list_specs()
+
+            # Pre-router heuristic 2: explicit c-suite spawn
+            # imperative ("spawn CTO and CMO", "hire a CTO", "I need
+            # a CMO"). Same rationale as the multi-line bypass: the
+            # router LLM has been observed to prefer writing
+            # 'I'll spawn both now' markdown over actually picking
+            # hr.spawn_executives, so we deterministically force the
+            # skill. Idempotent — re-asking is safe.
+            csuite_to_spawn = (
+                _detect_spawn_csuite(founder_message)
+                if max_skill_calls > 0
+                and "hr.spawn_executives" in registry.skills
+                else None
+            )
+            if csuite_to_spawn:
+                yield {
+                    "type": "phase", "phase": "skill",
+                    "skill_name": "hr.spawn_executives",
+                }
+                skill_ctx = SkillContext(
+                    business=business,
+                    founder=founder,
+                    session=self.session,
+                    cost_tracker=self.cost_tracker,
+                    invoking_agent_role_id=ceo_role.id,
+                    browser=self.browser,
+                )
+                skill_result = await registry.run(
+                    "hr.spawn_executives",
+                    ctx=skill_ctx,
+                    args={"roles": csuite_to_spawn},
+                )
+                yield {"type": "phase", "phase": "synth"}
+                synth_msg = _skill_synth_prompt(
+                    founder_message, skill_result,
+                )
+                synth_request = CompletionRequest(
+                    messages=self._build_messages(
+                        business=business,
+                        founder=founder,
+                        history=history or [],
+                        user_message=synth_msg,
+                        digest=digest,
+                    ),
+                    tier=self.default_tier,
+                    session_key=f"ceo-handle-{ceo_role.id}",
+                    max_tokens=self.default_max_tokens or agent_max_tokens(),
+                    timeout_seconds=self.default_timeout_seconds or agent_timeout(),
+                )
+                buf: list[str] = []
+                async for chunk in self.cost_tracker.stream(
+                    synth_request,
+                    session=self.session,
+                    business_id=business.id,
+                    agent_role_id=ceo_role.id,
+                    thread_id=thread_id,
+                ):
+                    if chunk.delta_content:
+                        buf.append(chunk.delta_content)
+                        yield {"type": "content", "text": chunk.delta_content}
+                    if chunk.delta_reasoning:
+                        yield {"type": "reasoning", "text": chunk.delta_reasoning}
+                yield {
+                    "type": "done",
+                    "skills_used": [skill_result.skill_name],
+                    "content": "".join(buf),
+                }
+                return
 
             # Pre-router heuristic: if the founder message clearly
             # asks to spawn MULTIPLE business lines at once, skip the
