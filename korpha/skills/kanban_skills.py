@@ -767,10 +767,44 @@ class KanbanFireSprintSkill(Skill):
         if errors:
             summary += f". {len(errors)} failed."
 
+        # Inline auto-dispatch trigger: after claiming, immediately
+        # run the cards through Workforce so executors actually do
+        # the work. Without this the cards sit IN_PROGRESS forever.
+        # Mode-gated so the cron + hook triggers don't double-fire.
+        dispatch_summary: dict[str, Any] | None = None
+        try:
+            from korpha.cofounder.auto_dispatch import (
+                auto_dispatch_mode, dispatch_pending_cards,
+            )
+            mode = auto_dispatch_mode()
+            if mode in {"inline", "all"}:
+                fired_ids = [UUID(f["card_id"]) for f in fired]
+                dispatch_summary = await dispatch_pending_cards(
+                    business=ctx.business,
+                    founder=ctx.founder,
+                    session=ctx.session,
+                    cost_tracker=ctx.cost_tracker,
+                    card_ids=fired_ids,
+                )
+                summary += (
+                    f". Auto-dispatched "
+                    f"{dispatch_summary.get('dispatched_count', 0)} "
+                    f"executor run(s)."
+                )
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception(
+                "kanban.fire_sprint inline auto-dispatch failed"
+            )
+            dispatch_summary = {"error": f"{type(exc).__name__}: {exc}"}
+
+        payload: dict[str, Any] = {"fired": fired, "errors": errors}
+        if dispatch_summary is not None:
+            payload["auto_dispatch"] = dispatch_summary
         return SkillResult(
             skill_name=self.spec.name,
             summary=summary,
-            payload={"fired": fired, "errors": errors},
+            payload=payload,
             cost_usd=0.0,
         )
 

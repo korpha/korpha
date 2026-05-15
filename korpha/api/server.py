@@ -370,6 +370,16 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
         from korpha.backup.offdisk import ensure_replicator_running
         ensure_replicator_running()
 
+    # Workforce auto-dispatch — register the POST_SKILL_CALL hook
+    # path if the configured mode includes 'hook' (or 'all'). The
+    # inline path lives inside kanban.fire_sprint itself; the cron
+    # path is opt-in via `aigenteur cron add-card-dispatcher`.
+    with contextlib.suppress(Exception):
+        from korpha.cofounder.auto_dispatch import (
+            register_post_skill_hook,
+        )
+        register_post_skill_hook()
+
     yield
 
 

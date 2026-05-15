@@ -119,6 +119,40 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ---- Workforce auto-dispatch (kanban IN_PROGRESS → execution) ----
+    # Without auto-dispatch, cards sit in IN_PROGRESS with no
+    # executor running them. We have three triggers; pick one.
+    workforce_auto_dispatch_mode: str = Field(
+        default="inline",
+        description=(
+            "When to auto-dispatch IN_PROGRESS kanban cards through "
+            "Workforce.dispatch. Options: 'inline' (default — "
+            "kanban.fire_sprint triggers immediately after claim), "
+            "'cron' (a ScriptCron preset polls every N min — "
+            "install via `aigenteur cron add-card-dispatcher`), "
+            "'hook' (POST_SKILL_CALL plugin hook fires after the "
+            "skill), 'all' (all three; idempotency stamps prevent "
+            "double-runs), 'off' (manual via /approvals/* only)."
+        ),
+    )
+    workforce_auto_dispatch_stale_after_minutes: int = Field(
+        default=30,
+        description=(
+            "A card already IN_PROGRESS for this many minutes "
+            "without auto_dispatch stamp completion is treated as "
+            "'still running' and skipped. Lower → faster retry on "
+            "stuck cards. Higher → fewer duplicate runs."
+        ),
+    )
+    workforce_auto_dispatch_max_cards: int = Field(
+        default=12,
+        description=(
+            "Max cards dispatched per trigger fire. Prevents a "
+            "huge bootstrap from spawning 50 parallel executors "
+            "and busting the inference rate limit."
+        ),
+    )
+
     @model_validator(mode="after")
     def _derive_db_url(self) -> "Settings":
         if not self.db_url:
