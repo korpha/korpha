@@ -390,6 +390,70 @@ _CSUITE_TOKENS = {
 }
 
 
+_REASSIGN_PHRASES = (
+    "reassign", "re-assign", "reassign them", "yes reassign",
+    "apply the fixes", "apply the reassign", "switch owners",
+    "swap owners", "redo the routing", "rebalance",
+)
+
+
+def _detect_reassign_pairs(
+    msg: str, history: list["Message"] | None,
+) -> list[dict[str, str]] | None:
+    """If the founder said a reassign-trigger phrase AND the most
+    recent agent message lists card-ID + role pairs, return the
+    parsed [(card_id, new_owner_role), ...] list. Else None.
+
+    Pair-finding heuristic: for each 8-char hex card id in the
+    agent message, scan a ±80-char window around it for one of
+    {CTO, CMO, COO}. Pair them. Multiple ids → multiple pairs.
+    """
+    if not msg:
+        return None
+    low = msg.strip().lower().rstrip(".!?")
+    if low not in _REASSIGN_PHRASES and not any(
+        p in low for p in _REASSIGN_PHRASES
+    ):
+        return None
+    if not history:
+        return None
+    last_assistant = None
+    for m in reversed(history):
+        try:
+            role_str = (
+                m.role.value if hasattr(m.role, "value") else str(m.role)
+            ).lower()
+        except Exception:  # noqa: BLE001
+            role_str = ""
+        if role_str == "assistant":
+            last_assistant = m
+            break
+    if last_assistant is None or not last_assistant.content:
+        return None
+    text = last_assistant.content
+    # Group card IDs by the sentence they appear in. Each sentence
+    # has at most one role assignment; cards in that sentence share
+    # the role. Handles patterns like:
+    #   "Reassign A and B to CMO. Keep C, D, E with CTO."
+    # which a pure-nearest-token heuristic gets wrong because C is
+    # closer to the previous 'CMO' than to the 'CTO' at the end.
+    pairs: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    # Sentence delimiter — period + space, newline, or bullet boundary.
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+|(?<=:)\s+|(?<=-)\s+", text):
+        role_match = re.search(r"\b(CTO|CMO|COO)\b", sentence, re.I)
+        if not role_match:
+            continue
+        role = role_match.group(1).lower()
+        for m in re.finditer(r"\b([0-9a-f]{8})\b", sentence, re.I):
+            cid = m.group(1).lower()
+            if cid in seen_ids:
+                continue
+            seen_ids.add(cid)
+            pairs.append({"card_id": cid, "new_owner_role": role})
+    return pairs if pairs else None
+
+
 _FIRE_SPRINT_PHRASES = (
     "go", "yes go", "yes, go", "ok go", "ok, go",
     "fire", "fire it", "fire away", "fire the sprint",
@@ -843,6 +907,72 @@ class CEO:
             ceo_role = self.hiring.ensure_ceo(business.id)
             digest = self._maybe_digest(business.id)
             skill_specs = registry.list_specs()
+
+            # Pre-router heuristic 4: 'reassign' after a CEO message
+            # that lists card-ID + role pairs. Force-routes to
+            # kanban.reassign_cards so the CTO/CMO routing actually
+            # changes in the DB (same hallucination class as the
+            # other forced-route heuristics).
+            reassign_pairs = (
+                _detect_reassign_pairs(founder_message, history)
+                if max_skill_calls > 0
+                and "kanban.reassign_cards" in registry.skills
+                else None
+            )
+            if reassign_pairs:
+                yield {
+                    "type": "phase", "phase": "skill",
+                    "skill_name": "kanban.reassign_cards",
+                }
+                skill_ctx = SkillContext(
+                    business=business,
+                    founder=founder,
+                    session=self.session,
+                    cost_tracker=self.cost_tracker,
+                    invoking_agent_role_id=ceo_role.id,
+                    browser=self.browser,
+                )
+                skill_result = await registry.run(
+                    "kanban.reassign_cards",
+                    ctx=skill_ctx,
+                    args={"assignments": reassign_pairs},
+                )
+                yield {"type": "phase", "phase": "synth"}
+                synth_msg = _skill_synth_prompt(
+                    founder_message, skill_result,
+                )
+                synth_request = CompletionRequest(
+                    messages=await self._build_messages(
+                        business=business,
+                        founder=founder,
+                        history=history or [],
+                        user_message=synth_msg,
+                        digest=digest,
+                    ),
+                    tier=self.default_tier,
+                    session_key=f"ceo-handle-{ceo_role.id}",
+                    max_tokens=self.default_max_tokens or agent_max_tokens(),
+                    timeout_seconds=self.default_timeout_seconds or agent_timeout(),
+                )
+                buf: list[str] = []
+                async for chunk in self.cost_tracker.stream(
+                    synth_request,
+                    session=self.session,
+                    business_id=business.id,
+                    agent_role_id=ceo_role.id,
+                    thread_id=thread_id,
+                ):
+                    if chunk.delta_content:
+                        buf.append(chunk.delta_content)
+                        yield {"type": "content", "text": chunk.delta_content}
+                    if chunk.delta_reasoning:
+                        yield {"type": "reasoning", "text": chunk.delta_reasoning}
+                yield {
+                    "type": "done",
+                    "skills_used": [skill_result.skill_name],
+                    "content": "".join(buf),
+                }
+                return
 
             # Pre-router heuristic 3: short approval phrase that
             # follows a CEO message citing card IDs. Force-route to

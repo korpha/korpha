@@ -775,6 +775,103 @@ class KanbanFireSprintSkill(Skill):
         )
 
 
+class KanbanReassignCardsSkill(Skill):
+    """Re-assign cards to a different c-suite owner (cto/cmo/coo).
+
+    Used when the CEO's earlier auto-assignment was off (e.g. our
+    keyword heuristic in fire_sprint over-mapped "draft / create"
+    to cto when those cards should be cmo). The skill flips the
+    ``owner_role`` string; the Line VP claim is left alone since
+    the actual executor is the line VP.
+    """
+
+    spec = SkillSpec(
+        name="kanban.reassign_cards",
+        description=(
+            "USE THIS when the founder says 'reassign' / 'switch "
+            "owner' / 'move X to CMO' / 'put Y under CTO' to change "
+            "a kanban card's c-suite owner. Args: assignments="
+            "[{card_id, new_owner_role}, ...] (each new_owner_role "
+            "is cto|cmo|coo)."
+        ),
+        parameters={
+            "assignments": (
+                "List of {card_id, new_owner_role} dicts. card_id "
+                "can be an 8-char hex prefix or full UUID. "
+                "new_owner_role is one of cto, cmo, coo."
+            ),
+        },
+        default_tier=InferenceTier.WORKHORSE,
+        provenance=SkillProvenance.BUILTIN,
+    )
+
+    async def run(
+        self, *, ctx: SkillContext, args: dict[str, Any],
+    ) -> SkillResult:
+        raw = args.get("assignments") or []
+        if not isinstance(raw, list) or not raw:
+            raise SkillError(
+                "kanban.reassign_cards: assignments=<list> required"
+            )
+        results: list[dict[str, Any]] = []
+        errors: list[str] = []
+        for a in raw:
+            if not isinstance(a, dict):
+                errors.append(f"bad assignment shape: {a!r}")
+                continue
+            cid_ref = a.get("card_id")
+            target = str(a.get("new_owner_role") or "").strip().lower()
+            if target not in {"cto", "cmo", "coo"}:
+                errors.append(
+                    f"{cid_ref}: invalid new_owner_role={target!r}"
+                )
+                continue
+            card = _resolve_card(ctx.session, cid_ref, ctx.business.id)
+            if card is None:
+                errors.append(f"{cid_ref}: not found")
+                continue
+            old = card.owner_role
+            if old == target:
+                results.append({
+                    "card_id": str(card.id),
+                    "title": card.title[:60],
+                    "old_owner": old,
+                    "new_owner": target,
+                    "skipped": "already_owned_by_target",
+                })
+                continue
+            card.owner_role = target
+            try:
+                ctx.session.add(card)
+                ctx.session.commit()
+                ctx.session.refresh(card)
+                results.append({
+                    "card_id": str(card.id),
+                    "title": card.title[:60],
+                    "old_owner": old,
+                    "new_owner": target,
+                })
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{cid_ref}: commit failed: {exc}")
+        changed = [r for r in results if "skipped" not in r]
+        if not changed and not results:
+            raise SkillError(
+                f"kanban.reassign_cards: nothing changed. "
+                f"Errors: {errors[:3]}"
+            )
+        summary = (
+            f"Reassigned {len(changed)} card(s); "
+            f"{len(results) - len(changed)} no-op, "
+            f"{len(errors)} failed"
+        )
+        return SkillResult(
+            skill_name=self.spec.name,
+            summary=summary,
+            payload={"reassigned": results, "errors": errors},
+            cost_usd=0.0,
+        )
+
+
 register(KanbanCreateCardSkill())
 register(KanbanSpecifyCardSkill())
 register(KanbanMoveCardSkill())
@@ -782,6 +879,7 @@ register(KanbanClaimCardSkill())
 register(KanbanSubmitEvidenceSkill())
 register(KanbanListBoardSkill())
 register(KanbanFireSprintSkill())
+register(KanbanReassignCardsSkill())
 
 
 __all__ = [
