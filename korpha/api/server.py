@@ -212,6 +212,14 @@ def _data_dir() -> str:
     return os.getenv("KORPHA_DATA_DIR") or os.path.expanduser("~/.korpha")
 
 
+def _history_db_limit() -> int:
+    """How many recent messages to load from DB before the context
+    engine shapes them. Reads ``Settings.context_history_db_limit``
+    (default 500). Big enough that the engine handles real trimming."""
+    from korpha.config import get_settings
+    return get_settings().context_history_db_limit
+
+
 def _build_engine() -> Engine:
     db_path = os.path.join(_data_dir(), "korpha.db")
     if not os.path.exists(os.path.dirname(db_path)):
@@ -629,7 +637,7 @@ def build_app() -> FastAPI:
                 business_id=business.id,
                 founder_id=founder.id,
                 platform=ThreadPlatform.WEB,
-                limit=20,
+                limit=_history_db_limit(),
             )
             if (
                 history
@@ -709,7 +717,7 @@ def build_app() -> FastAPI:
             business_id=business.id,
             founder_id=founder.id,
             platform=ThreadPlatform.WEB,
-            limit=20,
+            limit=_history_db_limit(),
         )
         if (
             history

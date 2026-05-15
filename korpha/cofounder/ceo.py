@@ -639,7 +639,7 @@ class CEO:
         """
         ceo_role = self.hiring.ensure_ceo(business.id)
         digest = self._maybe_digest(business.id) if include_digest else None
-        messages = self._build_messages(
+        messages =await self._build_messages(
             business=business,
             founder=founder,
             history=history or [],
@@ -706,7 +706,7 @@ class CEO:
         )
 
         digest = self._maybe_digest(business.id)
-        messages = self._build_messages(
+        messages =await self._build_messages(
             business=business,
             founder=founder,
             history=[],
@@ -879,7 +879,7 @@ class CEO:
                     founder_message, skill_result,
                 )
                 synth_request = CompletionRequest(
-                    messages=self._build_messages(
+                    messages=await self._build_messages(
                         business=business,
                         founder=founder,
                         history=history or [],
@@ -947,7 +947,7 @@ class CEO:
                     founder_message, skill_result,
                 )
                 synth_request = CompletionRequest(
-                    messages=self._build_messages(
+                    messages=await self._build_messages(
                         business=business,
                         founder=founder,
                         history=history or [],
@@ -1015,7 +1015,7 @@ class CEO:
                     founder_message, skill_result,
                 )
                 synth_request = CompletionRequest(
-                    messages=self._build_messages(
+                    messages=await self._build_messages(
                         business=business,
                         founder=founder,
                         history=history or [],
@@ -1065,7 +1065,7 @@ class CEO:
 
             router_msg = _skill_router_prompt(skill_specs, founder_message)
             router_request = CompletionRequest(
-                messages=self._build_messages(
+                messages=await self._build_messages(
                     business=business,
                     founder=founder,
                     history=history or [],
@@ -1154,7 +1154,7 @@ class CEO:
 
             synth_msg = _skill_synth_prompt(founder_message, skill_result)
             synth_request = CompletionRequest(
-                messages=self._build_messages(
+                messages=await self._build_messages(
                     business=business,
                     founder=founder,
                     history=history or [],
@@ -1201,7 +1201,7 @@ class CEO:
         thread_id: UUID | None,
     ) -> Any:  # AsyncIterator[dict] — typed loose for the helper
         request = CompletionRequest(
-            messages=self._build_messages(
+            messages=await self._build_messages(
                 business=business,
                 founder=founder,
                 history=history,
@@ -1308,7 +1308,7 @@ class CEO:
 
         router_msg = _skill_router_prompt(skill_specs, founder_message)
         router_request = CompletionRequest(
-            messages=self._build_messages(
+            messages=await self._build_messages(
                 business=business,
                 founder=founder,
                 history=history or [],
@@ -1387,7 +1387,7 @@ class CEO:
 
         synth_msg = _skill_synth_prompt(founder_message, skill_result)
         synth_request = CompletionRequest(
-            messages=self._build_messages(
+            messages=await self._build_messages(
                 business=business,
                 founder=founder,
                 history=history or [],
@@ -1489,7 +1489,7 @@ class CEO:
         digest = self.chief_of_staff.digest_for_ceo(business_id)
         return digest if digest.items else None
 
-    def _build_messages(
+    async def _build_messages(
         self,
         *,
         business: Business,
@@ -1497,6 +1497,7 @@ class CEO:
         history: list[Message],
         user_message: str,
         digest: Digest | None = None,
+        max_output_tokens: int | None = None,
     ) -> list[Message]:
         system_parts = [
             self.cofounder_voice,
@@ -1571,9 +1572,39 @@ class CEO:
                 "list them):\n" + digest.render()
             )
         system = "\n\n".join(system_parts)
+
+        # Run the configured context engine on the history before
+        # sending. This handles long conversations against 1M-context
+        # models by summarizing the middle when the prompt grows
+        # past the threshold (default 80% of context window).
+        try:
+            from korpha.cofounder.context_engine import build_context_engine
+            engine = build_context_engine(
+                cost_tracker=self.cost_tracker,
+                tier=self.default_tier,
+                session_key=f"ceo-history-{business.id}",
+            )
+            sys_overhead_tokens = (len(system) // 4) + 32
+            shaped_history = await engine.shape(
+                history,
+                max_output_tokens=int(
+                    max_output_tokens
+                    or self.default_max_tokens
+                    or agent_max_tokens()
+                ),
+                system_overhead_tokens=sys_overhead_tokens,
+            )
+        except Exception:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception(
+                "context engine shape() failed; "
+                "falling back to raw history"
+            )
+            shaped_history = list(history)
+
         return [
             Message(role=Role.SYSTEM, content=system),
-            *history,
+            *shaped_history,
             Message(role=Role.USER, content=user_message),
         ]
 
