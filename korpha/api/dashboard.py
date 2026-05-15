@@ -1489,6 +1489,164 @@ def build_dashboard_router(
         finally:
             session.close()
 
+    @router.post(
+        "/approvals/{approval_id}/approve",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    async def approvals_approve_post(
+        approval_id: str,
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+        comment: Annotated[str, Form()] = "",
+    ) -> RedirectResponse:
+        """Founder approves an approval from the dashboard, optionally
+        with a comment. Wraps the same gate.decide path the JSON API
+        and CLI use — same dispatch side-effects (Stripe / email / skill
+        author / cron / etc.) fire here too."""
+        try:
+            from uuid import UUID
+
+            from korpha.approvals.gate import ApprovalGate, Decision
+
+            ctx = _ctx(session, active="approvals")
+            try:
+                aid = UUID(approval_id)
+            except ValueError:
+                return RedirectResponse(
+                    "/app/approvals?error=Bad+approval+id",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            note = (comment or "").strip() or None
+            gate = ApprovalGate(session)
+            try:
+                result = gate.decide(
+                    approval_id=aid,
+                    decision=Decision.APPROVE,
+                    decided_by_founder_id=ctx["founder"].id,
+                    modification_note=note,
+                )
+            except KeyError:
+                return RedirectResponse(
+                    "/app/approvals?error=Approval+not+found",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            except Exception as exc:  # noqa: BLE001
+                return RedirectResponse(
+                    f"/app/approvals?error={str(exc)[:80].replace(' ', '+')}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            # Mirror the post-approve dispatch that /approvals/{id}/approve
+            # does in server.py — without this, approving from /app would
+            # be a no-op for Stripe / cron / skill-author payload kinds.
+            payload = result.approval.action_payload or {}
+            payload_kind = payload.get("kind")
+            try:
+                if payload_kind == "author_skill":
+                    from korpha.skills.meta import (
+                        apply_skill_proposal_from_approval,
+                    )
+                    apply_skill_proposal_from_approval(result.approval)
+                elif payload_kind == "author_python_skill":
+                    from korpha.skills.meta import (
+                        apply_python_skill_proposal_from_approval,
+                    )
+                    apply_python_skill_proposal_from_approval(result.approval)
+                elif payload_kind == "create_cron":
+                    from korpha.skills.cron_author import (
+                        apply_cron_proposal_from_approval,
+                    )
+                    apply_cron_proposal_from_approval(result.approval)
+                else:
+                    from korpha.approvals.dispatch import (
+                        dispatch_by_action_class,
+                    )
+                    dr = await dispatch_by_action_class(
+                        session, result.approval, ctx["business"],
+                    )
+                    if dr is not None and not dr.ok:
+                        result.approval.action_payload = {
+                            **(result.approval.action_payload or {}),
+                            "dispatch_error": dr.message,
+                        }
+                        session.add(result.approval)
+                        session.commit()
+            except Exception as exc:  # noqa: BLE001
+                import logging
+                logging.getLogger(__name__).warning(
+                    "approval dashboard approve: dispatch raised",
+                    exc_info=True,
+                )
+                result.approval.action_payload = {
+                    **(result.approval.action_payload or {}),
+                    "dispatch_error": (
+                        f"internal dispatch crash: {type(exc).__name__}: {exc}"
+                    ),
+                }
+                session.add(result.approval)
+                session.commit()
+
+            return RedirectResponse(
+                f"/app/approvals?approved={approval_id[:8]}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    @router.post(
+        "/approvals/{approval_id}/reject",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def approvals_reject_post(
+        approval_id: str,
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+        comment: Annotated[str, Form()] = "",
+    ) -> RedirectResponse:
+        """Founder rejects an approval, optionally with a comment
+        explaining why. Comment lands in modification_note on the row."""
+        try:
+            from uuid import UUID
+
+            from korpha.approvals.gate import ApprovalGate, Decision
+
+            ctx = _ctx(session, active="approvals")
+            try:
+                aid = UUID(approval_id)
+            except ValueError:
+                return RedirectResponse(
+                    "/app/approvals?error=Bad+approval+id",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            note = (comment or "").strip() or None
+            gate = ApprovalGate(session)
+            try:
+                gate.decide(
+                    approval_id=aid,
+                    decision=Decision.REJECT,
+                    decided_by_founder_id=ctx["founder"].id,
+                    modification_note=note,
+                )
+            except KeyError:
+                return RedirectResponse(
+                    "/app/approvals?error=Approval+not+found",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            except Exception as exc:  # noqa: BLE001
+                return RedirectResponse(
+                    f"/app/approvals?error={str(exc)[:80].replace(' ', '+')}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            return RedirectResponse(
+                f"/app/approvals?rejected={approval_id[:8]}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
     @router.get("/skills", response_class=HTMLResponse)
     def skills_view(
         request: Request,
@@ -5199,6 +5357,7 @@ def _format_approval(a: Approval) -> dict[str, Any]:
         "kind_tag": kind_tag,
         "dispatch_error": dispatch_error,
         "side_effect_url": side_effect_url,
+        "modification_note": a.modification_note,
     }
 
 
