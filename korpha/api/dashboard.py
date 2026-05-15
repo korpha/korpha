@@ -4840,6 +4840,7 @@ def build_dashboard_router(
         session: Annotated[Session, Depends(require_session)],
     ) -> HTMLResponse:
         try:
+            from korpha.inference.codex_runtime import status as codex_status
             from korpha.inference.config import load_from_yaml
             from korpha.inference.env_fallback import (
                 detect_configured_providers,
@@ -4858,8 +4859,50 @@ def build_dashboard_router(
             )
             ctx["accounts"] = accounts
             ctx["source"] = source
+            ctx["codex_runtime"] = codex_status()
             return templates.TemplateResponse(
                 request, "inference.html", ctx,
+            )
+        finally:
+            session.close()
+
+    @router.post(
+        "/inference/codex-runtime/toggle",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def inference_codex_runtime_toggle(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+        action: Annotated[str, Form()] = "",
+    ) -> RedirectResponse:
+        """One-click flip of the Codex runtime — adds or removes the
+        codex-cli entry from providers.yaml at top priority. Mirrors
+        Hermes /codex-runtime."""
+        try:
+            from korpha.inference.codex_runtime import disable, enable
+            act = (action or "").strip().lower()
+            if act in ("on", "enable", "true"):
+                result = enable()
+            elif act in ("off", "disable", "false"):
+                result = disable()
+            else:
+                return RedirectResponse(
+                    "/app/inference?error=Bad+action+(use+on+or+off)",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            from urllib.parse import quote
+            flash = "Codex runtime " + (
+                "enabled" if result.enabled else "disabled"
+            )
+            if not result.codex_binary_ok and act in ("on", "enable", "true"):
+                return RedirectResponse(
+                    f"/app/inference?error={quote(result.detail)}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            return RedirectResponse(
+                f"/app/inference?flash={quote(flash)}",
+                status_code=status.HTTP_303_SEE_OTHER,
             )
         finally:
             session.close()
