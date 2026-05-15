@@ -593,10 +593,12 @@ def _detect_fire_sprint(
     ):
         return None
 
-    # Strategy 1 + 2: scan more than the most-recent assistant
-    # message. Sometimes the CEO's previous synth (the one that
-    # listed IDs) is one turn back behind a "summary" or "reassign"
-    # response that used role labels.
+    # Collect from BOTH chat-history (Strategy 1) AND the live
+    # board (Strategy 3), then union + dedupe. Bare "go" / "yes" /
+    # "fire it" expresses intent over the whole sprint, not just
+    # the one card the CEO happened to cite in its last synth.
+    # If the founder wanted a narrower scope they would have named
+    # the card (handled outside this heuristic).
     seen: set[str] = set()
     out: list[str] = []
     if history:
@@ -624,37 +626,36 @@ def _detect_fire_sprint(
                     continue
                 seen.add(prefix)
                 out.append(prefix)
-            if out:
-                # Stop at the first message that gave us anything.
-                # Older messages may reference cards we already
-                # processed.
-                return out
 
-    # Strategy 3: live DB fallback. Founder said "go", no IDs in
-    # the last 5 agent messages — pull the live board's actionable
-    # cards. Limit to a safe batch.
-    if session is None or business_id is None:
-        return None
-    try:
-        from sqlmodel import select
-        from korpha.kanban.model import KanbanCard, KanbanColumn
+    # Live DB pull: every READY/IN_PROGRESS card the founder could
+    # mean. Unions with chat IDs so we never silently leave half
+    # the sprint behind.
+    if session is not None and business_id is not None:
+        try:
+            from sqlmodel import select
+            from korpha.kanban.model import KanbanCard, KanbanColumn
 
-        cards = list(session.exec(
-            select(KanbanCard)
-            .where(KanbanCard.business_id == business_id)
-            .where(
-                KanbanCard.column.in_([  # type: ignore[union-attr]
-                    KanbanColumn.READY,
-                    KanbanColumn.IN_PROGRESS,
-                ])
-            )
-            .order_by(KanbanCard.created_at)  # type: ignore[union-attr]
-        ))[:12]
-    except Exception:  # noqa: BLE001
-        return None
-    if not cards:
-        return None
-    return [str(c.id).replace("-", "")[:8] for c in cards]
+            cards = list(session.exec(
+                select(KanbanCard)
+                .where(KanbanCard.business_id == business_id)
+                .where(
+                    KanbanCard.column.in_([  # type: ignore[union-attr]
+                        KanbanColumn.READY,
+                        KanbanColumn.IN_PROGRESS,
+                    ])
+                )
+                .order_by(KanbanCard.created_at)  # type: ignore[union-attr]
+            ))[:12]
+            for c in cards:
+                prefix = str(c.id).replace("-", "").lower()[:8]
+                if prefix in seen:
+                    continue
+                seen.add(prefix)
+                out.append(prefix)
+        except Exception:  # noqa: BLE001
+            pass
+
+    return out if out else None
 
 
 def _detect_spawn_csuite(msg: str) -> list[str] | None:
