@@ -60,13 +60,21 @@
           </div>
           <div class="kb-col-body">
             {% for c in cards %}
-              <div class="kb-card kb-card-{{ c.priority.value }}{% if c.id in live_card_ids %} kb-card-live{% endif %}">
+              {% set blocker_count = (blocker_counts_by_card or {}).get(c.id, 0) %}
+              <div class="kb-card kb-card-{{ c.priority.value }}{% if c.id in live_card_ids %} kb-card-live{% endif %}{% if blocker_count %} kb-card-blocked{% endif %}">
                 <div class="kb-card-title">
                   {% if c.id in live_card_ids %}
                     <span class="kb-live-dot" title="A {{ c.owner_role|upper }} agent is actively working this card right now"></span>
                   {% endif %}
-                  {{ c.title }}
+                  <a href="/app/kanban/{{ c.id }}" class="kb-card-link">{{ c.title }}</a>
                 </div>
+                {% if blocker_count %}
+                  <div class="kb-card-blocker-banner">
+                    <a href="/app/kanban/{{ c.id }}" class="kb-card-blocker-link">
+                      ! {{ blocker_count }} waiting for you →
+                    </a>
+                  </div>
+                {% endif %}
                 {% if c.body %}
                   <div class="kb-card-body">{{ c.body[:240] }}{% if c.body|length > 240 %}…{% endif %}</div>
                 {% endif %}
@@ -262,6 +270,28 @@
     50% { opacity: 0.55; box-shadow: 0 0 0 6px rgba(40, 180, 99, 0); }
   }
   .kb-card-title { font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .kb-card-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  .kb-card-link:hover { text-decoration: underline; }
+  .kb-card-blocked { border-left: 3px solid #c25; }
+  .kb-card-blocker-banner {
+    background: rgba(204, 51, 102, 0.15);
+    border-radius: 3px;
+    padding: 3px 6px;
+    margin-bottom: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .kb-card-blocker-link {
+    color: #ff6b8a;
+    text-decoration: none;
+    display: block;
+  }
+  .kb-card-blocker-link:hover { text-decoration: underline; }
   .kb-card-body { color: var(--text-faint); font-size: 11px; margin-bottom: 6px; }
   .kb-card-meta { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
 

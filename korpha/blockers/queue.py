@@ -31,6 +31,7 @@ class BlockerSubmission:
     detail: str = ""
     options: list[str] = field(default_factory=list)
     task_id: UUID | None = None
+    kanban_card_id: UUID | None = None
     parent_blocker_id: UUID | None = None
     topic_tag: str | None = None
 
@@ -53,6 +54,7 @@ class BlockerQueue:
             business_id=submission.business_id,
             requesting_agent_role_id=submission.requesting_agent_role_id,
             task_id=submission.task_id,
+            kanban_card_id=submission.kanban_card_id,
             parent_blocker_id=submission.parent_blocker_id,
             kind=submission.kind,
             urgency=submission.urgency,

@@ -67,6 +67,12 @@ class Blocker(SQLModel, table=True):
     business_id: UUID = Field(foreign_key="business.id", index=True)
     requesting_agent_role_id: UUID = Field(foreign_key="agent_role.id", index=True)
     task_id: UUID | None = Field(default=None, foreign_key="task.id", index=True)
+    kanban_card_id: UUID | None = Field(
+        default=None, foreign_key="kanban_card.id", index=True,
+    )
+    """The kanban card this blocker is attached to. Lets /app/kanban/{id}
+    surface 'what's blocking this card' and lets the founder respond from
+    the card detail page."""
 
     kind: BlockerKind = Field(index=True)
     urgency: BlockerUrgency = Field(default=BlockerUrgency.NORMAL, index=True)

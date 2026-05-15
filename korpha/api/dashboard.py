@@ -2204,10 +2204,30 @@ def build_dashboard_router(
                 artifacts_by_card.setdefault(
                     art.card_id, [],
                 ).append(art)
+
+            # Count open blockers per card so the board can surface
+            # 'this card is waiting on Mike' visually.
+            from korpha.blockers.model import Blocker, BlockerStatus
+            blocker_counts_by_card: dict = {}
+            for b in session.exec(
+                select(Blocker)
+                .where(Blocker.business_id == ctx["business"].id)
+                .where(Blocker.kanban_card_id.is_not(None))  # type: ignore[union-attr]
+                .where(Blocker.status.in_([  # type: ignore[union-attr]
+                    BlockerStatus.OPEN,
+                    BlockerStatus.TRIAGED,
+                    BlockerStatus.AWAITING_FOUNDER,
+                ]))
+            ).all():
+                blocker_counts_by_card[b.kanban_card_id] = (
+                    blocker_counts_by_card.get(b.kanban_card_id, 0) + 1
+                )
+
             ctx["snapshot"] = snapshot
             ctx["transitions"] = TRANSITIONS
             ctx["live_card_ids"] = live_card_ids
             ctx["artifacts_by_card"] = artifacts_by_card
+            ctx["blocker_counts_by_card"] = blocker_counts_by_card
             return templates.TemplateResponse(
                 request, "kanban.html", ctx,
             )
@@ -2311,6 +2331,245 @@ def build_dashboard_router(
             return RedirectResponse(
                 f"/app/kanban?moved={col.value}",
                 status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    @router.get("/kanban/{card_id}", response_class=HTMLResponse)
+    def kanban_card_detail(
+        card_id: str,
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse:
+        """Per-card view: title, body, acceptance criteria, attached
+        blockers (with respond form), artifacts, comments, history.
+        Mike's primary surface for unblocking work."""
+        try:
+            from uuid import UUID
+
+            from korpha.blockers.model import (
+                Blocker, BlockerStatus,
+            )
+            from korpha.kanban.artifacts import CardArtifact
+            from korpha.kanban.model import KanbanCard
+            from korpha.kanban.relations import KanbanCardComment
+
+            ctx = _ctx(session, active="kanban")
+            try:
+                cid = UUID(card_id)
+            except ValueError:
+                return RedirectResponse(
+                    "/app/kanban?error=Bad+card+id",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            card = session.get(KanbanCard, cid)
+            if card is None or card.business_id != ctx["business"].id:
+                return RedirectResponse(
+                    "/app/kanban?error=Card+not+found",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            # Open blockers attached to this card (newest first).
+            open_blockers = list(session.exec(
+                select(Blocker)
+                .where(Blocker.kanban_card_id == cid)
+                .where(Blocker.status.in_([  # type: ignore[union-attr]
+                    BlockerStatus.OPEN,
+                    BlockerStatus.TRIAGED,
+                    BlockerStatus.AWAITING_FOUNDER,
+                ]))
+                .order_by(Blocker.submitted_at.desc())  # type: ignore[union-attr]
+            ).all())
+            # Resolved blockers (for context — what's already answered).
+            resolved_blockers = list(session.exec(
+                select(Blocker)
+                .where(Blocker.kanban_card_id == cid)
+                .where(Blocker.status.in_([  # type: ignore[union-attr]
+                    BlockerStatus.RESOLVED,
+                    BlockerStatus.RESOLVED_BY_COS,
+                ]))
+                .order_by(Blocker.resolved_at.desc())  # type: ignore[union-attr]
+            ).all())
+
+            # Artifacts (REVIEW evidence, generated work, URLs).
+            artifacts = list(session.exec(
+                select(CardArtifact)
+                .where(CardArtifact.card_id == cid)
+                .order_by(CardArtifact.created_at.desc())  # type: ignore[union-attr]
+            ).all())
+
+            # Comments (Hermes-style audit trail).
+            comments = list(session.exec(
+                select(KanbanCardComment)
+                .where(KanbanCardComment.card_id == cid)
+                .order_by(KanbanCardComment.created_at.asc())  # type: ignore[union-attr]
+            ).all())
+
+            ctx["card"] = card
+            ctx["open_blockers"] = open_blockers
+            ctx["resolved_blockers"] = resolved_blockers
+            ctx["artifacts"] = artifacts
+            ctx["comments"] = comments
+            return templates.TemplateResponse(
+                request, "kanban_detail.html", ctx,
+            )
+        finally:
+            session.close()
+
+    @router.post(
+        "/kanban/{card_id}/blockers/{blocker_id}/respond",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    async def kanban_blocker_respond_post(
+        card_id: str,
+        blocker_id: str,
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+        response: Annotated[str, Form()] = "",
+    ) -> RedirectResponse:
+        """Founder submits the answer / decision / info that unblocks
+        a card. Marks the blocker resolved, drops a card comment with
+        the resolution, clears the auto_dispatch cooldown stamp, and
+        kicks off an immediate re-dispatch so the Director sees the
+        new context."""
+        try:
+            from uuid import UUID
+
+            from korpha.blockers.queue import BlockerQueue
+            from korpha.kanban import KanbanBoard
+            from korpha.kanban.model import KanbanCard, KanbanColumn
+            from korpha.kanban.relations import KanbanCardComment
+
+            ctx = _ctx(session, active="kanban")
+            try:
+                cid = UUID(card_id)
+                bid = UUID(blocker_id)
+            except ValueError:
+                return RedirectResponse(
+                    "/app/kanban?error=Bad+id",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            card = session.get(KanbanCard, cid)
+            if card is None or card.business_id != ctx["business"].id:
+                return RedirectResponse(
+                    "/app/kanban?error=Card+not+found",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            answer = (response or "").strip()
+            if not answer:
+                return RedirectResponse(
+                    f"/app/kanban/{cid}?error=Response+is+required",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            queue = BlockerQueue(session=session)
+            try:
+                resolved = queue.mark_resolved(
+                    bid,
+                    resolution=answer,
+                    resolved_by_founder_id=ctx["founder"].id,
+                )
+            except KeyError:
+                return RedirectResponse(
+                    f"/app/kanban/{cid}?error=Blocker+not+found",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            # Drop a comment on the card so the next Director attempt
+            # sees the resolution as inline context.
+            session.add(KanbanCardComment(
+                card_id=cid,
+                business_id=ctx["business"].id,
+                author_kind="founder",
+                author_founder_id=ctx["founder"].id,
+                body=f"[Founder unblocked: {resolved.title}] {answer}",
+            ))
+            session.commit()
+
+            # Clear the cooldown stamp + bounce IN_PROGRESS cards back
+            # to READY so the next "go" can re-fire from a clean state.
+            meta = dict(card.metadata_json or {})
+            stamp_dropped = meta.pop("auto_dispatch_at", None) is not None
+            if stamp_dropped:
+                card.metadata_json = meta
+                session.add(card)
+            if card.column == KanbanColumn.IN_PROGRESS:
+                board = KanbanBoard(session)
+                try:
+                    board.move(
+                        cid, KanbanColumn.READY,
+                        actor_founder_id=ctx["founder"].id,
+                        note=f"unblocked by founder: {resolved.title}",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+            session.commit()
+
+            return RedirectResponse(
+                f"/app/kanban/{cid}?unblocked=1",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    @router.get("/blockers", response_class=HTMLResponse)
+    def blockers_inbox(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse:
+        """Mike's inbox of every open blocker — grouped by card so he
+        can see 'these 5 cards need answers' at a glance. Each row
+        deep-links into the card detail view to respond."""
+        try:
+            from korpha.blockers.model import Blocker, BlockerStatus
+            from korpha.kanban.model import KanbanCard
+
+            ctx = _ctx(session, active="blockers")
+            biz_id = ctx["business"].id
+            open_rows = list(session.exec(
+                select(Blocker)
+                .where(Blocker.business_id == biz_id)
+                .where(Blocker.status.in_([  # type: ignore[union-attr]
+                    BlockerStatus.OPEN,
+                    BlockerStatus.TRIAGED,
+                    BlockerStatus.AWAITING_FOUNDER,
+                ]))
+                .where(Blocker.deduped_into_id.is_(None))  # type: ignore[union-attr]
+                .order_by(Blocker.submitted_at.desc())  # type: ignore[union-attr]
+            ).all())
+
+            # Lookup card titles in one query
+            card_ids = {b.kanban_card_id for b in open_rows if b.kanban_card_id}
+            cards_by_id: dict = {}
+            if card_ids:
+                for card in session.exec(
+                    select(KanbanCard).where(KanbanCard.id.in_(card_ids))  # type: ignore[union-attr]
+                ).all():
+                    cards_by_id[card.id] = card
+
+            grouped_attached: list = []
+            unattached: list = []
+            seen_card_ids: list = []
+            attached_by_card: dict = {}
+            for b in open_rows:
+                if b.kanban_card_id and b.kanban_card_id in cards_by_id:
+                    attached_by_card.setdefault(b.kanban_card_id, []).append(b)
+                    if b.kanban_card_id not in seen_card_ids:
+                        seen_card_ids.append(b.kanban_card_id)
+                else:
+                    unattached.append(b)
+            for cid in seen_card_ids:
+                grouped_attached.append({
+                    "card": cards_by_id[cid],
+                    "blockers": attached_by_card[cid],
+                })
+
+            ctx["grouped_attached"] = grouped_attached
+            ctx["unattached"] = unattached
+            ctx["total_open"] = len(open_rows)
+            return templates.TemplateResponse(
+                request, "blockers.html", ctx,
             )
         finally:
             session.close()

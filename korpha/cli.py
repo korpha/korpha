@@ -5189,6 +5189,317 @@ def kanban_dispatch_pending_cmd(
         typer.echo(_dim(f"  • {t}"))
 
 
+@kanban_app.command("show")
+def kanban_show_cmd(
+    card_id: Annotated[str, typer.Argument(
+        help="Card UUID (or unique prefix) to display.",
+    )],
+) -> None:
+    """Print full card detail: blockers, acceptance criteria,
+    artifacts, evidence, comments. Dashboard equivalent of
+    /app/kanban/{card_id}."""
+    _ensure_load_env()
+    from sqlmodel import Session, select as _select
+
+    from korpha.blockers.model import Blocker, BlockerStatus
+    from korpha.db._session import get_engine
+    from korpha.kanban.artifacts import CardArtifact
+    from korpha.kanban.relations import KanbanCardComment
+
+    engine = get_engine()
+    with Session(engine) as session:
+        business = _kanban_active_business(session)
+        card = _resolve_card_prefix(session, business.id, card_id)
+        typer.echo(_bold(f"\n{card.title}"))
+        typer.echo(_dim(
+            f"  {str(card.id)[:8]} · {card.column.value} · "
+            f"{card.priority.value}"
+            + (f" · owner={card.owner_role}" if card.owner_role else "")
+        ))
+        if card.body:
+            typer.echo("")
+            typer.echo(card.body)
+
+        open_blockers = list(session.exec(
+            _select(Blocker)
+            .where(Blocker.kanban_card_id == card.id)
+            .where(Blocker.status.in_([  # type: ignore[union-attr]
+                BlockerStatus.OPEN,
+                BlockerStatus.TRIAGED,
+                BlockerStatus.AWAITING_FOUNDER,
+            ]))
+            .order_by(Blocker.submitted_at.desc())  # type: ignore[union-attr]
+        ).all())
+        if open_blockers:
+            typer.echo(_red(
+                f"\nWAITING FOR YOU ({len(open_blockers)}):"
+            ))
+            for idx, b in enumerate(open_blockers, 1):
+                typer.echo(_bold(
+                    f"  [{idx}] {b.title}  ({b.kind.value}/{b.urgency.value})"
+                ))
+                if b.detail:
+                    typer.echo(f"      {b.detail}")
+                if b.options:
+                    typer.echo(_dim(
+                        f"      options: {', '.join(b.options)}"
+                    ))
+                typer.echo(_dim(
+                    f"      blocker_id: {b.id}"
+                ))
+            typer.echo(_dim(
+                "\n  respond with: aigenteur kanban respond "
+                f"{str(card.id)[:8]} <blocker_index> <your answer>"
+            ))
+
+        if card.acceptance_criteria:
+            typer.echo(_bold(
+                f"\nACCEPTANCE CRITERIA ({len(card.acceptance_criteria)}):"
+            ))
+            for c in card.acceptance_criteria:
+                typer.echo(f"  • {c}")
+
+        if card.review_evidence:
+            typer.echo(_green("\nREVIEW EVIDENCE:"))
+            for line in card.review_evidence.splitlines()[:30]:
+                typer.echo(f"  {line}")
+            if card.review_verdict:
+                typer.echo(_dim(
+                    f"  verdict: {card.review_verdict}"
+                ))
+
+        arts = list(session.exec(
+            _select(CardArtifact)
+            .where(CardArtifact.card_id == card.id)
+            .order_by(CardArtifact.created_at.desc())  # type: ignore[union-attr]
+        ).all())
+        if arts:
+            typer.echo(_bold(f"\nARTIFACTS ({len(arts)}):"))
+            for a in arts:
+                primary = " *" if a.is_primary else ""
+                typer.echo(
+                    f"  [{a.kind.value}]{primary} {a.label} — {a.location}"
+                )
+
+        resolved = list(session.exec(
+            _select(Blocker)
+            .where(Blocker.kanban_card_id == card.id)
+            .where(Blocker.status.in_([  # type: ignore[union-attr]
+                BlockerStatus.RESOLVED,
+                BlockerStatus.RESOLVED_BY_COS,
+            ]))
+            .order_by(Blocker.resolved_at.desc())  # type: ignore[union-attr]
+        ).all())
+        if resolved:
+            typer.echo(_dim(f"\nRESOLVED ({len(resolved)}):"))
+            for b in resolved:
+                typer.echo(_dim(f"  • {b.title} → {b.resolution or '(no answer)'}"))
+
+        comments = list(session.exec(
+            _select(KanbanCardComment)
+            .where(KanbanCardComment.card_id == card.id)
+            .order_by(KanbanCardComment.created_at.asc())  # type: ignore[union-attr]
+        ).all())
+        if comments:
+            typer.echo(_bold(f"\nCOMMENTS ({len(comments)}):"))
+            for cm in comments:
+                ts = cm.created_at.strftime("%Y-%m-%d %H:%M")
+                typer.echo(f"  [{cm.author_kind} {ts}] {cm.body}")
+
+
+@kanban_app.command("respond")
+def kanban_respond_cmd(
+    card_id: Annotated[str, typer.Argument(
+        help="Card UUID (or unique prefix) whose blocker you're answering.",
+    )],
+    blocker_ref: Annotated[str, typer.Argument(
+        help=(
+            "Either the blocker index from `kanban show` (1, 2, ...) "
+            "OR a UUID prefix matching the blocker_id."
+        ),
+    )],
+    answer: Annotated[list[str], typer.Argument(
+        help="Your answer / decision / info (everything after the index).",
+    )],
+) -> None:
+    """Resolve a blocker on a kanban card. Drops a comment with the
+    resolution and bounces the card to READY for the next 'go' to
+    re-fire. Dashboard equivalent of the form on /app/kanban/{id}."""
+    _ensure_load_env()
+    from sqlmodel import Session, select as _select
+
+    from korpha.blockers.model import Blocker, BlockerStatus
+    from korpha.blockers.queue import BlockerQueue
+    from korpha.db._session import get_engine
+    from korpha.identity.model import Founder
+    from korpha.kanban import KanbanBoard
+    from korpha.kanban.model import KanbanColumn
+    from korpha.kanban.relations import KanbanCardComment
+
+    text = " ".join(answer).strip()
+    if not text:
+        typer.echo(_red("Answer cannot be empty."))
+        raise typer.Exit(code=1)
+
+    engine = get_engine()
+    with Session(engine) as session:
+        business = _kanban_active_business(session)
+        card = _resolve_card_prefix(session, business.id, card_id)
+        open_blockers = list(session.exec(
+            _select(Blocker)
+            .where(Blocker.kanban_card_id == card.id)
+            .where(Blocker.status.in_([  # type: ignore[union-attr]
+                BlockerStatus.OPEN,
+                BlockerStatus.TRIAGED,
+                BlockerStatus.AWAITING_FOUNDER,
+            ]))
+            .order_by(Blocker.submitted_at.desc())  # type: ignore[union-attr]
+        ).all())
+        if not open_blockers:
+            typer.echo(_red(
+                f"No open blockers on card {str(card.id)[:8]}."
+            ))
+            raise typer.Exit(code=1)
+
+        # Resolve blocker_ref — index or UUID prefix.
+        target = None
+        ref = blocker_ref.strip()
+        if ref.isdigit():
+            idx = int(ref) - 1
+            if 0 <= idx < len(open_blockers):
+                target = open_blockers[idx]
+        if target is None:
+            matches = [
+                b for b in open_blockers if str(b.id).startswith(ref.lower())
+            ]
+            if len(matches) == 1:
+                target = matches[0]
+        if target is None:
+            typer.echo(_red(
+                f"Could not match {blocker_ref!r} to an open blocker. "
+                "Use the index from `kanban show` or a UUID prefix."
+            ))
+            raise typer.Exit(code=1)
+
+        founder = session.exec(_select(Founder)).first()
+        queue = BlockerQueue(session=session)
+        resolved = queue.mark_resolved(
+            target.id,
+            resolution=text,
+            resolved_by_founder_id=founder.id if founder else None,
+        )
+
+        # Drop a comment that the Director sees on the next attempt.
+        session.add(KanbanCardComment(
+            card_id=card.id,
+            business_id=business.id,
+            author_kind="founder",
+            author_founder_id=founder.id if founder else None,
+            body=f"[Founder unblocked: {resolved.title}] {text}",
+        ))
+
+        # Clear the cooldown + bounce IN_PROGRESS back to READY.
+        meta = dict(card.metadata_json or {})
+        if meta.pop("auto_dispatch_at", None) is not None:
+            card.metadata_json = meta
+            session.add(card)
+        if card.column == KanbanColumn.IN_PROGRESS:
+            board = KanbanBoard(session)
+            try:
+                board.move(
+                    card.id, KanbanColumn.READY,
+                    actor_founder_id=founder.id if founder else None,
+                    note=f"unblocked by founder: {resolved.title}",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        session.commit()
+
+        typer.echo(_green(
+            f"✓ Resolved blocker '{resolved.title}' on card "
+            f"{str(card.id)[:8]}."
+        ))
+        typer.echo(_dim(
+            "Type `go` in chat (or run `aigenteur kanban dispatch-pending`) "
+            "to re-fire."
+        ))
+
+
+blockers_app = typer.Typer(
+    name="blockers",
+    help=(
+        "Founder inbox: every blocker the team is stuck on. Mirrors "
+        "the dashboard at /app/blockers."
+    ),
+)
+app.add_typer(blockers_app)
+
+
+@blockers_app.command("list")
+def blockers_list_cmd() -> None:
+    """List open blockers grouped by card."""
+    _ensure_load_env()
+    from sqlmodel import Session, select as _select
+
+    from korpha.blockers.model import Blocker, BlockerStatus
+    from korpha.db._session import get_engine
+    from korpha.kanban.model import KanbanCard
+
+    engine = get_engine()
+    with Session(engine) as session:
+        business = _kanban_active_business(session)
+        open_rows = list(session.exec(
+            _select(Blocker)
+            .where(Blocker.business_id == business.id)
+            .where(Blocker.status.in_([  # type: ignore[union-attr]
+                BlockerStatus.OPEN,
+                BlockerStatus.TRIAGED,
+                BlockerStatus.AWAITING_FOUNDER,
+            ]))
+            .where(Blocker.deduped_into_id.is_(None))  # type: ignore[union-attr]
+            .order_by(Blocker.submitted_at.desc())  # type: ignore[union-attr]
+        ).all())
+
+        if not open_rows:
+            typer.echo(_dim("No open blockers. 🎉"))
+            return
+
+        # Group by card.
+        card_ids = {b.kanban_card_id for b in open_rows if b.kanban_card_id}
+        cards_by_id: dict = {}
+        if card_ids:
+            for card in session.exec(
+                _select(KanbanCard).where(KanbanCard.id.in_(card_ids))  # type: ignore[union-attr]
+            ).all():
+                cards_by_id[card.id] = card
+
+        by_card: dict = {}
+        unattached: list = []
+        for b in open_rows:
+            if b.kanban_card_id and b.kanban_card_id in cards_by_id:
+                by_card.setdefault(b.kanban_card_id, []).append(b)
+            else:
+                unattached.append(b)
+
+        typer.echo(_bold(f"\n{len(open_rows)} open blocker(s)\n"))
+        for cid, bs in by_card.items():
+            card = cards_by_id[cid]
+            typer.echo(_bold(f"{str(card.id)[:8]}  {card.title}"))
+            typer.echo(_dim(
+                f"  column={card.column.value}"
+                + (f" owner={card.owner_role}" if card.owner_role else "")
+            ))
+            for b in bs:
+                typer.echo(
+                    f"  • [{b.kind.value}/{b.urgency.value}] {b.title}"
+                )
+            typer.echo("")
+        if unattached:
+            typer.echo(_dim(f"\nUnattached ({len(unattached)}):"))
+            for b in unattached:
+                typer.echo(_dim(f"  • {b.title} ({b.kind.value})"))
+
+
 secret_app = typer.Typer(
     name="secret",
     help=(
