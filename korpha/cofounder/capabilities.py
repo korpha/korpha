@@ -92,14 +92,18 @@ def _video_capability_line() -> str:
 
 
 def _search_capability_line() -> str:
-    """Web search / scrape via web.* skills, if configured."""
-    # web search providers are gated behind env vars; just point at the
-    # umbrella skill so the agent calls it rather than asks "should we
-    # use Google or Brave or DDG?"
-    return (
-        "- Web search: web.search (uses configured provider — Brave / "
-        "DDG / Exa / Tavily). Call directly when you need fresh info."
-    )
+    """Intentionally not surfaced to Directors today.
+
+    Director.attempt() generates JSON text — it does NOT invoke skills.
+    Telling Directors "you have web search" caused them to emit
+    ``<search>...</search>`` Responses-API tool-call tags that go
+    nowhere through the current subprocess transport. Until we port
+    the codex Responses API path (follow-up PR), the Director
+    pretends the team has done research and drafts from training
+    data. Skill invocation happens in the CEO router layer, not
+    here.
+    """
+    return ""
 
 
 def build_capabilities_preamble() -> str:
