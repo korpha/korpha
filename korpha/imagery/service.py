@@ -167,12 +167,22 @@ def load_image_providers(path: Path | None = None) -> list[ImageGenProvider]:
             # surface via the wizard's --validate path later.
             continue
 
-    if not out and shutil.which("codex") is not None:
-        # Implicit default: a logged-in Codex CLI is the strongest
-        # image-gen signal we can detect. Pre-wire gpt-image-2 so the
-        # team has something to call without making the founder edit
-        # providers.yaml.
-        out.append(CodexCLIImageProvider())
+    if not out:
+        # Implicit default — prefer the Responses API path when Codex
+        # OAuth is wired (faster, native tool, supports quality tiers).
+        # Fall back to the subprocess provider only when ``codex login``
+        # hasn't run yet but the binary is on PATH.
+        try:
+            from korpha.imagery.providers.codex_responses_image import (
+                CodexResponsesImageProvider,
+            )
+            from korpha.inference.codex_oauth import is_configured
+            if is_configured():
+                out.append(CodexResponsesImageProvider())
+        except Exception:  # noqa: BLE001
+            pass
+        if not out and shutil.which("codex") is not None:
+            out.append(CodexCLIImageProvider())
 
     return out
 
