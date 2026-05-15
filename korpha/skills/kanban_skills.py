@@ -975,6 +975,337 @@ class KanbanHeartbeatSkill(Skill):
         )
 
 
+_AUTO_SPECIFY_SYSTEM = (
+    "You are the Kanban triage specifier for Korpha. A card just "
+    "landed with only a title (typical when "
+    "business.bootstrap_from_brief seeded a backlog). Your job is "
+    "to turn the rough title into a concrete spec a Line VP can "
+    "pick up and execute without further clarification.\n\n"
+    "Output a single JSON object with exactly two keys:\n\n"
+    "  {\n"
+    '    "title": "<tightened title, <= 80 chars, imperative voice>",\n'
+    '    "body":  "<multi-line spec, see structure below>",\n'
+    '    "acceptance_criteria": ["<criterion 1>", "<criterion 2>", ...]\n'
+    "  }\n\n"
+    "The body MUST include these sections, each as a bold markdown "
+    "heading, in this order:\n\n"
+    "  **Goal** — one sentence, founder-facing outcome.\n"
+    "  **Approach** — 2-5 bullets on how the Line VP should tackle it.\n"
+    "  **Out of scope** — short list of things NOT to do "
+    "(omit if nothing obvious; never invent scope creep).\n\n"
+    "Rules:\n"
+    "  - Keep the tightened title close to the original — don't "
+    "invent a different project.\n"
+    "  - Acceptance criteria must be CONCRETE + VERIFIABLE "
+    "(e.g. 'Listing live on Etsy with 5 keyword-rich tags', not "
+    "'Etsy listing is good').\n"
+    "  - 2-5 acceptance criteria. More is noise; fewer is sloppy.\n"
+    "  - No preamble, no closing remarks, no code fences around "
+    "the JSON. Output only the JSON object."
+)
+
+
+class KanbanAutoSpecifySkill(Skill):
+    """Auto-flesh-out a title-only card via auxiliary LLM.
+
+    Port of Hermes's ``hermes_cli/kanban_specify.py``. The skill
+    takes a card in BACKLOG (the equivalent of Hermes's triage) and
+    runs a single WORKHORSE-tier LLM call to produce:
+      - Tightened title (optional)
+      - Body with Goal / Approach / Out-of-scope sections
+      - 2-5 concrete acceptance criteria
+
+    Then moves the card BACKLOG → SPECIFY with the new fields set.
+    Idempotent: cards that already have a body + criteria are
+    returned unchanged with skipped=True.
+    """
+
+    spec = SkillSpec(
+        name="kanban.auto_specify",
+        description=(
+            "Auto-generate a body + acceptance criteria for a "
+            "title-only card via auxiliary LLM. Use after "
+            "business.bootstrap_from_brief seeds raw cards. The "
+            "Line VP can then pick up a complete spec instead of "
+            "guessing what 'Set up Printify account' means. Args: "
+            "card_id (UUID or 8-char prefix)."
+        ),
+        parameters={
+            "card_id": "Full UUID or 8-char hex prefix.",
+        },
+        default_tier=InferenceTier.WORKHORSE,
+        provenance=SkillProvenance.BUILTIN,
+    )
+
+    async def run(
+        self, *, ctx: SkillContext, args: dict[str, Any],
+    ) -> SkillResult:
+        from korpha.inference.cost_tracker import CompletionRequest
+        from korpha.inference.types import Message, Role
+        from korpha.kanban.model import KanbanColumn
+
+        cid_ref = args.get("card_id")
+        if not cid_ref:
+            raise SkillError("kanban.auto_specify: card_id required")
+        card = _resolve_card(ctx.session, cid_ref, ctx.business.id)
+        if card is None:
+            raise SkillError(
+                f"kanban.auto_specify: card {cid_ref!r} not found"
+            )
+        if (
+            card.body
+            and card.body.strip()
+            and len(card.acceptance_criteria or []) >= 2
+        ):
+            return SkillResult(
+                skill_name=self.spec.name,
+                summary=(
+                    f"card {str(card.id)[:8]} already specified — skipped"
+                ),
+                payload={
+                    "card_id": str(card.id),
+                    "skipped": "already_specified",
+                },
+                cost_usd=0.0,
+            )
+
+        user_msg = (
+            f"Card id: {str(card.id)[:8]}\n"
+            f"Current title: {card.title}\n"
+            f"Current body: {card.body or '(empty)'}\n"
+            f"Owner role: {card.owner_role or '(unassigned)'}\n"
+        )
+        # Pull a tiny bit of context about the business unit so the
+        # spec doesn't drift away from the line's actual product.
+        try:
+            from korpha.business_units.model import BusinessUnit
+            if card.business_unit_id:
+                unit = ctx.session.get(BusinessUnit, card.business_unit_id)
+                if unit is not None:
+                    user_msg += (
+                        f"Business unit: {unit.name} "
+                        f"(kind={getattr(unit.kind, 'value', unit.kind)})\n"
+                    )
+        except Exception:  # noqa: BLE001
+            pass
+
+        request = CompletionRequest(
+            messages=[
+                Message(role=Role.SYSTEM, content=_AUTO_SPECIFY_SYSTEM),
+                Message(role=Role.USER, content=user_msg),
+            ],
+            tier=self.spec.default_tier,
+            session_key=f"kanban-specify-{card.id}",
+            max_tokens=8_000,
+            timeout_seconds=120,
+        )
+        response = await ctx.cost_tracker.complete(
+            request,
+            session=ctx.session,
+            business_id=ctx.business.id,
+            agent_role_id=ctx.invoking_agent_role_id,
+        )
+        raw = (response.content or response.reasoning or "").strip()
+        if not raw:
+            raise SkillError(
+                "kanban.auto_specify: specifier LLM returned empty"
+            )
+
+        # Lenient JSON parse — tolerates ```json fences.
+        import json as _json
+        import re as _re
+        body_text = ""
+        new_title: str | None = None
+        criteria: list[str] = []
+        stripped = _re.sub(
+            r"^\s*```(?:json)?\s*|\s*```\s*$", "", raw.strip(),
+            flags=_re.IGNORECASE,
+        )
+        first = stripped.find("{")
+        last = stripped.rfind("}")
+        parsed: dict | None = None
+        if 0 <= first < last:
+            try:
+                parsed = _json.loads(stripped[first:last + 1])
+            except (ValueError, _json.JSONDecodeError):
+                parsed = None
+        if parsed is not None:
+            new_title = (parsed.get("title") or "").strip() or None
+            body_text = (parsed.get("body") or "").strip()
+            ac = parsed.get("acceptance_criteria") or []
+            if isinstance(ac, list):
+                criteria = [str(c).strip() for c in ac if str(c).strip()]
+        else:
+            # Fall back to the whole response as the body, title unchanged.
+            body_text = raw
+            criteria = [
+                "Deliverable matches the card title and the "
+                "spec body above.",
+            ]
+
+        if not body_text:
+            raise SkillError(
+                "kanban.auto_specify: specifier produced empty body"
+            )
+
+        # Apply: only update title if materially different.
+        if new_title and new_title.lower() != card.title.lower():
+            card.title = new_title[:200]
+        card.body = body_text
+        if criteria:
+            card.acceptance_criteria = criteria
+        if card.column == KanbanColumn.BACKLOG:
+            card.column = KanbanColumn.SPECIFY
+            from datetime import datetime, timezone
+            card.moved_at = datetime.now(timezone.utc)
+        ctx.session.add(card)
+        ctx.session.commit()
+        ctx.session.refresh(card)
+
+        return SkillResult(
+            skill_name=self.spec.name,
+            summary=(
+                f"specified card {str(card.id)[:8]} "
+                f"({len(criteria)} criteria)"
+            ),
+            payload={
+                "card_id": str(card.id),
+                "title": card.title,
+                "body_chars": len(card.body or ""),
+                "acceptance_criteria_count": len(criteria),
+                "column": (
+                    card.column.value if hasattr(card.column, "value")
+                    else str(card.column)
+                ),
+            },
+            cost_usd=float(response.cost_usd or 0.0),
+        )
+
+
+class KanbanLinkCardsSkill(Skill):
+    """Declare a parent → child dependency between two cards.
+
+    Mirrors Hermes's ``link_tasks``. After linking, the child can't
+    leave READY until the parent reaches DONE (or REVIEW with
+    verdict=accepted)."""
+
+    spec = SkillSpec(
+        name="kanban.link_cards",
+        description=(
+            "Declare that one card must wait for another to finish. "
+            "Use when 'publish book' depends on 'design cover'. "
+            "Args: parent_card_id, child_card_id, note (optional)."
+        ),
+        parameters={
+            "parent_card_id": "The card that must finish first.",
+            "child_card_id": "The card that's blocked until parent is done.",
+            "note": "Optional human reason for this dependency.",
+        },
+        default_tier=InferenceTier.WORKHORSE,
+        provenance=SkillProvenance.BUILTIN,
+    )
+
+    async def run(
+        self, *, ctx: SkillContext, args: dict[str, Any],
+    ) -> SkillResult:
+        from korpha.kanban.relations import link_cards
+
+        parent = _resolve_card(
+            ctx.session, args.get("parent_card_id"), ctx.business.id,
+        )
+        child = _resolve_card(
+            ctx.session, args.get("child_card_id"), ctx.business.id,
+        )
+        if parent is None or child is None:
+            raise SkillError(
+                "kanban.link_cards: both parent and child must exist"
+            )
+        if parent.id == child.id:
+            raise SkillError(
+                "kanban.link_cards: can't link a card to itself"
+            )
+        link = link_cards(
+            ctx.session,
+            parent_id=parent.id,
+            child_id=child.id,
+            business_id=ctx.business.id,
+            note=str(args.get("note") or "").strip() or None,
+        )
+        return SkillResult(
+            skill_name=self.spec.name,
+            summary=(
+                f"linked {str(parent.id)[:8]} → {str(child.id)[:8]}"
+            ),
+            payload={
+                "link_id": str(link.id),
+                "parent_id": str(parent.id),
+                "child_id": str(child.id),
+                "note": link.note,
+            },
+            cost_usd=0.0,
+        )
+
+
+class KanbanAddCommentSkill(Skill):
+    """Append a comment to a card's discussion thread.
+
+    Mirrors Hermes's ``add_comment``. Agents leave breadcrumbs;
+    founders leave decisions; system writes dispatcher notes."""
+
+    spec = SkillSpec(
+        name="kanban.add_comment",
+        description=(
+            "Append a comment to a card's discussion thread. Use "
+            "for breadcrumbs ('found Etsy requires JPEG, retrying') "
+            "or decisions ('approved pivot to seasonal'). Args: "
+            "card_id, body."
+        ),
+        parameters={
+            "card_id": "Card to comment on.",
+            "body": "Comment text. Markdown OK.",
+        },
+        default_tier=InferenceTier.WORKHORSE,
+        provenance=SkillProvenance.BUILTIN,
+    )
+
+    async def run(
+        self, *, ctx: SkillContext, args: dict[str, Any],
+    ) -> SkillResult:
+        from korpha.kanban.relations import add_comment
+
+        card = _resolve_card(
+            ctx.session, args.get("card_id"), ctx.business.id,
+        )
+        if card is None:
+            raise SkillError(
+                f"kanban.add_comment: card "
+                f"{args.get('card_id')!r} not found"
+            )
+        body = str(args.get("body") or "").strip()
+        if not body:
+            raise SkillError("kanban.add_comment: body required")
+        c = add_comment(
+            ctx.session,
+            card_id=card.id,
+            business_id=ctx.business.id,
+            body=body,
+            author_kind="agent",
+            author_agent_role_id=ctx.invoking_agent_role_id,
+        )
+        return SkillResult(
+            skill_name=self.spec.name,
+            summary=(
+                f"commented on {str(card.id)[:8]}: {body[:50]}..."
+            ),
+            payload={
+                "comment_id": str(c.id),
+                "card_id": str(card.id),
+                "body_chars": len(body),
+            },
+            cost_usd=0.0,
+        )
+
+
 register(KanbanCreateCardSkill())
 register(KanbanSpecifyCardSkill())
 register(KanbanMoveCardSkill())
@@ -984,6 +1315,9 @@ register(KanbanListBoardSkill())
 register(KanbanFireSprintSkill())
 register(KanbanReassignCardsSkill())
 register(KanbanHeartbeatSkill())
+register(KanbanAutoSpecifySkill())
+register(KanbanLinkCardsSkill())
+register(KanbanAddCommentSkill())
 
 
 __all__ = [
