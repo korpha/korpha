@@ -87,6 +87,10 @@ from korpha.kanban.refs import (
     KanbanCardRef,
     RefRelation,
 )
+from korpha.kanban.relations import (
+    KanbanCardComment,
+    KanbanCardLink,
+)
 from korpha.kanban.model import (
     CardPriority,
     KanbanCard,
