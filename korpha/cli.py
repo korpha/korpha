@@ -1472,10 +1472,21 @@ def approve(
     approval_id: Annotated[str, typer.Argument(help="UUID of the pending approval.")],
     note: Annotated[
         str | None,
-        typer.Option(help="Optional modification note (treated as approve-with-edits)."),
+        typer.Option(
+            "--note", "--comment",
+            help="Founder comment attached to the approval (visible at /app/approvals).",
+        ),
     ] = None,
+    with_edits: Annotated[
+        bool,
+        typer.Option(
+            "--with-edits",
+            help="Treat as APPROVE_WITH_EDITS — agent should re-draft based on the note.",
+        ),
+    ] = False,
 ) -> None:
-    """Approve a pending Approval. With --note, treated as approve-with-edits."""
+    """Approve a pending Approval. The optional --note is attached as
+    the founder's reasoning and surfaces back on the dashboard."""
     from uuid import UUID
 
     from korpha.approvals.gate import Decision
@@ -1490,7 +1501,7 @@ def approve(
         founder, _business = _ensure_founder_and_business(session)
         gate = ApprovalGate(session)
         decision_kind = (
-            Decision.APPROVE_WITH_EDITS if note else Decision.APPROVE
+            Decision.APPROVE_WITH_EDITS if with_edits else Decision.APPROVE
         )
         result = gate.decide(
             approval_id=UUID(approval_id),
@@ -1522,8 +1533,15 @@ def approve(
 @app.command()
 def reject(
     approval_id: Annotated[str, typer.Argument(help="UUID of the pending approval.")],
+    note: Annotated[
+        str | None,
+        typer.Option(
+            "--note", "--comment",
+            help="Founder comment attached to the rejection (visible at /app/approvals).",
+        ),
+    ] = None,
 ) -> None:
-    """Reject a pending Approval."""
+    """Reject a pending Approval. The optional --note explains why."""
     from uuid import UUID
 
     from korpha.approvals.gate import Decision
@@ -1541,6 +1559,7 @@ def reject(
             approval_id=UUID(approval_id),
             decision=Decision.REJECT,
             decided_by_founder_id=founder.id,
+            modification_note=note,
         )
         counter = result.envelope.consecutive_approvals
 

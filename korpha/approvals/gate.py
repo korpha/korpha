@@ -166,6 +166,11 @@ class ApprovalGate:
         now = utcnow()
         approval.decided_at = now
         approval.decided_by = str(decided_by_founder_id)
+        # Persist the founder's note on every decision type, not just
+        # APPROVE_WITH_EDITS. The dashboard surfaces it as 'Your note:'
+        # so the team can see *why* the founder approved / rejected.
+        if modification_note is not None:
+            approval.modification_note = modification_note
 
         promotion_offered = False
         if decision == Decision.APPROVE:
@@ -179,7 +184,6 @@ class ApprovalGate:
             event = "approval.approved"
         elif decision == Decision.APPROVE_WITH_EDITS:
             approval.status = ApprovalStatus.MODIFIED
-            approval.modification_note = modification_note
             envelope.consecutive_approvals = 0
             event = "approval.modified"
         else:  # REJECT

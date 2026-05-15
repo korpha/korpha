@@ -9,6 +9,22 @@
     <a href="/app/approvals?tab=all" class="approvals-tab {{ 'is-active' if tab == 'all' }}">All</a>
   </div>
 
+  {% if request.query_params.get('approved') %}
+    <div class="approval-flash">
+      ✓ Approved <code>{{ request.query_params.get('approved') }}</code>.
+    </div>
+  {% endif %}
+  {% if request.query_params.get('rejected') %}
+    <div class="approval-flash approval-flash-warn">
+      ✗ Rejected <code>{{ request.query_params.get('rejected') }}</code>.
+    </div>
+  {% endif %}
+  {% if request.query_params.get('error') %}
+    <div class="approval-flash approval-flash-warn">
+      {{ request.query_params.get('error') }}
+    </div>
+  {% endif %}
+
   {% if approvals %}
     <div class="approval-list">
       {% for a in approvals %}
@@ -57,7 +73,23 @@
               {% elif a.kind_tag == 'outreach drafts' %}
                 <a href="/app/approvals/{{ a.id }}/preview" target="_blank" class="approval-preview-link">Read all drafts →</a>
               {% endif %}
-              <span class="approval-hint">Approve / reject from the chat or via <code>korpha approve {{ a.id }}</code></span>
+            </div>
+            <form method="post" class="approval-decide-form" data-approval-id="{{ a.id }}">
+              <textarea name="comment" rows="2"
+                        placeholder="Optional comment / instructions for the team…"
+                        class="approval-comment"></textarea>
+              <div class="approval-decide-row">
+                <button type="submit" formaction="/app/approvals/{{ a.id }}/approve"
+                        class="approval-btn approval-btn-approve">✓ Approve</button>
+                <button type="submit" formaction="/app/approvals/{{ a.id }}/reject"
+                        class="approval-btn approval-btn-reject">✗ Reject</button>
+                <span class="approval-hint">or <code>korpha approve {{ a.id|string|truncate(8, true, '') }}</code></span>
+              </div>
+            </form>
+          {% elif a.modification_note %}
+            <div class="approval-note">
+              <span class="approval-note-label">Your note:</span>
+              <span class="approval-note-text">{{ a.modification_note }}</span>
             </div>
           {% endif %}
         </div>
@@ -109,5 +141,86 @@
 .approval-hint code { font-family: ui-monospace, Menlo, monospace; padding: 1px 6px; background: var(--bg); border-radius: 4px; color: var(--text); }
 .approval-preview-link { color: var(--accent, #e7c14b); font-size: 12.5px; text-decoration: none; font-weight: 500; }
 .approval-preview-link:hover { text-decoration: underline; }
+
+.approval-flash {
+  background: var(--bg-elev);
+  border: 1px solid var(--accent, #e7c14b);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.approval-flash-warn { border-color: #c25; }
+.approval-flash code {
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+}
+
+.approval-decide-form {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.approval-comment {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 44px;
+}
+.approval-decide-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.approval-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--bg-elev);
+  color: var(--text);
+}
+.approval-btn-approve {
+  background: rgba(40, 180, 99, 0.18);
+  border-color: rgba(40, 180, 99, 0.45);
+  color: #28b463;
+}
+.approval-btn-approve:hover { background: rgba(40, 180, 99, 0.28); }
+.approval-btn-reject {
+  background: rgba(204, 51, 102, 0.12);
+  border-color: rgba(204, 51, 102, 0.35);
+  color: #c25;
+}
+.approval-btn-reject:hover { background: rgba(204, 51, 102, 0.22); }
+
+.approval-note {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border-left: 2px solid var(--accent, #e7c14b);
+  font-size: 12.5px;
+}
+.approval-note-label {
+  color: var(--text-faint);
+  margin-right: 6px;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.approval-note-text { color: var(--text); white-space: pre-wrap; }
 </style>
 {% endblock %}
