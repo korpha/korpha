@@ -202,30 +202,132 @@ async def _ask_codex(
 async def _ask_claude(
     *, question: str, context: str,
 ) -> tuple[str, str, int, int]:
-    """Hit Claude via Anthropic API. Requires ``ANTHROPIC_API_KEY``."""
+    """Hit Claude via subscription (Claude Code CLI) or API key.
+
+    **Subscription path (preferred when ``claude`` CLI is logged in)** —
+    subprocess ``claude --print --output-format=json`` reads the OAuth
+    state Claude Code already manages. $0 marginal for Pro/Max users.
+
+    **API path (fallback when no CLI but ``ANTHROPIC_API_KEY`` set)** —
+    direct POST to Anthropic Messages API. For users without a Pro
+    subscription. Pay-per-token billing.
+
+    The Agent SDK (``pip install claude-agent-sdk``) is NOT used —
+    Anthropic blocks subscription auth on the SDK; only API keys work.
+    The CLI subprocess path is the only viable subscription route.
+    """
+    import os
+    import shutil
+
+    cli_path = shutil.which("claude")
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+
+    prompt = question if not context else (
+        f"Context:\n{context}\n\nQuestion:\n{question}"
+    )
+    system_prompt = (
+        "You are a senior consultant brought in for hard problems "
+        "the main team can't fully resolve. Give a concrete answer "
+        "with reasoning. Be direct, concise, and committal."
+    )
+
+    # Prefer subscription (CLI) when available — $0 marginal for the
+    # founder. The API path is the fallback for users without a Pro
+    # plan but with API access.
+    if cli_path:
+        return await _ask_claude_cli(prompt, system_prompt)
+    if api_key:
+        return await _ask_claude_api(prompt, system_prompt, api_key)
+    raise SkillError(
+        "consultant.ask provider=claude needs either the `claude` CLI "
+        "logged in (run `claude` once) or ANTHROPIC_API_KEY set"
+    )
+
+
+async def _ask_claude_cli(
+    prompt: str, system: str,
+) -> tuple[str, str, int, int]:
+    """Subprocess the Claude Code CLI. Uses the OAuth `claude login`
+    set up, so the founder's Pro / Max subscription pays."""
+    import asyncio
+    import json
+    import os
+
+    model = os.environ.get(
+        "ANTHROPIC_CONSULTANT_MODEL", "sonnet",
+    ).strip()
+    argv = [
+        "claude",
+        "--print",
+        "--output-format=json",
+        "--model", model,
+        "--append-system-prompt", system,
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *argv,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(prompt.encode("utf-8")),
+            timeout=120.0,
+        )
+    except TimeoutError as exc:
+        proc.kill()
+        raise SkillError("claude CLI timed out after 120s") from exc
+
+    if proc.returncode != 0:
+        raise SkillError(
+            f"claude CLI exited {proc.returncode}: "
+            + stderr.decode("utf-8", errors="replace")[:300]
+        )
+    body = stdout.decode("utf-8", errors="replace").strip()
+    if not body:
+        raise SkillError(
+            "claude CLI returned empty stdout: "
+            + stderr.decode("utf-8", errors="replace")[:300]
+        )
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise SkillError(
+            f"claude CLI returned non-JSON: {body[:300]}"
+        ) from exc
+    if payload.get("is_error"):
+        raise SkillError(
+            f"claude error: {payload.get('result') or 'unknown'}"
+        )
+    text = str(payload.get("result") or "").strip()
+    if not text:
+        raise SkillError("claude CLI returned empty result field")
+    usage = payload.get("usage") or {}
+    in_tok = (
+        int(usage.get("input_tokens", 0))
+        + int(usage.get("cache_creation_input_tokens", 0))
+        + int(usage.get("cache_read_input_tokens", 0))
+    )
+    out_tok = int(usage.get("output_tokens") or 0)
+    return text, f"claude-{model}", in_tok, out_tok
+
+
+async def _ask_claude_api(
+    prompt: str, system: str, key: str,
+) -> tuple[str, str, int, int]:
+    """Direct Anthropic Messages API — only for users without a CLI
+    install but with a paid API key."""
     import os
 
     import httpx
 
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        raise SkillError(
-            "consultant.ask provider=claude requires ANTHROPIC_API_KEY"
-        )
     model = os.environ.get(
         "ANTHROPIC_CONSULTANT_MODEL", "claude-sonnet-4-5",
     ).strip()
-    prompt = question if not context else (
-        f"Context:\n{context}\n\nQuestion:\n{question}"
-    )
     payload = {
         "model": model,
         "max_tokens": 4096,
-        "system": (
-            "You are a senior consultant brought in for hard problems "
-            "the main team can't fully resolve. Give a concrete answer "
-            "with reasoning. Be direct, concise, and committal."
-        ),
+        "system": system,
         "messages": [{"role": "user", "content": prompt}],
     }
     try:
@@ -243,7 +345,7 @@ async def _ask_claude(
             data = resp.json()
     except httpx.HTTPError as exc:
         raise SkillError(
-            f"consultant.ask claude transport: {type(exc).__name__}: {exc}"
+            f"claude API transport: {type(exc).__name__}: {exc}"
         ) from exc
     answer = "".join(
         b.get("text", "") for b in (data.get("content") or [])
