@@ -170,10 +170,16 @@ async def dispatch_pending_cards(
             "tasks": [], "reason": "no_in_progress_cards",
         }
 
+    # When card_ids is explicit (the inline trigger path), the
+    # caller already filtered to cards the founder just re-fired.
+    # The cooldown belongs to the cron path that scans broadly;
+    # don't let it silently swallow an explicit retry.
+    bypass_cooldown = bool(card_ids) or force
+
     eligible = []
     skipped: list[dict[str, str]] = []
     for c in rows:
-        if force or _card_dispatch_eligible(
+        if bypass_cooldown or _card_dispatch_eligible(
             c, stale_after_minutes=stale_after_minutes,
         ):
             eligible.append(c)

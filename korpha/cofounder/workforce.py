@@ -605,6 +605,17 @@ def _kanban_finalize(
                     + (attempt.summary or "")[:200]
                 ),
             )
+            # Clear the auto_dispatch stamp so the next "go" turn
+            # actually re-fires this card. Without this, the 30-min
+            # cooldown silently blocks the founder's explicit retry.
+            from korpha.kanban.model import KanbanCard
+            card_row = session.get(KanbanCard, handle.card_id)
+            if card_row is not None:
+                meta = dict(card_row.metadata_json or {})
+                if meta.pop("auto_dispatch_at", None) is not None:
+                    card_row.metadata_json = meta
+                    session.add(card_row)
+                    session.commit()
     except Exception:  # noqa: BLE001
         import logging
         logging.getLogger(__name__).warning(
