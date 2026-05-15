@@ -64,6 +64,61 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ---- Context engine (CEO chat history shaping) ----
+    # The original 20-message hardcoded cap was way too small for
+    # 1M-context models. Hermes ships a token-budget compressor with
+    # summary fallback; Korpha mirrors the same shape and exposes
+    # the knobs here.
+    context_engine: str = Field(
+        default="compressor",
+        description=(
+            "Which context engine shapes CEO chat history before each "
+            "LLM call. 'compressor' = Hermes-style head+tail+summary "
+            "(default). 'passthrough' = no compaction (debugging)."
+        ),
+    )
+    context_threshold_percent: float = Field(
+        default=0.80,
+        description=(
+            "Compaction fires when estimated prompt tokens >= "
+            "context_length * this. 0.80 leaves 20% headroom for "
+            "the model's response and system overhead."
+        ),
+    )
+    context_protect_first_n: int = Field(
+        default=3,
+        description=(
+            "How many head messages always stay verbatim. The "
+            "founder's original framing should fit in this window."
+        ),
+    )
+    context_protect_last_n: int = Field(
+        default=20,
+        description=(
+            "Minimum number of recent messages kept verbatim. Real "
+            "tail size scales with the token budget; this is a floor."
+        ),
+    )
+    context_summary_target_ratio: float = Field(
+        default=0.20,
+        description=(
+            "Tail token budget as a fraction of threshold. 0.20 = "
+            "protected tail can fill up to ~20% of threshold tokens."
+        ),
+    )
+    context_summary_tokens_ceiling: int = Field(
+        default=12_000,
+        description="Hard cap on the summary's token budget.",
+    )
+    context_history_db_limit: int = Field(
+        default=500,
+        description=(
+            "Max number of message rows to load from the DB per "
+            "turn. Safety cap so a runaway conversation doesn't OOM "
+            "the loader. Set high — engine handles real trimming."
+        ),
+    )
+
     @model_validator(mode="after")
     def _derive_db_url(self) -> "Settings":
         if not self.db_url:
