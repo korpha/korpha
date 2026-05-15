@@ -173,9 +173,22 @@ def _parse_entry(
     if preset == "custom":
         provider = _build_custom_provider(entry, source=source, index=index)
     elif preset == "codex-cli":
-        # Subscription auth via Codex CLI — no api_key required.
-        # Mike runs `codex login` and the CLI's OAuth handles everything.
-        provider = CodexCLIProvider()
+        # Subscription auth via Codex OAuth (~/.codex/auth.json).
+        # By default we use the Responses API directly (faster, native
+        # tools). The legacy subprocess path remains as a fallback for
+        # users with codex >= 0.x but a quirky environment — opt in by
+        # setting ``transport: subprocess`` on the providers.yaml entry.
+        transport = str(entry.get("transport") or "responses").strip().lower()
+        if transport == "subprocess":
+            provider = CodexCLIProvider()
+        else:
+            try:
+                from korpha.inference.providers.codex_responses import (
+                    CodexResponsesProvider,
+                )
+                provider = CodexResponsesProvider()
+            except ImportError:
+                provider = CodexCLIProvider()
     elif preset == "claude-code-cli":
         # Same shape for Claude Code: auth lives in keychain/OAuth set
         # up by `claude` on first run. ChatGPT subscription → codex-cli;
