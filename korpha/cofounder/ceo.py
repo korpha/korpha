@@ -566,16 +566,24 @@ _CARD_ID_PATTERN = re.compile(
 
 def _detect_fire_sprint(
     msg: str, history: list["Message"] | None,
+    *,
+    business_id: "UUID | None" = None,
+    session: "Any | None" = None,
 ) -> list[str] | None:
-    """If the founder said a short approval phrase AND the most
-    recent agent message in history cites kanban card ID prefixes,
-    return the cited IDs. Else None.
+    """If the founder said a short approval phrase, return card IDs
+    to fire. Tries three strategies in order:
 
-    Used by ``handle_stream()`` to deterministically force-route
-    'go' to ``kanban.fire_sprint`` instead of relying on the router
-    LLM (which has been observed to either hallucinate 'assigned'
-    or hedge 'tell me again' for this case).
-    """
+    1. Walk back through the last 5 assistant messages, pulling
+       8-char hex prefixes (the format the CEO writes in chat).
+       Stops at the first message that has IDs.
+    2. If no IDs found in chat and a live DB session is provided,
+       fall back to "every card currently in READY or
+       IN_PROGRESS" — the founder's intent was clear ("go"), it's
+       just that the prior synth message didn't use IDs.
+    3. Return None if neither works.
+
+    Returns None on non-approval messages so the router LLM stays
+    in control of unrelated turns."""
     if not msg:
         return None
     low = msg.strip().lower().rstrip(".!?")
@@ -584,34 +592,69 @@ def _detect_fire_sprint(
         for p in _FIRE_SPRINT_PHRASES
     ):
         return None
-    if not history:
-        return None
-    # Walk back to the most recent assistant message.
-    last_assistant = None
-    for m in reversed(history):
-        try:
-            role = m.role.value if hasattr(m.role, "value") else str(m.role)
-        except Exception:  # noqa: BLE001
-            role = str(getattr(m, "role", ""))
-        if role.lower() == "assistant":
-            last_assistant = m
-            break
-    if last_assistant is None or not last_assistant.content:
-        return None
-    ids = _CARD_ID_PATTERN.findall(last_assistant.content)
-    # Keep only hex tokens 8+ chars (deduped, preserve order).
+
+    # Strategy 1 + 2: scan more than the most-recent assistant
+    # message. Sometimes the CEO's previous synth (the one that
+    # listed IDs) is one turn back behind a "summary" or "reassign"
+    # response that used role labels.
     seen: set[str] = set()
     out: list[str] = []
-    for tok in ids:
-        norm = tok.replace("-", "").lower()
-        if len(norm) < 8:
-            continue
-        prefix = norm[:8]
-        if prefix in seen:
-            continue
-        seen.add(prefix)
-        out.append(prefix)
-    return out if out else None
+    if history:
+        assistant_count = 0
+        for m in reversed(history):
+            try:
+                role = (
+                    m.role.value if hasattr(m.role, "value")
+                    else str(m.role)
+                )
+            except Exception:  # noqa: BLE001
+                role = str(getattr(m, "role", ""))
+            if role.lower() != "assistant":
+                continue
+            assistant_count += 1
+            if assistant_count > 5:
+                break
+            content = m.content or ""
+            for tok in _CARD_ID_PATTERN.findall(content):
+                norm = tok.replace("-", "").lower()
+                if len(norm) < 8:
+                    continue
+                prefix = norm[:8]
+                if prefix in seen:
+                    continue
+                seen.add(prefix)
+                out.append(prefix)
+            if out:
+                # Stop at the first message that gave us anything.
+                # Older messages may reference cards we already
+                # processed.
+                return out
+
+    # Strategy 3: live DB fallback. Founder said "go", no IDs in
+    # the last 5 agent messages — pull the live board's actionable
+    # cards. Limit to a safe batch.
+    if session is None or business_id is None:
+        return None
+    try:
+        from sqlmodel import select
+        from korpha.kanban.model import KanbanCard, KanbanColumn
+
+        cards = list(session.exec(
+            select(KanbanCard)
+            .where(KanbanCard.business_id == business_id)
+            .where(
+                KanbanCard.column.in_([  # type: ignore[union-attr]
+                    KanbanColumn.READY,
+                    KanbanColumn.IN_PROGRESS,
+                ])
+            )
+            .order_by(KanbanCard.created_at)  # type: ignore[union-attr]
+        ))[:12]
+    except Exception:  # noqa: BLE001
+        return None
+    if not cards:
+        return None
+    return [str(c.id).replace("-", "")[:8] for c in cards]
 
 
 def _detect_spawn_csuite(msg: str) -> list[str] | None:
@@ -1076,7 +1119,11 @@ class CEO:
             # LLM hedging ("Once you confirm…") or hallucinating
             # ("I assigned them").
             fire_ids = (
-                _detect_fire_sprint(founder_message, history)
+                _detect_fire_sprint(
+                    founder_message, history,
+                    business_id=business.id,
+                    session=self.session,
+                )
                 if max_skill_calls > 0
                 and "kanban.fire_sprint" in registry.skills
                 else None

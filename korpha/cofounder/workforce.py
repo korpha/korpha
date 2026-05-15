@@ -460,14 +460,25 @@ def _kanban_advance_to_in_progress(
     if not title:
         return None
     try:
-        # We want the most recent BACKLOG card whose title matches.
-        # If the CEO ran multiple Plan iterations there could be
-        # several with the same title; pick the newest.
-        candidates = list(session.exec(
+        # We want the most recent matching card. Priority:
+        #   1. IN_PROGRESS — already claimed by fire_sprint /
+        #      auto-dispatch / cron path. We DON'T re-transition;
+        #      just return a handle so the end-of-dispatch
+        #      finalize can write review_evidence.
+        #   2. BACKLOG — the original CEO-Plan path; the function
+        #      auto-specifies + advances through SPECIFY → READY →
+        #      IN_PROGRESS as before.
+        # Multiple matches → newest wins.
+        all_matches = list(session.exec(
             _select(KanbanCard)
             .where(KanbanCard.business_id == business_id)
             .where(KanbanCard.title == title)
-            .where(KanbanCard.column == KanbanColumn.BACKLOG)
+            .where(
+                KanbanCard.column.in_([  # type: ignore[union-attr]
+                    KanbanColumn.IN_PROGRESS,
+                    KanbanColumn.BACKLOG,
+                ])
+            )
         ).all())
     except Exception:  # noqa: BLE001
         import logging
@@ -475,10 +486,22 @@ def _kanban_advance_to_in_progress(
             "kanban lookup failed for task %r", title, exc_info=True,
         )
         return None
-    if not candidates:
+    if not all_matches:
         return None
-    candidates.sort(key=lambda c: c.created_at, reverse=True)
-    card = candidates[0]
+    # Sort: IN_PROGRESS first (so we attach to the already-claimed
+    # card if one exists), then by created_at desc within each group.
+    all_matches.sort(
+        key=lambda c: (
+            0 if c.column == KanbanColumn.IN_PROGRESS else 1,
+            -(c.created_at.timestamp() if c.created_at else 0),
+        )
+    )
+    card = all_matches[0]
+    # Already-IN_PROGRESS short-circuit: return a handle without
+    # re-running the SPECIFY → READY → CLAIM dance. The end-of-
+    # dispatch finalize will write review_evidence to this card.
+    if card.column == KanbanColumn.IN_PROGRESS:
+        return KanbanHandle(card_id=card.id)
 
     board = KanbanBoard(session)
     try:
