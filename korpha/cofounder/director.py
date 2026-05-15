@@ -616,6 +616,21 @@ class Director:
                 parts.append(cap_block)
         except Exception:  # noqa: BLE001
             pass
+        # Recent shipped work + founder notes: lets the Director see
+        # what the team has already produced + founder unblock-comments,
+        # so the CMO drafting "listing copy for both books" can pull the
+        # title from the other CMO turn that just shipped it.
+        try:
+            from korpha.cofounder.business_context import (
+                build_recent_business_output_block,
+            )
+            biz_block = build_recent_business_output_block(
+                self.session, business_id=business.id,
+            )
+            if biz_block:
+                parts.append(biz_block)
+        except Exception:  # noqa: BLE001
+            pass
         # Optional founder deep-profile (Debriefeur). When present, the
         # Director picks up how Mike thinks so plans land in his style.
         try:
@@ -771,6 +786,18 @@ class Worker:
             cap_block = build_capabilities_preamble()
             if cap_block:
                 parts.append(cap_block)
+        except Exception:  # noqa: BLE001
+            pass
+        # Recent shipped work + founder notes — same as Director.
+        try:
+            from korpha.cofounder.business_context import (
+                build_recent_business_output_block,
+            )
+            biz_block = build_recent_business_output_block(
+                self.session, business_id=business.id,
+            )
+            if biz_block:
+                parts.append(biz_block)
         except Exception:  # noqa: BLE001
             pass
         # Optional founder deep-profile (Debriefeur).
