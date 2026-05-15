@@ -22,6 +22,7 @@ Founder unless they explicitly request it.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -387,6 +388,71 @@ _CSUITE_TOKENS = {
     "chief operating": "coo",
     "chief operations": "coo",
 }
+
+
+_FIRE_SPRINT_PHRASES = (
+    "go", "yes go", "yes, go", "ok go", "ok, go",
+    "fire", "fire it", "fire away", "fire the sprint",
+    "proceed", "do it", "go ahead", "ship it",
+    "approve", "approve it", "approved",
+    "yes proceed", "yes, proceed",
+)
+
+# 8-32 hex chars, optionally with dashes; word-boundary delimited.
+# Matches '7d4b8115', '7d4b8115-1234-5678-9abc-def0...'.
+_CARD_ID_PATTERN = re.compile(
+    r"\b[0-9a-f]{8}(?:-?[0-9a-f]{4,12})*\b", re.I,
+)
+
+
+def _detect_fire_sprint(
+    msg: str, history: list["Message"] | None,
+) -> list[str] | None:
+    """If the founder said a short approval phrase AND the most
+    recent agent message in history cites kanban card ID prefixes,
+    return the cited IDs. Else None.
+
+    Used by ``handle_stream()`` to deterministically force-route
+    'go' to ``kanban.fire_sprint`` instead of relying on the router
+    LLM (which has been observed to either hallucinate 'assigned'
+    or hedge 'tell me again' for this case).
+    """
+    if not msg:
+        return None
+    low = msg.strip().lower().rstrip(".!?")
+    if low not in _FIRE_SPRINT_PHRASES and not any(
+        low.startswith(p + " ") or low.startswith(p + ",")
+        for p in _FIRE_SPRINT_PHRASES
+    ):
+        return None
+    if not history:
+        return None
+    # Walk back to the most recent assistant message.
+    last_assistant = None
+    for m in reversed(history):
+        try:
+            role = m.role.value if hasattr(m.role, "value") else str(m.role)
+        except Exception:  # noqa: BLE001
+            role = str(getattr(m, "role", ""))
+        if role.lower() == "assistant":
+            last_assistant = m
+            break
+    if last_assistant is None or not last_assistant.content:
+        return None
+    ids = _CARD_ID_PATTERN.findall(last_assistant.content)
+    # Keep only hex tokens 8+ chars (deduped, preserve order).
+    seen: set[str] = set()
+    out: list[str] = []
+    for tok in ids:
+        norm = tok.replace("-", "").lower()
+        if len(norm) < 8:
+            continue
+        prefix = norm[:8]
+        if prefix in seen:
+            continue
+        seen.add(prefix)
+        out.append(prefix)
+    return out if out else None
 
 
 def _detect_spawn_csuite(msg: str) -> list[str] | None:
@@ -777,6 +843,73 @@ class CEO:
             ceo_role = self.hiring.ensure_ceo(business.id)
             digest = self._maybe_digest(business.id)
             skill_specs = registry.list_specs()
+
+            # Pre-router heuristic 3: short approval phrase that
+            # follows a CEO message citing card IDs. Force-route to
+            # kanban.fire_sprint so 'go' / 'fire it' actually moves
+            # the cards through BACKLOG → IN_PROGRESS instead of the
+            # LLM hedging ("Once you confirm…") or hallucinating
+            # ("I assigned them").
+            fire_ids = (
+                _detect_fire_sprint(founder_message, history)
+                if max_skill_calls > 0
+                and "kanban.fire_sprint" in registry.skills
+                else None
+            )
+            if fire_ids:
+                yield {
+                    "type": "phase", "phase": "skill",
+                    "skill_name": "kanban.fire_sprint",
+                }
+                skill_ctx = SkillContext(
+                    business=business,
+                    founder=founder,
+                    session=self.session,
+                    cost_tracker=self.cost_tracker,
+                    invoking_agent_role_id=ceo_role.id,
+                    browser=self.browser,
+                )
+                skill_result = await registry.run(
+                    "kanban.fire_sprint",
+                    ctx=skill_ctx,
+                    args={"card_ids": fire_ids},
+                )
+                yield {"type": "phase", "phase": "synth"}
+                synth_msg = _skill_synth_prompt(
+                    founder_message, skill_result,
+                )
+                synth_request = CompletionRequest(
+                    messages=self._build_messages(
+                        business=business,
+                        founder=founder,
+                        history=history or [],
+                        user_message=synth_msg,
+                        digest=digest,
+                    ),
+                    tier=self.default_tier,
+                    session_key=f"ceo-handle-{ceo_role.id}",
+                    max_tokens=self.default_max_tokens or agent_max_tokens(),
+                    timeout_seconds=self.default_timeout_seconds or agent_timeout(),
+                )
+                buf: list[str] = []
+                async for chunk in self.cost_tracker.stream(
+                    synth_request,
+                    session=self.session,
+                    business_id=business.id,
+                    agent_role_id=ceo_role.id,
+                    thread_id=thread_id,
+                ):
+                    if chunk.delta_content:
+                        buf.append(chunk.delta_content)
+                        yield {"type": "content", "text": chunk.delta_content}
+                    if chunk.delta_reasoning:
+                        yield {"type": "reasoning", "text": chunk.delta_reasoning}
+                yield {
+                    "type": "done",
+                    "skills_used": [skill_result.skill_name],
+                    "content": "".join(buf),
+                }
+                return
 
             # Pre-router heuristic 2: explicit c-suite spawn
             # imperative ("spawn CTO and CMO", "hire a CTO", "I need

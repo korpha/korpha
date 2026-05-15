@@ -534,12 +534,254 @@ class KanbanListBoardSkill(Skill):
 
 
 # Register all five.
+_OWNER_KEYWORDS_CTO = (
+    "design", "designs", "illustration", "illustrations",
+    "generate", "interior", "build", "produce", "frame", "frames",
+    "create video", "create videos", "graphic", "graphics",
+    "pipeline", "draft animation",
+)
+_OWNER_KEYWORDS_COO = (
+    "set up account", "connect", "fulfillment", "shipping",
+    "order tracking", "sample", "samples", "set up printify",
+    "set up etsy", "configure",
+)
+# everything else defaults to CMO (listings, marketing, social,
+# storefront)
+
+
+def _infer_owner_role(title: str, body: str) -> str:
+    """Map a kanban card to one of cto/cmo/coo by title+body keywords."""
+    blob = f"{title} {body}".lower()
+    for kw in _OWNER_KEYWORDS_CTO:
+        if kw in blob:
+            return "cto"
+    for kw in _OWNER_KEYWORDS_COO:
+        if kw in blob:
+            return "coo"
+    return "cmo"
+
+
+def _resolve_card(session: Any, ref: str, business_id: UUID) -> Any:
+    """Resolve a card by full UUID or 8-char hex prefix.
+
+    The CEO often cites cards by their 8-char prefix in chat
+    (e.g. 'task 7d4b8115'). The fire-sprint skill accepts either."""
+    from sqlmodel import select
+    from korpha.kanban.model import KanbanCard
+    ref = str(ref).strip()
+    # Try full UUID first
+    try:
+        u = UUID(ref)
+        card = session.get(KanbanCard, u)
+        if card is not None and card.business_id == business_id:
+            return card
+    except (ValueError, TypeError):
+        pass
+    # Prefix lookup: hex-only prefix of length 4-32
+    prefix = ref.lower()
+    if not all(c in "0123456789abcdef-" for c in prefix):
+        return None
+    # SQLite stores UUIDs as 32-hex strings without dashes via SQLModel.
+    # We try a LIKE match on the stringified id.
+    rows = list(session.exec(
+        select(KanbanCard)
+        .where(KanbanCard.business_id == business_id)
+    ))
+    norm = prefix.replace("-", "")
+    matches = [
+        c for c in rows
+        if str(c.id).replace("-", "").lower().startswith(norm)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+class KanbanFireSprintSkill(Skill):
+    """Bulk-move a list of backlog cards through SPECIFY → READY →
+    IN_PROGRESS in one call, claiming each to the Line VP that owns
+    its unit. Used when the founder says 'go' / 'fire it' / 'proceed'
+    after the CEO has proposed a specific sprint of card IDs.
+
+    Why bulk? The CEO router only picks one skill per turn. Without
+    this, the founder would have to specify+ready+claim every card
+    individually, which is the kind of grunt work that broke the
+    'go' UX and led the CEO to hallucinate ('I assigned them').
+    """
+
+    spec = SkillSpec(
+        name="kanban.fire_sprint",
+        description=(
+            "USE THIS when the founder says 'go' / 'fire it' / "
+            "'proceed' / 'do it' / 'approve the sprint' after a "
+            "recent CEO message that listed specific card IDs or "
+            "task references. Bulk-promotes the cited cards from "
+            "BACKLOG through SPECIFY → READY → IN_PROGRESS in one "
+            "atomic call. Auto-claims each to the Line VP that "
+            "owns its BusinessUnit. Args: "
+            "card_ids=<list of card id prefixes or full UUIDs>."
+        ),
+        parameters={
+            "card_ids": (
+                "List of card IDs to fire. Each can be a full UUID "
+                "or an 8-char hex prefix (as the CEO usually "
+                "writes in chat)."
+            ),
+        },
+        default_tier=InferenceTier.WORKHORSE,
+        provenance=SkillProvenance.BUILTIN,
+    )
+
+    async def run(
+        self, *, ctx: SkillContext, args: dict[str, Any],
+    ) -> SkillResult:
+        from sqlmodel import select
+        from korpha.cofounder.model import AgentRole, RoleType
+        from korpha.kanban.model import KanbanColumn
+
+        raw_ids = args.get("card_ids") or []
+        if isinstance(raw_ids, str):
+            raw_ids = [
+                t.strip() for t in raw_ids.replace(",", " ").split()
+                if t.strip()
+            ]
+        if not isinstance(raw_ids, list) or not raw_ids:
+            raise SkillError(
+                "kanban.fire_sprint: card_ids=<list> required"
+            )
+
+        board = KanbanBoard(ctx.session)
+        fired: list[dict[str, Any]] = []
+        errors: list[str] = []
+
+        # Cache Line VPs per unit (avoid N queries).
+        line_vps_by_unit: dict[UUID, AgentRole] = {}
+
+        def _line_vp_for_unit(unit_id: UUID | None) -> AgentRole | None:
+            if unit_id is None:
+                return None
+            cached = line_vps_by_unit.get(unit_id)
+            if cached is not None:
+                return cached
+            rows = list(ctx.session.exec(
+                select(AgentRole)
+                .where(AgentRole.business_unit_id == unit_id)
+                .where(AgentRole.role_type == RoleType.WORKER)
+                .where(AgentRole.is_active.is_(True))  # type: ignore[attr-defined]
+            ))
+            if rows:
+                line_vps_by_unit[unit_id] = rows[0]
+                return rows[0]
+            return None
+
+        for ref in raw_ids:
+            card = _resolve_card(ctx.session, ref, ctx.business.id)
+            if card is None:
+                errors.append(f"{ref}: card not found")
+                continue
+            try:
+                # If already in IN_PROGRESS, skip (idempotent).
+                if card.column == KanbanColumn.IN_PROGRESS:
+                    fired.append({
+                        "card_id": str(card.id),
+                        "title": card.title,
+                        "skipped": "already_in_progress",
+                    })
+                    continue
+
+                owner_role = card.owner_role or _infer_owner_role(
+                    card.title, card.body or "",
+                )
+
+                # 1. SPECIFY — set acceptance + owner_role
+                if card.column == KanbanColumn.BACKLOG:
+                    board.specify(
+                        card.id,
+                        acceptance_criteria=[
+                            "Deliverable matches the card title.",
+                            "Output uploaded to the Korpha workspace "
+                            "and linked in review evidence.",
+                        ],
+                        owner_role=owner_role,
+                        actor_agent_role_id=ctx.invoking_agent_role_id,
+                    )
+                elif card.column == KanbanColumn.SPECIFY:
+                    # ensure owner + criteria exist
+                    if not card.owner_role:
+                        card.owner_role = owner_role
+                        ctx.session.add(card)
+                        ctx.session.commit()
+                    if not card.acceptance_criteria:
+                        board.specify(
+                            card.id,
+                            acceptance_criteria=[
+                                "Deliverable matches the card title.",
+                            ],
+                            owner_role=owner_role,
+                            actor_agent_role_id=ctx.invoking_agent_role_id,
+                        )
+
+                # 2. SPECIFY → READY
+                if card.column != KanbanColumn.READY:
+                    board.move(
+                        card.id, KanbanColumn.READY,
+                        actor_agent_role_id=ctx.invoking_agent_role_id,
+                    )
+
+                # 3. CLAIM → IN_PROGRESS (auto-routed to Line VP)
+                vp = _line_vp_for_unit(card.business_unit_id)
+                if vp is None:
+                    errors.append(
+                        f"{str(card.id)[:8]}: no Line VP for unit"
+                    )
+                    continue
+                board.claim(
+                    card.id, agent_role_id=vp.id,
+                    actor_role=owner_role,
+                )
+                fired.append({
+                    "card_id": str(card.id),
+                    "title": card.title,
+                    "owner_role": owner_role,
+                    "claimed_by_agent_role_id": str(vp.id),
+                    "vp_title": vp.title,
+                })
+            except KanbanError as exc:
+                errors.append(f"{str(card.id)[:8]}: {exc}")
+            except Exception as exc:  # noqa: BLE001
+                errors.append(
+                    f"{str(card.id)[:8]}: unexpected: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+        if not fired:
+            raise SkillError(
+                "kanban.fire_sprint: nothing fired. Errors: "
+                f"{errors[:3]}"
+            )
+
+        summary = (
+            f"Fired {len(fired)} card(s) into IN_PROGRESS, "
+            f"claimed to their Line VPs"
+        )
+        if errors:
+            summary += f". {len(errors)} failed."
+
+        return SkillResult(
+            skill_name=self.spec.name,
+            summary=summary,
+            payload={"fired": fired, "errors": errors},
+            cost_usd=0.0,
+        )
+
+
 register(KanbanCreateCardSkill())
 register(KanbanSpecifyCardSkill())
 register(KanbanMoveCardSkill())
 register(KanbanClaimCardSkill())
 register(KanbanSubmitEvidenceSkill())
 register(KanbanListBoardSkill())
+register(KanbanFireSprintSkill())
 
 
 __all__ = [
