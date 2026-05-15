@@ -5,36 +5,26 @@ ChatGPT/Codex OAuth token (no separate OPENAI_API_KEY). The native
 Responses API ``web_search`` tool returns model-synthesized answer +
 citation URLs.
 
-Reads token from ``~/.codex/auth.json`` — managed by ``codex login``.
+Routes via :mod:`korpha.inference.codex_oauth` for token + Cloudflare
+WAF headers (the bare-httpx 403 fix).
 """
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
 
 import httpx
 
+from korpha.inference.codex_oauth import (
+    CodexAuthError,
+    cloudflare_headers,
+    get_codex_auth,
+    is_configured as codex_is_configured,
+)
 from korpha.web.types import SearchResult, WebSearchProvider
 
 logger = logging.getLogger(__name__)
 
 _BASE = "https://chatgpt.com/backend-api/codex"
-_AUTH_PATH = Path.home() / ".codex" / "auth.json"
-
-
-def _read_codex_token() -> str | None:
-    if not _AUTH_PATH.exists():
-        return None
-    try:
-        data = json.loads(_AUTH_PATH.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        return None
-    tokens = data.get("tokens") or {}
-    tok = tokens.get("access_token")
-    if not isinstance(tok, str) or not tok.strip():
-        return None
-    return tok.strip()
 
 
 class CodexWebProvider(WebSearchProvider):
@@ -43,7 +33,7 @@ class CodexWebProvider(WebSearchProvider):
     requires_key = False
 
     def is_configured(self) -> bool:
-        return _read_codex_token() is not None
+        return codex_is_configured()
 
     async def search(
         self,
@@ -53,13 +43,22 @@ class CodexWebProvider(WebSearchProvider):
         site: str | None = None,
         recency_days: int | None = None,
     ) -> list[SearchResult]:
-        token = _read_codex_token()
-        if not token:
+        try:
+            auth = get_codex_auth()
+        except CodexAuthError as exc:
+            logger.debug("codex auth unavailable: %s", exc)
             return []
         q = query if site is None else f"{query} site:{site}"
+        instructions = (
+            "You are a research assistant. Use the web_search tool to "
+            "answer the user's query. Return a concise answer that "
+            "cites the URLs you used."
+        )
         payload = {
             "model": "gpt-5.4",
             "store": False,
+            "stream": True,
+            "instructions": instructions,
             "input": [{
                 "type": "message",
                 "role": "user",
@@ -72,56 +71,104 @@ class CodexWebProvider(WebSearchProvider):
                 "tools": [{"type": "web_search"}],
             },
         }
+        headers = {
+            "Authorization": f"Bearer {auth.access_token}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            **cloudflare_headers(auth.access_token),
+        }
+        answer = ""
+        structured_citations: list[dict] = []
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(
-                    f"{_BASE}/v1/responses",
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Content-Type": "application/json",
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
+            async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=20.0)) as client:
+                async with client.stream(
+                    "POST", f"{_BASE}/responses",
+                    json=payload, headers=headers,
+                ) as resp:
+                    if resp.status_code != 200:
+                        body = await resp.aread()
+                        logger.warning(
+                            "codex web_search %s: %s",
+                            resp.status_code,
+                            body.decode("utf-8", errors="replace")[:300],
+                        )
+                        return []
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data_str = line[5:].strip()
+                        if not data_str or data_str == "[DONE]":
+                            continue
+                        try:
+                            import json as _json
+                            event = _json.loads(data_str)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        t = event.get("type", "")
+                        if t == "response.output_text.delta":
+                            answer += event.get("delta", "")
+                        elif t == "response.output_item.done":
+                            item = event.get("item") or {}
+                            if item.get("type") == "message":
+                                for c in item.get("content") or []:
+                                    for ann in c.get("annotations") or []:
+                                        if ann.get("type") == "url_citation":
+                                            structured_citations.append(ann)
         except httpx.HTTPStatusError as exc:
-            # 403 is expected today — chatgpt.com Cloudflare WAF blocks
-            # bare httpx calls. The full transport port (with WAF
-            # headers + Codex OAuth refresh) is the next architectural
-            # PR. Log at DEBUG so the cascade falls through silently.
-            logger.debug(
-                "codex web_search %s; falling through to next provider",
+            logger.warning(
+                "codex web_search %s: %s",
                 exc.response.status_code if exc.response else "error",
+                (exc.response.text[:200] if exc.response else "")
+                if exc.response else "",
             )
             return []
         except Exception:  # noqa: BLE001
             logger.debug("codex web_search failed", exc_info=True)
             return []
-        # Responses API: data["output"] is a list of items; we scan for
-        # web_search_call results and the message with citations.
+
+        answer = answer.strip()
+        # Codex sometimes returns structured url_citation annotations and
+        # sometimes embeds URLs inline. Pick whichever we got.
         out: list[SearchResult] = []
-        answer = ""
-        for item in data.get("output") or []:
-            t = item.get("type")
-            if t == "message":
-                for c in item.get("content") or []:
-                    if c.get("type") == "output_text":
-                        answer = (c.get("text") or "").strip()
-                        annotations = c.get("annotations") or []
-                        for i, ann in enumerate(annotations[:max_results]):
-                            if ann.get("type") == "url_citation":
-                                url = ann.get("url") or ""
-                                if url:
-                                    out.append(SearchResult(
-                                        title=str(ann.get("title") or f"Source {i+1}").strip(),
-                                        url=url,
-                                        snippet=answer if i == 0 else "",
-                                        provider="codex",
-                                    ))
+        if structured_citations:
+            for i, ann in enumerate(structured_citations[:max_results]):
+                url = ann.get("url") or ""
+                if not url:
+                    continue
+                out.append(SearchResult(
+                    title=str(ann.get("title") or f"Source {i+1}").strip(),
+                    url=url,
+                    snippet=answer if i == 0 else "",
+                    provider="codex",
+                ))
+        else:
+            # Regex-extract URLs from the markdown answer. First hit
+            # carries the full answer as snippet; later hits are bare
+            # citations so the caller can render a source list.
+            import re
+            url_re = re.compile(r"https?://[^\s)>\]]+")
+            seen: set[str] = set()
+            urls: list[str] = []
+            for m in url_re.finditer(answer):
+                u = m.group(0).rstrip(".,;:)>")
+                if u in seen:
+                    continue
+                seen.add(u)
+                urls.append(u)
+                if len(urls) >= max_results:
+                    break
+            for i, u in enumerate(urls):
+                out.append(SearchResult(
+                    title=f"Source {i + 1}",
+                    url=u,
+                    snippet=answer if i == 0 else "",
+                    provider="codex",
+                ))
         if not out and answer:
             out.append(SearchResult(
                 title="Codex web_search answer", url="",
                 snippet=answer, provider="codex",
+                extra={"synthesized_answer": answer},
             ))
         return out
 
