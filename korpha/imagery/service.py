@@ -132,18 +132,32 @@ def _resolve_secret(entry: dict[str, Any], inline_key: str, env_key: str) -> str
 
 def load_image_providers(path: Path | None = None) -> list[ImageGenProvider]:
     """Read ``image_providers:`` from providers.yaml; return built
-    providers in declared order. Missing file or section → empty list."""
+    providers in declared order. Missing file or section → fall back to
+    ``CodexCLIImageProvider`` if the ``codex`` binary is on PATH (it's
+    the configured default for users who logged in to ChatGPT/Codex);
+    otherwise empty list.
+
+    The fallback prevents the "AI tool selection and budget" hallucination
+    pattern: when no provider was wired but Codex IS available, the agent
+    asks the founder which image tool to pick. With the fallback in place,
+    the system has a real default and the LLM sees it in the capabilities
+    preamble (see korpha/cofounder/capabilities.py).
+    """
+    import shutil
+
     import yaml
 
     from korpha.inference.config import config_path
 
     p = path or config_path()
-    if not p.exists():
-        return []
-    body = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    entries = body.get("image_providers") or []
-    if not isinstance(entries, list):
-        raise ImageConfigError("image_providers must be a list")
+    entries: list = []
+    if p.exists():
+        body = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        raw = body.get("image_providers") or []
+        if raw and not isinstance(raw, list):
+            raise ImageConfigError("image_providers must be a list")
+        entries = list(raw)
+
     out: list[ImageGenProvider] = []
     for entry in entries:
         try:
@@ -152,6 +166,14 @@ def load_image_providers(path: Path | None = None) -> list[ImageGenProvider]:
             # Skip a bad entry rather than blowing up the whole load —
             # surface via the wizard's --validate path later.
             continue
+
+    if not out and shutil.which("codex") is not None:
+        # Implicit default: a logged-in Codex CLI is the strongest
+        # image-gen signal we can detect. Pre-wire gpt-image-2 so the
+        # team has something to call without making the founder edit
+        # providers.yaml.
+        out.append(CodexCLIImageProvider())
+
     return out
 
 
