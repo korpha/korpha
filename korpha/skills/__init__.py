@@ -101,11 +101,13 @@ def _autoload_builtins() -> None:
         outreach_send,
         pricing,
         product,
+        consultant,
         research,
         support,
         validate,
         web_search,
     )
+    consultant.register_skills()
     web_search.register_skills()
 
 
