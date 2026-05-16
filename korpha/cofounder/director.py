@@ -546,6 +546,18 @@ class Director:
             research_block = await build_pre_research_block(task)
         except Exception:  # noqa: BLE001
             research_block = ""
+        # Knowledge packs: inject a compact directory of Hermes-style
+        # SKILL.md playbooks the director's role can consult. Full
+        # pack content is fetched on demand via knowledge.get_pack.
+        try:
+            from korpha.cofounder.knowledge_inject import (
+                build_knowledge_directory_block,
+            )
+            knowledge_block = build_knowledge_directory_block(
+                role_type=self.personality.role_type.value,
+            )
+        except Exception:  # noqa: BLE001
+            knowledge_block = ""
         prompt = _build_attempt_prompt(task)
         if research_block:
             prompt = f"{research_block}\n\n{prompt}"

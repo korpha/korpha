@@ -88,15 +88,20 @@ def _autoload_builtins() -> None:
         founder,
         geo_seo,
         growth,
+        domain_intel,
+        github,
         hr,
         imagery,
         kanban_skills,
+        knowledge,
+        linear,
         landing,
         marketing,
         memory,
         memory_notes,
         meta,
         niche,
+        notion,
         outreach,
         outreach_send,
         pricing,
@@ -108,6 +113,11 @@ def _autoload_builtins() -> None:
         web_search,
     )
     consultant.register_skills()
+    domain_intel.register_skills()
+    github.register_skills()
+    knowledge.register_skills()
+    linear.register_skills()
+    notion.register_skills()
     web_search.register_skills()
 
 
