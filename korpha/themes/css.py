@@ -35,9 +35,14 @@ def render_theme_css_vars(theme: DashboardTheme) -> str:
     warning = co.warning or "#e9c46a"
     destructive = co.destructive or "#e76f74"
     border = co.border or _shift(bg, 0x10)
+    # Contrast ratios on dark themes need text_dim ≥ ~4.5:1 and
+    # text_faint ≥ ~3:1 against bg. Prior 0.55 / 0.35 alpha mix put
+    # text_faint at ~2.5:1 which fails WCAG AA on dark backgrounds —
+    # body copy + blocker details ended up unreadable. Bumped so even
+    # the lowest-priority hint text stays legible.
     text = mg
-    text_dim = _alpha_mix(mg, bg, 0.55)
-    text_faint = _alpha_mix(mg, bg, 0.35)
+    text_dim = _alpha_mix(mg, bg, 0.75)
+    text_faint = _alpha_mix(mg, bg, 0.55)
 
     # Layered backgrounds for elevation surfaces
     bg_elev = _shift(bg, 0x05)
