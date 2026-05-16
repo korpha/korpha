@@ -395,13 +395,56 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
             name="kanban-dispatcher",
         )
 
+    # Heartbeat loop — fires Wakeups, evaluates Routines, and ticks
+    # ScriptCron jobs. Without this loop nothing scheduled actually
+    # runs; ``korpha tick`` exists for one-shot use but production
+    # needs the in-process pulse.
+    heartbeat_task: asyncio.Task[None] | None = None
+    with contextlib.suppress(Exception):
+        from korpha.api.heartbeat_loop import heartbeat_loop
+        heartbeat_task = asyncio.create_task(
+            heartbeat_loop(),
+            name="heartbeat-loop",
+        )
+
+    # Load bundled plugins. These ship with the install and run by
+    # default (observability counters etc.); third-party plugins
+    # under ~/.korpha/plugins/ still need explicit enable via the
+    # ``plugins.enabled`` allow-list.
+    with contextlib.suppress(Exception):
+        from korpha.plugins.loader import (
+            BUNDLED_PLUGINS_DIR,
+            discover_plugins,
+            load_plugin,
+        )
+        from korpha.plugins.host import PluginHost
+        from korpha.skills.registry import default_registry
+        from korpha.heartbeats.dispatcher import default_registry as _hr
+        if BUNDLED_PLUGINS_DIR.is_dir():
+            for manifest in discover_plugins(BUNDLED_PLUGINS_DIR):
+                host = PluginHost(
+                    plugin_name=manifest.name,
+                    permissions=manifest.permissions,
+                    skill_registry=default_registry,
+                    handler_registry=_hr(),
+                )
+                try:
+                    load_plugin(manifest, host)
+                except Exception:  # noqa: BLE001
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "bundled plugin %s failed to load",
+                        manifest.name, exc_info=True,
+                    )
+
     try:
         yield
     finally:
-        if dispatcher_task is not None and not dispatcher_task.done():
-            dispatcher_task.cancel()
-            with contextlib.suppress(Exception):
-                await dispatcher_task
+        for task in (dispatcher_task, heartbeat_task):
+            if task is not None and not task.done():
+                task.cancel()
+                with contextlib.suppress(Exception):
+                    await task
 
 
 def build_app() -> FastAPI:
@@ -534,6 +577,25 @@ def build_app() -> FastAPI:
         if not index_path.exists():
             raise HTTPException(404, "static/index.html not found")
         return FileResponse(index_path, media_type="text/html")
+
+    @app.get("/metrics", include_in_schema=False)
+    def metrics_root():  # type: ignore[no-untyped-def]
+        """Prometheus scrape endpoint — root-level by convention."""
+        from fastapi.responses import PlainTextResponse
+        try:
+            from korpha.plugins.bundled.observability import (
+                render_prometheus,
+            )
+            return PlainTextResponse(
+                render_prometheus(),
+                media_type="text/plain; version=0.0.4",
+            )
+        except Exception as exc:  # noqa: BLE001
+            return PlainTextResponse(
+                f"# observability plugin not loaded: "
+                f"{type(exc).__name__}: {exc}\n",
+                status_code=503,
+            )
 
     @app.get("/healthz", response_model=HealthResponse)
     def healthz() -> HealthResponse:

@@ -33,17 +33,27 @@
       </form>
     </div>
 
+    <div class="kb-filter-ribbon">
+      <span class="kb-filter-label">View:</span>
+      <a href="/app/kanban{% if unit_filter_id and unit_filter_id != '__none__' %}?unit={{ unit_filter_id }}{% elif unit_filter_id == '__none__' %}?unit=__none__{% endif %}"
+         class="kb-filter-pill {{ 'is-active' if not mine_filter }}">All cards</a>
+      <a href="/app/kanban?mine=1{% if unit_filter_id and unit_filter_id != '__none__' %}&unit={{ unit_filter_id }}{% elif unit_filter_id == '__none__' %}&unit=__none__{% endif %}"
+         class="kb-filter-pill kb-filter-pill-mine {{ 'is-active' if mine_filter }}">
+        Waiting for me
+      </a>
+    </div>
+
     {% if unit_filter_options %}
       <div class="kb-filter-ribbon">
         <span class="kb-filter-label">Line:</span>
-        <a href="/app/kanban"
+        <a href="/app/kanban{% if mine_filter %}?mine=1{% endif %}"
            class="kb-filter-pill {{ 'is-active' if not unit_filter_id }}">All</a>
-        <a href="/app/kanban?unit=__none__"
+        <a href="/app/kanban?unit=__none__{% if mine_filter %}&mine=1{% endif %}"
            class="kb-filter-pill {{ 'is-active' if unit_filter_id == '__none__' }}">
           Company-wide
         </a>
         {% for u in unit_filter_options %}
-          <a href="/app/kanban?unit={{ u.id }}"
+          <a href="/app/kanban?unit={{ u.id }}{% if mine_filter %}&mine=1{% endif %}"
              class="kb-filter-pill {{ 'is-active' if unit_filter_id == u.id|string }}">
             {{ u.name }} <code class="tm-muted">{{ u.kind.value }}</code>
           </a>
@@ -62,17 +72,19 @@
             {% for c in cards %}
               {% set blocker_count = (blocker_counts_by_card or {}).get(c.id, 0) %}
               <div class="kb-card kb-card-{{ c.priority.value }}{% if c.id in live_card_ids %} kb-card-live{% endif %}{% if blocker_count %} kb-card-blocked{% endif %}">
+                <a href="/app/kanban/{{ c.id }}" class="kb-card-overlay"
+                   aria-label="Open card: {{ c.title|e }}"></a>
                 <div class="kb-card-title">
                   {% if c.id in live_card_ids %}
                     <span class="kb-live-dot" title="A {{ c.owner_role|upper }} agent is actively working this card right now"></span>
                   {% endif %}
-                  <a href="/app/kanban/{{ c.id }}" class="kb-card-link">{{ c.title }}</a>
+                  <span class="kb-card-link">{{ c.title }}</span>
                 </div>
                 {% if blocker_count %}
                   <div class="kb-card-blocker-banner">
-                    <a href="/app/kanban/{{ c.id }}" class="kb-card-blocker-link">
+                    <span class="kb-card-blocker-link">
                       ! {{ blocker_count }} waiting for you →
-                    </a>
+                    </span>
                   </div>
                 {% endif %}
                 {% if c.body %}
@@ -148,6 +160,46 @@
 {% block scripts %}
 <style>
   .kb-shell { display: flex; flex-direction: column; gap: 14px; }
+  .kb-filter-ribbon {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .kb-filter-label {
+    color: var(--text-faint);
+    font-size: 12px;
+    margin-right: 2px;
+  }
+  .kb-filter-pill {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--text-faint);
+    text-decoration: none;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+  .kb-filter-pill:hover {
+    border-color: var(--accent, #e7c14b);
+    color: var(--text);
+  }
+  .kb-filter-pill.is-active {
+    background: var(--accent, #e7c14b);
+    color: var(--bg);
+    border-color: var(--accent, #e7c14b);
+  }
+  .kb-filter-pill-mine {
+    border-color: #c25;
+    color: #ff6b8a;
+  }
+  .kb-filter-pill-mine.is-active {
+    background: #c25;
+    color: #fff;
+    border-color: #c25;
+  }
   .kb-header {
     display: flex;
     justify-content: space-between;
@@ -244,6 +296,32 @@
     border-radius: 6px;
     padding: 8px 10px;
     font-size: 12px;
+    position: relative;
+    cursor: pointer;
+    transition: border-color 80ms ease-in-out, background 80ms ease-in-out;
+  }
+  .kb-card:hover {
+    border-color: var(--accent, #e7c14b);
+    background: rgba(255, 255, 255, 0.02);
+  }
+  /* Overlay link covers the whole tile so clicking anywhere outside an
+     action button opens the card detail. Interactive children (buttons,
+     forms, outbound links) sit ABOVE the overlay so their clicks still
+     register; plain text + divs stay in normal flow so the overlay
+     absolutely-positioned above them catches the click. */
+  .kb-card-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+  }
+  .kb-card-actions,
+  .kb-card-actions form,
+  .kb-card-actions button,
+  .kb-card-artifacts,
+  .kb-art-link {
+    position: relative;
+    z-index: 2;
   }
   .kb-card-high { border-left: 3px solid #c25; }
   .kb-card-low { opacity: 0.7; }

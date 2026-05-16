@@ -1,0 +1,10 @@
+name: observability
+version: 0.1.0
+description: |
+  In-process Prometheus-compatible metrics exporter. Subscribes to the
+  inference + skill lifecycle hooks and emits counters / histograms
+  exposed at /metrics. Lets you point Grafana / Prometheus / Loki at
+  Korpha without adding a separate sidecar.
+author: korpha-bundled
+entry_point: ./__init__.py:register
+permissions: []

@@ -18,6 +18,48 @@ from korpha.inference.pool import InferencePool
 from korpha.inference.types import CompletionRequest, CompletionResponse, StreamChunk
 
 
+async def _fire_post_llm_call(
+    *,
+    model: str,
+    tier: str,
+    duration: float,
+    input_tokens: int,
+    output_tokens: int,
+    cost_usd: float,
+    error: BaseException | None,
+    business_id: UUID,
+    agent_role_id: UUID | None,
+) -> None:
+    """Notify the plugin host that an LLM call just completed.
+
+    Hooks are best-effort — any exception in a listener is logged + the
+    rest continue. We don't want a misbehaving observability plugin to
+    wedge inference. Importing lazily keeps the plugin layer optional
+    in test environments that don't load it.
+    """
+    try:
+        from korpha.plugins.hooks import (
+            HookKind, PostLlmCallEvent, hook_registry,
+        )
+    except Exception:  # noqa: BLE001
+        return
+    if not hook_registry.has(HookKind.POST_LLM_CALL):
+        return
+    event = PostLlmCallEvent(
+        model=model,
+        tier=tier,
+        duration_seconds=duration,
+        input_tokens=int(input_tokens or 0),
+        output_tokens=int(output_tokens or 0),
+        cost_usd=float(cost_usd or 0.0),
+        business_id=business_id,
+        founder_id=None,
+        invoking_agent_role_id=agent_role_id,
+        error=error,
+    )
+    await hook_registry.dispatch(HookKind.POST_LLM_CALL, event)
+
+
 @dataclass
 class CostTracker:
     pool: InferencePool
@@ -62,7 +104,41 @@ class CostTracker:
                 "enforcement: %s", exc,
             )
 
-        response = await self.pool.complete(request)
+        import time as _time
+        _started = _time.monotonic()
+        _error: BaseException | None = None
+        try:
+            response = await self.pool.complete(request)
+        except BaseException as _exc:  # noqa: BLE001
+            _error = _exc
+            _duration = _time.monotonic() - _started
+            # Fire POST_LLM_CALL on the error path too — observability
+            # plugins want to count errors as much as successes.
+            await _fire_post_llm_call(
+                model=getattr(request, "model", "") or "",
+                tier=request.tier.value,
+                duration=_duration,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                error=_error,
+                business_id=business_id,
+                agent_role_id=agent_role_id,
+            )
+            raise
+        _duration = _time.monotonic() - _started
+        await _fire_post_llm_call(
+            model=response.model,
+            tier=request.tier.value,
+            duration=_duration,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+            cost_usd=float(response.cost_usd or 0.0),
+            error=None,
+            business_id=business_id,
+            agent_role_id=agent_role_id,
+        )
+
         cost = Cost(
             business_id=business_id,
             agent_role_id=agent_role_id,

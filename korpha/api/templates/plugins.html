@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Plugins · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Plugins{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">Plugins</h1>
+      <p class="tm-blurb">
+        Plugins extend Korpha with new hooks, skills, channel adapters, and
+        observability sinks. Bundled plugins ship with the install and load
+        automatically; user / pip plugins are opt-in via the
+        <code>plugins.enabled</code> allow-list.
+        Metrics from the bundled observability plugin are at
+        <code><a href="/metrics" target="_blank">/metrics</a></code>.
+      </p>
+    </div>
+  </div>
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Discovered ({{ plugins|length }})</h2>
+    {% if not plugins %}
+      <p class="tm-blurb">No plugins discovered.</p>
+    {% else %}
+      <table class="tm-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Version</th><th>Origin</th>
+            <th>Permissions</th><th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in plugins %}
+            <tr>
+              <td><strong>{{ p.name }}</strong></td>
+              <td>{{ p.version }}</td>
+              <td>
+                <span class="tm-pill tm-pill-active">{{ p.origin }}</span>
+              </td>
+              <td>
+                {% if p.permissions %}
+                  {% for perm in p.permissions %}
+                    <code>{{ perm }}</code>{% if not loop.last %} {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span class="tm-muted">(none)</span>
+                {% endif %}
+              </td>
+              <td>{{ p.description|truncate(120) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Hook listener counts</h2>
+    <p class="tm-blurb">
+      Live count of plugin callbacks subscribed to each lifecycle hook.
+      A zero means no plugin is listening to that event yet.
+    </p>
+    <table class="tm-table">
+      <thead><tr><th>Hook</th><th>Listeners</th></tr></thead>
+      <tbody>
+        {% for kind, count in hook_listener_counts.items() %}
+          <tr>
+            <td><code>{{ kind }}</code></td>
+            <td>{{ count }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}

@@ -549,6 +549,8 @@ class Director:
         prompt = _build_attempt_prompt(task)
         if research_block:
             prompt = f"{research_block}\n\n{prompt}"
+        if knowledge_block:
+            prompt = f"{knowledge_block}\n\n{prompt}"
 
         request = CompletionRequest(
             messages=[
@@ -739,9 +741,21 @@ class Worker:
             research_block = await build_pre_research_block(task)
         except Exception:  # noqa: BLE001
             research_block = ""
+        try:
+            from korpha.cofounder.knowledge_inject import (
+                build_knowledge_directory_block,
+            )
+            knowledge_block = build_knowledge_directory_block(
+                role_type=self.personality.parent_role_type.value,
+                specialty=self.personality.specialty,
+            )
+        except Exception:  # noqa: BLE001
+            knowledge_block = ""
         prompt = _build_attempt_prompt(task)
         if research_block:
             prompt = f"{research_block}\n\n{prompt}"
+        if knowledge_block:
+            prompt = f"{knowledge_block}\n\n{prompt}"
         request = CompletionRequest(
             messages=[
                 Message(role=Role.SYSTEM, content=self._system_prompt(business, founder)),
@@ -858,7 +872,26 @@ def _build_attempt_prompt(task: str) -> str:
         "- 'choose categories/tags' → you research and choose\n"
         "- 'design a t-shirt concept' → you describe the concept\n"
         "- 'name the book' → you propose a title (you can offer 3 in detail)\n"
-        "- 'plan the launch sequence' → you write the plan\n\n"
+        "- 'plan the launch sequence' → you write the plan\n"
+        "- 'optimize video titles/descriptions/tags' → you INVENT 5-10 "
+        "concrete title+description+tag sets matching the channel niche; "
+        "the videos themselves don't have to exist yet — you're producing "
+        "the editorial template the team will use when the videos ship\n"
+        "- 'write KDP listing for 2 books' → you draft 2 concrete listings "
+        "based on the line's niche; you DO NOT ask the Founder 'which "
+        "books'; pick titles from the line's strategy and own them\n"
+        "- 'pick AI tools to promote' → you research current AI tool "
+        "landscape and pick 5-10 specific tools with affiliate-program "
+        "URLs you know exist; you don't ask the Founder which tools\n\n"
+        "**Anti-pattern (never do this):** 'I need the list of videos / "
+        "books / topics / AI tools / products from you before I can "
+        "produce X.' That content IS the deliverable. The Founder is "
+        "paying you to invent it. If a card depends on content that "
+        "hasn't been created yet, either (a) produce a concrete first "
+        "draft yourself based on the line's niche + strategy, or (b) "
+        "in the detail field flag the upstream card it depends on so the "
+        "CEO can sequence them — but still ship a draft so REVIEW has "
+        "something to work with.\n\n"
         "**Output format — strict:** Generate JSON ONLY. Do NOT emit "
         "XML tool-call tags (`<search>`, `<tool>`, etc.), function-call "
         "JSON, or any other 'I'm about to call a tool' syntax. You are "
@@ -879,7 +912,48 @@ def _build_attempt_prompt(task: str) -> str:
         "  trademark calls, irreversible pivots)\n"
         "- account-creation authorization on Founder's behalf\n"
         "Never block on 'I need creative input', 'pick a style', 'choose "
-        "a topic', 'what subjects should we cover'. Those are YOUR job.\n\n"
+        "a topic', 'what subjects should we cover', 'which AI tools / "
+        "books / videos / products to focus on'. Those are YOUR job.\n\n"
+        "**Account-creation cards: prep is NOT a ship.** If the card is "
+        "'set up <platform> account / shop / channel' and the account "
+        "doesn't exist yet, the deliverable IS the account — you cannot "
+        "ship the card by producing prep work (shop name, profile copy, "
+        "banner brief, etc.). The right output is "
+        "``status='blocked'`` with ONE blocker whose detail bundles "
+        "(a) the signup URL, (b) free-vs-paid + cost, (c) ALL the prep "
+        "work you'd otherwise put in review evidence so the Founder can "
+        "paste it at signup time. Never put account-creation prep in "
+        "review_evidence with status='shipped' — the account doesn't "
+        "exist; nothing was shipped to anyone yet.\n\n"
+        "Examples (account-setup cards always block):\n"
+        "- 'Set up Etsy shop' → blocked, prep bundled in detail\n"
+        "- 'Set up YouTube channel' → blocked, prep bundled in detail\n"
+        "- 'Create Stripe account' → blocked, prep bundled in detail\n"
+        "- 'Open Printify account' → blocked, prep bundled in detail\n\n"
+        "**One external integration per card.** If a card's title or "
+        "body mentions setting up / connecting / authenticating with "
+        "two or more independent platforms (e.g. 'Set up Printify "
+        "account and connect to Etsy shop' → two integrations), DO NOT "
+        "emit multiple blockers on the same card. Each platform has "
+        "its own credentials, its own signup URL, its own cost — they "
+        "deserve separate cards so the Founder can act on each one in "
+        "isolation. Ship status='blocked' with a single 'split' blocker "
+        "that names the platforms and asks for the split, OR if you "
+        "have the kanban.split_card / kanban.create_card skill available, "
+        "use it to spawn the split children and resolve THIS card. "
+        "Never give the Founder a card with 4-6 blockers across "
+        "multiple platforms — that's the team's job to decompose.\n\n"
+        "**When you block on an API key, make the blocker actionable.** "
+        "The detail field MUST include: (a) the URL to get the key, (b) "
+        "the exact steps to obtain it, (c) whether free or paid + cost. "
+        "Example detail: 'Need YouTube Data API v3 key. Get it at "
+        "https://console.cloud.google.com/apis/credentials → Create "
+        "Credentials → API Key → enable YouTube Data API v3. Free up to "
+        "10k requests/day.' Don't just say 'I need the YouTube API key.'\n\n"
+        "**Once the key is on file, never re-ask for content or "
+        "decisions.** A key blocker resolves the key permanently; you "
+        "should produce all downstream creative + decisions yourself "
+        "until the next time real money or a legal call surfaces.\n\n"
         "If you need a specialist you don't have (a 'children's book "
         "consultant', 'Etsy SEO specialist', etc.), prefer status='shipped' "
         "with the work produced under your own best judgment plus a note "
