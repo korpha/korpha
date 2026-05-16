@@ -68,6 +68,12 @@ from korpha.budgets.model import (
     BudgetScope,
     BudgetWindow,
 )
+from korpha.throughput.model import ActionThrottle
+from korpha.credits.model import (
+    CreditLedger,
+    CreditLedgerKind,
+    CreditPool,
+)
 from korpha.commerce.revenue import RevenueEvent, RevenueKind
 from korpha.goals.model import Goal as AgentGoal, GoalStatus as AgentGoalStatus  # noqa: F401
 from korpha.heartbeats.model import (
@@ -114,7 +120,11 @@ __all__ = [
     "BlockerUrgency",
     "ArtifactKind",
     "ArtifactReviewState",
+    "ActionThrottle",
     "BudgetPolicy",
+    "CreditLedger",
+    "CreditLedgerKind",
+    "CreditPool",
     "BudgetScope",
     "BudgetWindow",
     "Business",

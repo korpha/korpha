@@ -35,6 +35,16 @@ from korpha.plugins.host import PluginHost
 
 DEFAULT_PLUGINS_DIR = Path.home() / ".korpha" / "plugins"
 
+PROJECT_PLUGINS_SUBDIR = ".korpha/plugins"
+"""Per-project plugin location. The Founder running ``korpha`` from
+inside a project directory can drop plugins into
+``./.korpha/plugins/<name>/`` and they load alongside the user-dir
+plugins. Opt-in via ``KORPHA_ENABLE_PROJECT_PLUGINS=1`` so a stray
+``.korpha/`` from someone else's repo can't sneak code in. Mirrors
+Hermes's ``HERMES_ENABLE_PROJECT_PLUGINS`` switch."""
+
+PROJECT_PLUGINS_OPT_IN_ENV = "KORPHA_ENABLE_PROJECT_PLUGINS"
+
 VALID_PERMISSIONS = frozenset({
     "skills",
     "wakeup_handlers",
@@ -82,6 +92,36 @@ def plugins_dir() -> Path:
 
     override = os.getenv("KORPHA_PLUGINS_DIR")
     return Path(override).expanduser() if override else DEFAULT_PLUGINS_DIR
+
+
+def project_plugins_dir(start: Path | None = None) -> Path | None:
+    """Return the project plugins directory if the opt-in env is set
+    AND the directory exists at or above ``start`` (cwd by default).
+    Returns ``None`` when not opted-in or not found.
+
+    Walks up from ``start`` looking for ``.korpha/plugins/`` — same
+    discovery pattern as ``.git`` / ``pyproject.toml`` so plugins
+    follow the project root, not the current shell location."""
+    import os
+
+    if not os.getenv(PROJECT_PLUGINS_OPT_IN_ENV, "").strip().lower() in (
+        "1", "true", "yes", "on",
+    ):
+        return None
+    current = (start or Path.cwd()).resolve()
+    for parent in (current, *current.parents):
+        candidate = parent / PROJECT_PLUGINS_SUBDIR
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+BUNDLED_PLUGINS_DIR = Path(__file__).parent / "bundled"
+"""Where vendored Hermes-style plugins live in the Korpha tree.
+Always discovered + always enabled (they ship with the install).
+Drop a Hermes plugin in ``korpha/plugins/bundled/<name>/`` with its
+own ``plugin.yaml`` + ``__init__.py`` and it's available out of the
+box."""
 
 
 def discover_plugins(root: Path | None = None) -> list[PluginManifest]:
@@ -313,20 +353,36 @@ def discover_all_plugins(
     *,
     root: Path | None = None,
     include_entry_points: bool = True,
+    include_bundled: bool = True,
+    include_project: bool = True,
 ) -> list[PluginManifest]:
-    """Combined discovery: directory plugins (~/.korpha/plugins/)
-    plus pip-installed entry-point plugins.
+    """Combined discovery across all 4 sources, deduped by name.
 
-    Directory + entry-point name collisions: directory wins (last
-    register). This lets a user shadow an installed plugin with a
-    local fork by dropping it in ``~/.korpha/plugins/<name>/``.
+    Source order (later overrides earlier — mirrors Hermes):
+      1. **Bundled** (``korpha/plugins/bundled/<name>/``) — ships with
+         the install, always loaded unless explicitly disabled.
+      2. **Pip entry points** — third-party plugins distributed as
+         wheels via the ``korpha.plugins`` entry-point group.
+      3. **User dir** (``~/.korpha/plugins/<name>/`` or
+         ``KORPHA_PLUGINS_DIR`` override).
+      4. **Project dir** (``./.korpha/plugins/``, opt-in via
+         ``KORPHA_ENABLE_PROJECT_PLUGINS``) — lets devs iterate on
+         a local fork that shadows a published plugin.
     """
     seen: dict[str, PluginManifest] = {}
+    if include_bundled and BUNDLED_PLUGINS_DIR.is_dir():
+        for m in discover_plugins(BUNDLED_PLUGINS_DIR):
+            seen[m.name] = m
     if include_entry_points:
         for m in discover_entry_point_plugins():
             seen[m.name] = m
     for m in discover_plugins(root):
-        seen[m.name] = m  # local override
+        seen[m.name] = m  # user override
+    if include_project:
+        project = project_plugins_dir()
+        if project is not None:
+            for m in discover_plugins(project):
+                seen[m.name] = m
     return list(seen.values())
 
 
@@ -404,4 +460,7 @@ __all__ = [
     "load_plugin",
     "parse_manifest",
     "plugins_dir",
+    "project_plugins_dir",
+    "PROJECT_PLUGINS_OPT_IN_ENV",
+    "PROJECT_PLUGINS_SUBDIR",
 ]

@@ -59,6 +59,13 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 
+# Last autonomy tick result per business — populated by the
+# /app/autonomy/tick handler so the panel can render
+# "Last tick: fired X" without persisting a new table. Lost on
+# process restart, which is fine — it's a UX nicety, not a record.
+_LAST_AUTONOMY_TICK: dict[Any, dict[str, Any]] = {}
+
+
 def _agent_created_root() -> Path:
     """Where authored skills live on disk. Honors KORPHA_SKILLS_DIR
     so tests can point at tmp_path."""
@@ -2319,6 +2326,9 @@ def build_dashboard_router(
                     col: [c for c in cards if c.business_unit_id is None]
                     for col, cards in snapshot.items()
                 }
+
+            mine_filter = request.query_params.get("mine") == "1"
+            ctx["mine_filter"] = mine_filter
             # Build the ribbon: all units, plus a "company-wide" pseudo
             from korpha.business_units.board import BusinessUnitBoard
             ctx["unit_filter_options"] = list(
@@ -2380,6 +2390,25 @@ def build_dashboard_router(
                 blocker_counts_by_card[b.kanban_card_id] = (
                     blocker_counts_by_card.get(b.kanban_card_id, 0) + 1
                 )
+
+            # ?mine=1 narrows the board to "cards waiting on Mike" so
+            # the founder can land on /app/kanban?mine=1 and see only
+            # the stuff blocking the team. Two definitions of
+            # "waiting on me":
+            #   - Card sits in REVIEW (needs accept/reject verdict).
+            #   - Card has an open Blocker (any column).
+            # Computed AFTER blocker_counts so we can scope by blocker
+            # presence; composes cleanly with the unit filter above.
+            if mine_filter:
+                from korpha.kanban.model import KanbanColumn as _KC
+                snapshot = {
+                    col: [
+                        c for c in cards
+                        if col == _KC.REVIEW
+                        or (blocker_counts_by_card.get(c.id, 0) > 0)
+                    ]
+                    for col, cards in snapshot.items()
+                }
 
             ctx["snapshot"] = snapshot
             ctx["transitions"] = TRANSITIONS
@@ -4826,6 +4855,316 @@ def build_dashboard_router(
             return RedirectResponse(
                 "/app/budgets?flash=Deleted",
                 status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    # ---------------------------------------------------------------
+    # Autonomy panel — mode selector + caps + force-tick
+    # ---------------------------------------------------------------
+
+    @router.get("/autonomy", response_class=HTMLResponse)
+    def autonomy_view(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse:
+        try:
+            from korpha.budgets.currency import format_amount
+            from korpha.cofounder import autonomy as autonomy_mod
+            from korpha.config import get_settings
+
+            ctx = _ctx(session, active="autonomy")
+            business = ctx["business"]
+            snap = autonomy_mod.evaluate(session, business=business)
+
+            settings = get_settings()
+            currency = settings.display_currency or "USD"
+            paused_reasons_human = {
+                "mode_off": "autonomy is off — only manual 'go' fires work",
+                "iterations_reached": "daily iteration cap reached",
+                "daily_budget_reached": "daily $ cap reached",
+                "monthly_budget_reached": "monthly $ cap reached",
+            }
+            snap_view = {
+                "mode": snap.mode,
+                "mode_label": {
+                    "off": "Off (manual go only)",
+                    "iterations": "Max iterations / day",
+                    "daily_budget": "Max budget / day",
+                    "monthly_only": "Monthly cap only",
+                }.get(snap.mode.value, snap.mode.value),
+                "paused": snap.paused,
+                "paused_reason": snap.paused_reason,
+                "paused_reason_human": paused_reasons_human.get(
+                    snap.paused_reason or "", snap.paused_reason or "",
+                ),
+                "iterations_today": snap.iterations_today,
+                "iterations_cap": snap.iterations_cap,
+                "spent_today_display": format_amount(snap.spent_today_usd),
+                "spent_month_display": format_amount(snap.spent_month_usd),
+                "daily_cap_display": (
+                    format_amount(snap.daily_cap_usd)
+                    if snap.daily_cap_usd is not None else None
+                ),
+                "monthly_cap_display": (
+                    format_amount(snap.monthly_cap_usd)
+                    if snap.monthly_cap_usd is not None else None
+                ),
+                "daily_cap_form_value": (
+                    f"{snap.daily_cap_usd:.2f}"
+                    if snap.daily_cap_usd is not None else None
+                ),
+                "monthly_cap_form_value": (
+                    f"{snap.monthly_cap_usd:.2f}"
+                    if snap.monthly_cap_usd is not None else None
+                ),
+            }
+
+            snap_view["throttle_rows"] = [
+                {
+                    "window": ts.throttle.window.value,
+                    "count": ts.count,
+                    "limit": ts.throttle.limit,
+                    "pct": min(100, int(ts.pct_used * 100)),
+                    "paused": ts.is_paused,
+                    "label": ts.throttle.label or "—",
+                }
+                for ts in snap.throttle_statuses
+            ]
+            snap_view["credit_pool"] = (
+                {
+                    "balance": snap.credit_pool.balance,
+                    "monthly_grant": snap.credit_pool.monthly_grant,
+                    "next_refill_at": (
+                        snap.credit_pool.next_refill_at.isoformat()[:19]
+                        if snap.credit_pool.next_refill_at else None
+                    ),
+                    "lifetime_debited": snap.credit_pool.lifetime_debited,
+                    "lifetime_purchased": snap.credit_pool.lifetime_purchased,
+                }
+                if snap.credit_pool is not None else None
+            )
+
+            ctx["snap"] = snap_view
+            ctx["currency"] = currency
+            ctx["last_tick"] = _LAST_AUTONOMY_TICK.get(business.id)
+            return templates.TemplateResponse(
+                request, "autonomy.html", ctx,
+            )
+        finally:
+            session.close()
+
+    @router.post(
+        "/autonomy/set",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def autonomy_set(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+        mode: Annotated[str, Form()] = "off",
+        daily_max_iterations: Annotated[str, Form()] = "",
+        daily_limit: Annotated[str, Form()] = "",
+        monthly_limit: Annotated[str, Form()] = "",
+    ) -> RedirectResponse:
+        try:
+            from decimal import Decimal, InvalidOperation
+            from korpha.business.model import AutonomyMode
+            from korpha.cofounder import autonomy as autonomy_mod
+
+            ctx = _ctx(session, active="autonomy")
+            business = ctx["business"]
+
+            try:
+                mode_val = AutonomyMode(mode)
+            except ValueError:
+                return RedirectResponse(
+                    f"/app/autonomy?error=invalid+mode:+{mode}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            def _maybe_decimal(raw: str) -> Decimal | None:
+                raw = (raw or "").strip()
+                if not raw:
+                    return None
+                try:
+                    val = Decimal(raw)
+                except (InvalidOperation, ValueError):
+                    return None
+                return val if val > 0 else None
+
+            iter_val: int | None = None
+            if mode_val == AutonomyMode.ITERATIONS:
+                try:
+                    iter_val = int((daily_max_iterations or "0").strip())
+                except ValueError:
+                    iter_val = 0
+                if iter_val <= 0:
+                    return RedirectResponse(
+                        "/app/autonomy?error=daily+max+iterations+must+be+%3E+0",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
+
+            try:
+                autonomy_mod.set_mode(
+                    session, business=business, mode=mode_val,
+                    daily_max_iterations=iter_val,
+                )
+            except ValueError as exc:
+                return RedirectResponse(
+                    f"/app/autonomy?error={str(exc)[:80]}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            daily_cap = _maybe_decimal(daily_limit)
+            monthly_cap = _maybe_decimal(monthly_limit)
+
+            # In daily_budget mode we always want a daily cap.
+            if mode_val == AutonomyMode.DAILY_BUDGET and daily_cap is None:
+                return RedirectResponse(
+                    "/app/autonomy?error=daily+limit+required+for+daily_budget+mode",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            # monthly_only intentionally does NOT require a monthly cap:
+            # for open-weights / subscription / local setups (Codex CLI,
+            # Claude Code, Ollama) the $ math is fake — we hit the
+            # subscription rate limit or local-GPU bandwidth instead.
+            # Leaving the cap blank means "no $ cap, just grind until
+            # the cascade naturally throttles."
+
+            # When switching out of daily_budget, clear the daily cap
+            # so the prior policy doesn't keep hard-stopping. The
+            # monthly cap is kept across mode switches because Mike
+            # likely wants a sticky monthly guardrail regardless of
+            # day-to-day choice.
+            if mode_val not in (
+                AutonomyMode.DAILY_BUDGET,
+            ):
+                autonomy_mod.upsert_daily_cap(
+                    session, business=business, limit_usd=None,
+                )
+            else:
+                autonomy_mod.upsert_daily_cap(
+                    session, business=business, limit_usd=daily_cap,
+                )
+            autonomy_mod.upsert_monthly_cap(
+                session, business=business, limit_usd=monthly_cap,
+            )
+
+            return RedirectResponse(
+                "/app/autonomy?flash=Saved",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    @router.post(
+        "/autonomy/tick",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    async def autonomy_force_tick(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> RedirectResponse:
+        try:
+            from korpha.cofounder.autonomy_daemon import run_tick
+            from korpha.identity.model import Founder as _Founder
+            from sqlmodel import select as _select
+
+            ctx = _ctx(session, active="autonomy")
+            business = ctx["business"]
+            founder = session.exec(
+                _select(_Founder).where(
+                    _Founder.id == business.founder_id,
+                )
+            ).first()
+            if founder is None:
+                return RedirectResponse(
+                    "/app/autonomy?error=founder+missing",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            # Build the same CostTracker pieces the running server uses.
+            try:
+                from korpha.api.server import _build_pool_pieces
+                from korpha.inference import InferencePool as _Pool
+                from korpha.inference.cost_tracker import (
+                    CostTracker as _Tracker,
+                )
+                providers_list, accounts_list = _build_pool_pieces()
+                pool = _Pool(
+                    providers=providers_list, accounts=accounts_list,
+                )
+                tracker = _Tracker(pool=pool)
+            except Exception:  # noqa: BLE001
+                tracker = None  # tick still runs; dispatch may no-op
+
+            tr = await run_tick(
+                session=session, business=business,
+                founder=founder, cost_tracker=tracker,
+            )
+            _LAST_AUTONOMY_TICK[business.id] = {
+                "fired_count": tr.fired_count,
+                "dispatched_count": tr.dispatched_count,
+                "skipped_reason": tr.skipped_reason,
+            }
+            msg = (
+                f"Fired+{tr.fired_count}+cards,+dispatched+"
+                f"{tr.dispatched_count}"
+            )
+            if tr.skipped_reason:
+                msg = f"Skipped:+{tr.skipped_reason}"
+            return RedirectResponse(
+                f"/app/autonomy?flash={msg}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    # ---------------------------------------------------------------
+    # Plugins panel — list discovered plugins + bundled load status
+    # ---------------------------------------------------------------
+
+    @router.get("/plugins", response_class=HTMLResponse)
+    def plugins_view(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse:
+        try:
+            from korpha.plugins.hooks import HookKind, hook_registry
+            from korpha.plugins.loader import (
+                BUNDLED_PLUGINS_DIR,
+                discover_all_plugins,
+            )
+
+            ctx = _ctx(session, active="plugins")
+            mans = discover_all_plugins()
+            bundled_path = str(BUNDLED_PLUGINS_DIR.resolve())
+            rows = []
+            for m in mans:
+                source = str(m.source_path.resolve())
+                if source.startswith(bundled_path):
+                    origin = "bundled"
+                elif "site-packages" in source:
+                    origin = "pip"
+                else:
+                    origin = "user"
+                rows.append({
+                    "name": m.name,
+                    "version": m.version,
+                    "description": m.description,
+                    "permissions": sorted(m.permissions),
+                    "source_path": source,
+                    "origin": origin,
+                })
+            ctx["plugins"] = rows
+            ctx["hook_listener_counts"] = {
+                kind.value: len(hook_registry.listeners(kind))
+                for kind in HookKind
+            }
+            return templates.TemplateResponse(
+                request, "plugins.html", ctx,
             )
         finally:
             session.close()

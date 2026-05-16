@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Autonomy · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Autonomy{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">Autonomy</h1>
+      <p class="tm-blurb">
+        Decide whether the team keeps grinding on its own and what
+        stops it. With autonomy <code>off</code>, work happens only
+        when you type "go". With autonomy on, the daemon pulls
+        BACKLOG cards into work whenever there's headroom under the
+        cap you pick.
+      </p>
+    </div>
+  </div>
+
+  {% if request.query_params.get('flash') %}
+    <div class="tm-flash">✓ {{ request.query_params.get('flash') }}</div>
+  {% endif %}
+  {% if request.query_params.get('error') %}
+    <div class="tm-flash tm-flash-warn">{{ request.query_params.get('error') }}</div>
+  {% endif %}
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Current state</h2>
+    <div class="tm-cred-row">
+      <div>
+        <div class="tm-muted">Mode</div>
+        <div><strong>{{ snap.mode_label }}</strong></div>
+      </div>
+      <div>
+        <div class="tm-muted">Status</div>
+        <div>
+          {% if snap.paused %}
+            <span class="tm-pill tm-pill-paused">PAUSED</span>
+            <span class="tm-muted">— {{ snap.paused_reason_human }}</span>
+          {% else %}
+            <span class="tm-pill tm-pill-active">RUNNING</span>
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="tm-muted">Iterations today</div>
+        <div>{{ snap.iterations_today }}
+          {% if snap.iterations_cap is not none %}
+            / {{ snap.iterations_cap }}
+          {% else %}
+            <span class="tm-muted">(no cap)</span>
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="tm-muted">Spent today</div>
+        <div>{{ snap.spent_today_display }}
+          {% if snap.daily_cap_display %}
+            / {{ snap.daily_cap_display }}
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="tm-muted">Spent this month</div>
+        <div>{{ snap.spent_month_display }}
+          {% if snap.monthly_cap_display %}
+            / {{ snap.monthly_cap_display }}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Change mode</h2>
+    <form method="post" action="/app/autonomy/set"
+          class="tm-cred-form" x-data="{mode: '{{ snap.mode.value }}'}">
+      <div class="tm-cred-row">
+        <label style="display:flex; align-items:center; gap:.4rem;">
+          <input type="radio" name="mode" value="off" x-model="mode" />
+          <span><strong>Off</strong> — manual "go" only. Team idles when BACKLOG-only work remains.</span>
+        </label>
+      </div>
+      <div class="tm-cred-row">
+        <label style="display:flex; align-items:center; gap:.4rem;">
+          <input type="radio" name="mode" value="iterations" x-model="mode" />
+          <span><strong>Max iterations / day</strong> — cap by number of card-fires per day.</span>
+        </label>
+      </div>
+      <div class="tm-cred-row" x-show="mode === 'iterations'" x-cloak>
+        <label>Daily max iterations
+          <input type="number" name="daily_max_iterations" min="1"
+                 value="{{ snap.iterations_cap or 20 }}" />
+        </label>
+        <span class="tm-muted">
+          One iteration = one Director attempt on one card. Resets at midnight UTC.
+        </span>
+      </div>
+
+      <div class="tm-cred-row">
+        <label style="display:flex; align-items:center; gap:.4rem;">
+          <input type="radio" name="mode" value="daily_budget" x-model="mode" />
+          <span><strong>Max budget / day</strong> — cap by daily $ spend.</span>
+        </label>
+      </div>
+      <div class="tm-cred-row" x-show="mode === 'daily_budget'" x-cloak>
+        <label>Daily limit ({{ currency }})
+          <input type="number" name="daily_limit" step="0.01" min="0.01"
+                 value="{{ snap.daily_cap_form_value or '' }}" />
+        </label>
+        <span class="tm-muted">
+          Enforced by the budget engine — any LLM call past the cap is hard-stopped.
+        </span>
+      </div>
+
+      <div class="tm-cred-row">
+        <label style="display:flex; align-items:center; gap:.4rem;">
+          <input type="radio" name="mode" value="monthly_only" x-model="mode" />
+          <span><strong>Free run</strong> — no daily cap. Best for open-weights / subscription / local setups (Codex, Claude, Ollama) — $ math is theatre because the cascade auto-swaps when paid providers 429.</span>
+        </label>
+      </div>
+      <div class="tm-cred-row" x-show="mode === 'monthly_only' || mode === 'daily_budget'" x-cloak>
+        <label>Monthly limit ({{ currency }})
+          <input type="number" name="monthly_limit" step="0.01" min="0"
+                 value="{{ snap.monthly_cap_form_value or '' }}"
+                 placeholder="leave blank for no cap" />
+        </label>
+        <span class="tm-muted">
+          Optional in both modes. Leave blank for a paranoid-only backstop you don't need today.
+        </span>
+      </div>
+
+      <div class="tm-cred-row">
+        <button type="submit" class="tm-hire-btn">Save</button>
+        <a href="/app/autonomy" class="tm-muted" style="margin-left:.5rem;">cancel</a>
+      </div>
+    </form>
+  </section>
+
+  {% if snap.throttle_rows or snap.credit_pool %}
+    <section class="tm-section">
+      <h2 class="tm-section-title">Throughput &amp; credits</h2>
+      <p class="tm-blurb">
+        Set via <code>aigenteur throughput set --window week --limit N</code>
+        or <code>aigenteur credits init --monthly N --initial N</code>.
+      </p>
+      {% if snap.throttle_rows %}
+        <table class="tm-table">
+          <thead>
+            <tr><th>Window</th><th>Count</th><th>Limit</th><th>Use</th><th>State</th><th>Label</th></tr>
+          </thead>
+          <tbody>
+            {% for t in snap.throttle_rows %}
+              <tr>
+                <td><code>{{ t.window }}</code></td>
+                <td>{{ t.count }}</td>
+                <td>{{ t.limit }}</td>
+                <td>
+                  <span class="tm-pill {% if t.pct >= 100 %}tm-pill-paused{% else %}tm-pill-active{% endif %}">
+                    {{ t.pct }}%
+                  </span>
+                </td>
+                <td>
+                  {% if t.paused %}<span class="tm-pill tm-pill-paused">PAUSED</span>
+                  {% else %}<span class="tm-pill tm-pill-active">active</span>{% endif %}
+                </td>
+                <td>{{ t.label }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+      {% if snap.credit_pool %}
+        <div class="tm-cred-row" style="margin-top:1rem;">
+          <div>
+            <div class="tm-muted">Balance</div>
+            <div><strong>{{ snap.credit_pool.balance }}</strong></div>
+          </div>
+          <div>
+            <div class="tm-muted">Monthly grant</div>
+            <div>{{ snap.credit_pool.monthly_grant }}</div>
+          </div>
+          <div>
+            <div class="tm-muted">Next refill</div>
+            <div>{{ snap.credit_pool.next_refill_at or '—' }}</div>
+          </div>
+          <div>
+            <div class="tm-muted">Lifetime debit</div>
+            <div>{{ snap.credit_pool.lifetime_debited }}</div>
+          </div>
+          <div>
+            <div class="tm-muted">Lifetime purchased</div>
+            <div>{{ snap.credit_pool.lifetime_purchased }}</div>
+          </div>
+        </div>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Force one tick now</h2>
+    <p class="tm-blurb">
+      Runs one round of the autonomy daemon immediately — useful to
+      verify your settings without waiting for the cron tick.
+    </p>
+    <form method="post" action="/app/autonomy/tick">
+      <button type="submit" class="tm-hire-btn">Run tick</button>
+    </form>
+    {% if last_tick %}
+      <div class="tm-blurb">
+        Last tick: fired {{ last_tick.fired_count }}, dispatched
+        {{ last_tick.dispatched_count }}{% if last_tick.skipped_reason %},
+        skipped because <code>{{ last_tick.skipped_reason }}</code>{% endif %}.
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

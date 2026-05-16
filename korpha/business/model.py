@@ -24,6 +24,40 @@ class BusinessStatus(StrEnum):
     SHUT_DOWN = "shut_down"
 
 
+class AutonomyMode(StrEnum):
+    """How aggressively the system should auto-progress the board.
+
+    ``off`` — manual only. The team works when Mike types "go". This is
+        the default for fresh installs so a new founder isn't surprised
+        by background spend.
+
+    ``iterations`` — autonomy is on, capped by N card-fires per day. One
+        iteration = one Director attempt on one card. Mike's mental
+        unit ("the team can do 20 things today"). Resets at midnight
+        UTC. Spend is uncapped — use this when you trust the spend rate
+        and want a hard ceiling on volume.
+
+    ``daily_budget`` — autonomy is on, capped by daily $ spend. Backed
+        by a :class:`BudgetPolicy` with ``scope=BUSINESS, window=DAY``
+        that hard-stops via the existing budget enforcer. Iterations
+        are uncapped within the daily $.
+
+    ``monthly_only`` — autonomy is on, neither iteration nor daily $
+        capped. Optional monthly :class:`BudgetPolicy` as a paranoid
+        backstop. The intended mode for open-weights / subscription /
+        local-only setups (Codex CLI, Claude Code, Ollama) where $
+        caps are theatre — the inference cascade already handles the
+        "wall hit": when the paid workhorse 429s, it swaps to the
+        subscription tier ($0 marginal), then to local. Highest-
+        throughput mode.
+    """
+
+    OFF = "off"
+    ITERATIONS = "iterations"
+    DAILY_BUDGET = "daily_budget"
+    MONTHLY_ONLY = "monthly_only"
+
+
 class GoalStatus(StrEnum):
     ACTIVE = "active"
     ACHIEVED = "achieved"
@@ -72,6 +106,28 @@ class Business(SQLModel, table=True):
             "have to re-ask. Empty dict means 'not captured yet'."
         ),
     )
+    autonomy_mode: AutonomyMode | None = Field(
+        default=AutonomyMode.OFF,
+        nullable=True,
+        description=(
+            "How the autonomy daemon should treat this business: ``off`` "
+            "(manual go only — default), ``iterations`` (cap by "
+            "card-fires/day), ``daily_budget`` (cap by daily $ via "
+            "BudgetPolicy), or ``monthly_only`` (no daily cap, only "
+            "monthly BudgetPolicy). NULL is treated as ``off`` for "
+            "backfilled rows."
+        ),
+    )
+    daily_max_iterations: int | None = Field(
+        default=None,
+        nullable=True,
+        description=(
+            "When autonomy_mode=iterations: max card-fires per UTC day. "
+            "One iteration = one Director attempt on one card. Reset at "
+            "midnight UTC. Null when mode is anything else."
+        ),
+    )
+
     created_at: datetime = timestamp_field()
     updated_at: datetime = timestamp_field()
     archived_at: datetime | None = Field(default=None)
