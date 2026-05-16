@@ -5170,6 +5170,64 @@ def build_dashboard_router(
             session.close()
 
     # ---------------------------------------------------------------
+    # Knowledge packs panel — browse Hermes-style SKILL.md playbooks
+    # ---------------------------------------------------------------
+
+    @router.get("/knowledge", response_class=HTMLResponse)
+    def knowledge_view(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse:
+        try:
+            from collections import Counter
+
+            from korpha.knowledge_packs import (
+                available_categories,
+                available_packs,
+            )
+
+            ctx = _ctx(session, active="knowledge")
+            packs = available_packs()
+            counts = Counter(p.category for p in packs)
+            ctx["packs"] = packs
+            ctx["categories"] = available_categories()
+            ctx["counts"] = dict(counts)
+            return templates.TemplateResponse(
+                request, "knowledge.html", ctx,
+            )
+        finally:
+            session.close()
+
+    @router.get(
+        "/knowledge/{category}/{name}", response_class=HTMLResponse,
+    )
+    def knowledge_pack_detail(
+        request: Request,
+        category: str,
+        name: str,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse:
+        try:
+            from fastapi import HTTPException
+
+            from korpha.knowledge_packs import get_pack
+
+            slug = f"{category}/{name}"
+            pack = get_pack(slug)
+            if pack is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"knowledge pack {slug!r} not found",
+                )
+            ctx = _ctx(session, active="knowledge")
+            ctx["pack"] = pack
+            return templates.TemplateResponse(
+                request, "knowledge_detail.html", ctx,
+            )
+        finally:
+            session.close()
+
+    # ---------------------------------------------------------------
     # PR-A/B: /app/inference — cascade tuning
     # ---------------------------------------------------------------
 

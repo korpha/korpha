@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ pack.slug }} · Knowledge pack{% endblock %}
+{% block breadcrumbs %}<a href="/app/knowledge">Knowledge</a> / {{ pack.slug }}{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">{{ pack.name }}</h1>
+      <p class="tm-blurb">
+        Category: <code>{{ pack.category }}</code> · {{ pack.char_length }} chars ·
+        Source: <code>{{ pack.path }}</code>
+      </p>
+    </div>
+  </div>
+  <section class="tm-section">
+    <pre style="white-space: pre-wrap; font-size: 13px; line-height: 1.5;
+                color: var(--text); background: var(--bg);
+                padding: 14px; border-radius: 6px; max-height: 70vh;
+                overflow: auto;">{{ pack.content }}</pre>
+  </section>
+</div>
+{% endblock %}

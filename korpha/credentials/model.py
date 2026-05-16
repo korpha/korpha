@@ -85,6 +85,25 @@ class ExternalServiceKind(StrEnum):
     SUPABASE = "supabase"
     NEON = "neon"
 
+    # Productivity / SaaS tools
+    NOTION = "notion"
+    """Notion integration token (https://notion.so/my-integrations).
+    Required for the ``notion.*`` skill family — search, get/create/
+    update pages, query databases. Pages + databases must be
+    explicitly shared with the integration in the Notion UI."""
+
+    LINEAR = "linear"
+    """Linear personal API key (Linear app → Settings → Account →
+    Security → Personal API keys). Used by the ``linear.*`` skill
+    family — issues, projects, teams."""
+
+    GITHUB = "github"
+    """GitHub personal access token (https://github.com/settings/
+    tokens) or fine-grained token. Used by the ``github.*`` skill
+    family — PRs, issues, repos, search, commits. Fine-grained tokens
+    must include 'Contents:read' + 'Issues:write' + 'Pull requests:
+    write' for the target repos."""
+
     # Custom — community-defined service kinds
     CUSTOM = "custom"
 

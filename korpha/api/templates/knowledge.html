@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Knowledge packs · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Knowledge packs{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">Knowledge packs</h1>
+      <p class="tm-blurb">
+        SKILL.md playbooks the agents reference when reasoning about
+        third-party tools. Loaded automatically by capability tag —
+        a Director assigned a 'productivity' card gets all
+        {{ counts.productivity }} productivity packs in its prompt.
+      </p>
+    </div>
+  </div>
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">By category ({{ packs|length }} packs total)</h2>
+    <div class="tm-cred-row">
+      {% for cat, n in counts.items() %}
+        <a href="#cat-{{ cat }}" class="tm-pill tm-pill-active"
+           style="text-decoration:none;">
+          {{ cat }} ({{ n }})
+        </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% for cat in categories %}
+    <section class="tm-section" id="cat-{{ cat }}">
+      <h2 class="tm-section-title">{{ cat }}</h2>
+      <table class="tm-table">
+        <thead>
+          <tr><th>Pack</th><th>Slug</th><th>Size</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for p in packs %}
+            {% if p.category == cat %}
+              <tr>
+                <td><strong>{{ p.name }}</strong></td>
+                <td><code>{{ p.slug }}</code></td>
+                <td>{{ p.char_length }} chars</td>
+                <td>
+                  <a href="/app/knowledge/{{ p.slug }}" class="tm-hire-btn">View</a>
+                </td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endfor %}
+</div>
+{% endblock %}

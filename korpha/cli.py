@@ -6278,6 +6278,99 @@ def credits_set_monthly_cmd(
     ))
 
 
+knowledge_app = typer.Typer(
+    name="knowledge",
+    help=(
+        "Browse + manage Hermes-style SKILL.md knowledge packs. Packs "
+        "are agent-readable playbooks for third-party tools (Notion, "
+        "Linear, GitHub, etc.). Loaded automatically by capability "
+        "tag — UI parity at /app/knowledge."
+    ),
+)
+app.add_typer(knowledge_app)
+
+
+@knowledge_app.command("list")
+def knowledge_list_cmd(
+    category: Annotated[str | None, typer.Option(
+        "--category", "-c",
+        help="Filter to one source category (productivity / github / "
+             "devops / mlops / creative / etc).",
+    )] = None,
+) -> None:
+    """List loaded knowledge packs."""
+    _ensure_load_env()
+    from korpha.knowledge_packs import available_packs
+
+    packs = available_packs()
+    if category:
+        cat = category.strip().lower()
+        packs = [p for p in packs if p.category.lower() == cat]
+    if not packs:
+        typer.echo(_dim("(no packs)"))
+        return
+    typer.echo(f"{len(packs)} pack(s):")
+    for p in packs:
+        typer.echo(
+            f"  {p.slug:55s}  {p.char_length:>6d} chars"
+        )
+
+
+@knowledge_app.command("show")
+def knowledge_show_cmd(
+    slug: Annotated[str, typer.Argument(
+        help="Pack slug e.g. 'productivity/notion'.",
+    )],
+) -> None:
+    """Print the full SKILL.md content of a pack."""
+    _ensure_load_env()
+    from korpha.knowledge_packs import get_pack
+
+    pack = get_pack(slug)
+    if pack is None:
+        typer.echo(_red(f"No pack at {slug!r}"))
+        raise typer.Exit(code=1)
+    typer.echo(_dim(f"# {pack.slug} ({pack.char_length} chars)"))
+    typer.echo(pack.content)
+
+
+@knowledge_app.command("reload")
+def knowledge_reload_cmd() -> None:
+    """Re-scan disk for pack changes."""
+    _ensure_load_env()
+    from korpha.knowledge_packs import reload_packs
+
+    n = reload_packs()
+    typer.echo(_green(f"✓ reloaded {n} pack(s)"))
+
+
+@knowledge_app.command("for-role")
+def knowledge_for_role_cmd(
+    role_type: Annotated[str, typer.Argument(
+        help="ceo / cto / cmo / coo / vp / worker.",
+    )],
+    specialty: Annotated[str | None, typer.Option(
+        "--specialty", help="Worker specialty: designer / copywriter / support / etc.",
+    )] = None,
+) -> None:
+    """Show the knowledge directory a Director/Worker of this role
+    would have injected into its prompt."""
+    _ensure_load_env()
+    from korpha.cofounder.knowledge_inject import (
+        build_knowledge_directory_block,
+    )
+    block = build_knowledge_directory_block(
+        role_type=role_type, specialty=specialty,
+    )
+    if not block:
+        typer.echo(_dim("(no packs match this role)"))
+        return
+    typer.echo(block)
+
+
+# ============================================================
+# Plugin CLI — list + show discovered plugins
+# ============================================================
 
 plugin_app = typer.Typer(
     name="plugin",
