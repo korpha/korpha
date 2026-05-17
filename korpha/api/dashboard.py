@@ -22,7 +22,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
@@ -3213,9 +3213,68 @@ def build_dashboard_router(
             ctx["unit_options"] = units
             from korpha.credentials.model import ExternalServiceKind
             ctx["service_kinds"] = [k.value for k in ExternalServiceKind]
+            # PR-XAI-1: subscription-OAuth status
+            from korpha.inference.xai_oauth import is_configured as _xai_ok
+            ctx["xai_oauth_configured"] = _xai_ok()
             return templates.TemplateResponse(
                 request, "credentials.html", ctx,
             )
+        finally:
+            session.close()
+
+    @router.post("/credentials/xai-oauth/start")
+    def credentials_xai_oauth_start(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> JSONResponse:
+        """Kick off the xAI OAuth loopback sign-in flow in a
+        background thread + return immediately. The flow opens
+        Mike's browser to ``auth.x.ai``; he signs in; the loopback
+        server captures the callback + writes tokens to the vault.
+
+        Returns JSON ``{started: true}`` — the UI polls
+        ``/app/credentials/xai-oauth/status`` for completion."""
+        try:
+            import threading
+            from korpha.inference.xai_oauth import begin_login
+
+            def _run():
+                try:
+                    begin_login(open_browser=True, timeout_seconds=300)
+                except Exception:  # noqa: BLE001
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "xai-oauth loopback failed", exc_info=True,
+                    )
+
+            t = threading.Thread(target=_run, daemon=True)
+            t.start()
+            return JSONResponse({"started": True})
+        finally:
+            session.close()
+
+    @router.get("/credentials/xai-oauth/status")
+    def credentials_xai_oauth_status(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> JSONResponse:
+        """Poll endpoint for the in-progress OAuth flow."""
+        try:
+            from korpha.inference.xai_oauth import is_configured
+            return JSONResponse({"configured": is_configured()})
+        finally:
+            session.close()
+
+    @router.post("/credentials/xai-oauth/logout")
+    def credentials_xai_oauth_logout(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> RedirectResponse:
+        """Clear stored xAI OAuth tokens."""
+        try:
+            from korpha.inference.xai_oauth import logout
+            logout()
+            return RedirectResponse("/app/credentials", status_code=303)
         finally:
             session.close()
 

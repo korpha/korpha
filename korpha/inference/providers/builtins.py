@@ -32,7 +32,9 @@ from korpha.inference.providers.codex_cli import CodexCLIProvider
 from korpha.inference.providers.openai_compat import (
     OpenAICompatibleProvider,
 )
+from korpha.inference.providers.xai_responses import xai_oauth_provider
 from korpha.inference.registry import AuthType
+from korpha.inference import xai_oauth as _xai_oauth
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +384,55 @@ def _claude_code_profile() -> ProviderProfile:
 
 
 # ---------------------------------------------------------------------------
+# xAI Grok via OAuth — uses SuperGrok / X Premium+ subscription
+# ---------------------------------------------------------------------------
+
+
+def _xai_oauth_profile() -> ProviderProfile:
+    return ProviderProfile(
+        name="xai-oauth",
+        label="xAI Grok (X Premium+ / SuperGrok subscription)",
+        provider_factory=xai_oauth_provider,
+        auth_type=AuthType.OAUTH,
+        api_mode=ApiMode.CHAT_COMPLETIONS,
+        base_url="https://api.x.ai/v1",
+        tier_capabilities={
+            InferenceTier.PRO: TierCapability(
+                default_model="grok-4.20-0309-reasoning",
+                context_length=256_000,
+                supports_streaming=True,
+                supports_tool_use=True,
+                supports_reasoning=True,
+                cost=CostHint(input_per_1m_usd=0.0, output_per_1m_usd=0.0),
+            ),
+            InferenceTier.WORKHORSE: TierCapability(
+                default_model="grok-4.20-0309-non-reasoning",
+                context_length=256_000,
+                supports_streaming=True,
+                supports_tool_use=True,
+                cost=CostHint(input_per_1m_usd=0.0, output_per_1m_usd=0.0),
+            ),
+        },
+        setup_fields=[],  # no env — OAuth handles auth
+        setup_url="https://x.com/i/premium_sign_up",
+        install_hint=(
+            "Sign in with your X Premium+ / SuperGrok account: "
+            "`aigenteur auth add xai-oauth` (opens browser)."
+        ),
+        check_fn=_xai_oauth.is_configured,
+        description=(
+            "Wrapper around xAI's Responses API authenticated via your "
+            "X Premium+ / SuperGrok subscription — no per-token charge. "
+            "Burns subscription quota first; falls back to API key or "
+            "next provider on 429. Pair with X Search skill for real-"
+            "time tweet research."
+        ),
+        source="builtin",
+        emoji="🐦",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Eager registration on import
 # ---------------------------------------------------------------------------
 
@@ -396,6 +447,7 @@ def _register_all_builtins() -> None:
         _local_ollama_profile,
         _codex_cli_profile,
         _claude_code_profile,
+        _xai_oauth_profile,
     ):
         provider_profile_registry.register(factory())
 
