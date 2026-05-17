@@ -111,6 +111,7 @@ def _autoload_builtins() -> None:
         support,
         validate,
         web_search,
+        x_search,
     )
     consultant.register_skills()
     domain_intel.register_skills()
@@ -119,6 +120,7 @@ def _autoload_builtins() -> None:
     linear.register_skills()
     notion.register_skills()
     web_search.register_skills()
+    x_search.register_skills()
 
 
 def load_user_yaml_skills(
