@@ -6534,6 +6534,114 @@ def secret_delete_cmd(
         typer.echo(_yellow(f"No secret named {name!r}."))
 
 
+auth_app = typer.Typer(
+    name="auth",
+    help=(
+        "OAuth subscription auth — sign in with your existing X / "
+        "ChatGPT / Claude subscription so the agent uses subscription "
+        "quota (zero marginal cost) before falling through to "
+        "API-key providers."
+    ),
+)
+app.add_typer(auth_app)
+
+
+@auth_app.command("add")
+def auth_add_cmd(
+    provider: Annotated[str, typer.Argument(
+        help="Provider to sign in with. Currently: 'xai-oauth'.",
+    )],
+    business_unit: Annotated[str | None, typer.Option(
+        "--unit",
+        help=(
+            "Business unit id. Stores tokens per-unit so two lines "
+            "can each have their own SuperGrok subscription. Omit "
+            "for an install-wide subscription."
+        ),
+    )] = None,
+    no_browser: Annotated[bool, typer.Option(
+        "--no-browser",
+        help=(
+            "Print the URL instead of opening a browser — for "
+            "VPS deployments. Forward port 56121 first: "
+            "ssh -L 56121:127.0.0.1:56121 user@host"
+        ),
+    )] = False,
+) -> None:
+    """Run the OAuth loopback sign-in flow for the chosen provider."""
+    _ensure_load_env()
+    prov = provider.strip().lower()
+    if prov not in ("xai-oauth", "xai", "grok", "grok-oauth"):
+        typer.echo(_red(f"Unknown provider {provider!r}."))
+        typer.echo("Available: xai-oauth")
+        raise typer.Exit(code=1)
+    from korpha.inference.xai_oauth import (
+        XAI_OAUTH_CALLBACK_PORT, XaiOAuthError, begin_login,
+    )
+    typer.echo(_bold("Opening browser for X / xAI sign-in..."))
+    if no_browser:
+        typer.echo(_dim(
+            f"--no-browser set; we'll print the URL. Open it on a "
+            f"machine that can reach this one on port "
+            f"{XAI_OAUTH_CALLBACK_PORT}."
+        ))
+    try:
+        auth = begin_login(
+            business_unit_id=business_unit,
+            open_browser=not no_browser,
+        )
+    except XaiOAuthError as exc:
+        typer.echo(_red(f"Sign-in failed: {exc}"))
+        raise typer.Exit(code=1) from exc
+    scope = (
+        f"business unit {business_unit}" if business_unit
+        else "install-wide"
+    )
+    typer.echo(_green(
+        f"✓ xAI OAuth tokens stored ({scope}). Expires in "
+        f"{max(0, auth.expires_at - int(__import__('time').time()))}s; "
+        "auto-refreshes."
+    ))
+
+
+@auth_app.command("status")
+def auth_status_cmd() -> None:
+    """Show which OAuth subscriptions are configured."""
+    _ensure_load_env()
+    from korpha.inference.xai_oauth import is_configured
+
+    typer.echo(_bold("\nOAuth subscriptions"))
+    xai_state = "✓ configured" if is_configured() else "✗ not configured"
+    color = _green if is_configured() else _dim
+    typer.echo(f"  xai-oauth   {color(xai_state)}")
+    if not is_configured():
+        typer.echo(_dim(
+            "  → run `aigenteur auth add xai-oauth` to sign in",
+        ))
+
+
+@auth_app.command("logout")
+def auth_logout_cmd(
+    provider: Annotated[str, typer.Argument(
+        help="Provider to forget tokens for. Currently: 'xai-oauth'.",
+    )],
+    business_unit: Annotated[str | None, typer.Option(
+        "--unit", help="Forget per-unit tokens; omit for install-wide.",
+    )] = None,
+) -> None:
+    """Erase stored OAuth tokens. Next call requires a fresh sign-in."""
+    _ensure_load_env()
+    if provider.strip().lower() not in ("xai-oauth", "xai", "grok"):
+        typer.echo(_red(f"Unknown provider {provider!r}."))
+        raise typer.Exit(code=1)
+    from korpha.inference.xai_oauth import logout
+
+    if logout(business_unit):
+        typer.echo(_red(f"✗ Cleared xai-oauth tokens"))
+    else:
+        typer.echo(_yellow("Nothing to clear."))
+
+
 budget_app = typer.Typer(
     name="budget",
     help=(
