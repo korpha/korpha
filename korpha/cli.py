@@ -6620,6 +6620,127 @@ def auth_status_cmd() -> None:
         ))
 
 
+@auth_app.command("add-openrouter-free")
+def auth_add_openrouter_free_cmd(
+    keys: Annotated[str | None, typer.Option(
+        "--keys",
+        help=(
+            "Comma-separated free-tier OpenRouter keys. Omit to enter "
+            "interactively (paste one per line, blank line to finish)."
+        ),
+    )] = None,
+    pro_model: Annotated[str, typer.Option(
+        "--pro-model",
+        help="Default PRO-tier model id (must end in :free).",
+    )] = "deepseek/deepseek-chat-v4:free",
+    workhorse_model: Annotated[str, typer.Option(
+        "--workhorse-model",
+        help="Default WORKHORSE-tier model id (must end in :free).",
+    )] = "meta-llama/llama-3.3-70b-instruct:free",
+) -> None:
+    """Bulk-register N OpenRouter free-tier keys. Each becomes its
+    own ProviderAccount under the 'openrouter-free' preset so the
+    cascade rotates through them on 429.
+
+    Hard-pinned to :free models so a $0-balance key can't be
+    accidentally pointed at a paid model.
+    """
+    _ensure_load_env()
+    import yaml
+    from pathlib import Path
+
+    if not pro_model.endswith(":free"):
+        typer.echo(_red(f"--pro-model must end in ':free', got {pro_model!r}"))
+        raise typer.Exit(code=1)
+    if not workhorse_model.endswith(":free"):
+        typer.echo(_red(
+            f"--workhorse-model must end in ':free', got {workhorse_model!r}"
+        ))
+        raise typer.Exit(code=1)
+
+    if keys:
+        key_list = [k.strip() for k in keys.split(",") if k.strip()]
+    else:
+        typer.echo(_bold(
+            "Paste your free-tier OpenRouter keys, one per line. "
+            "Empty line to finish:",
+        ))
+        key_list = []
+        while True:
+            try:
+                line = typer.prompt(
+                    f"  key {len(key_list)+1}", default="",
+                    show_default=False,
+                )
+            except (KeyboardInterrupt, EOFError):
+                typer.echo("\nCancelled.")
+                raise typer.Exit(code=1)
+            line = (line or "").strip()
+            if not line:
+                break
+            key_list.append(line)
+
+    if not key_list:
+        typer.echo(_yellow("No keys provided. Nothing to do."))
+        raise typer.Exit(code=0)
+
+    # Sanity: dedupe + light shape check (OpenRouter keys start with sk-or-).
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for k in key_list:
+        if k in seen:
+            typer.echo(_dim(f"  skipping duplicate: {k[:12]}…"))
+            continue
+        if not k.startswith(("sk-or-", "sk-")):
+            typer.echo(_yellow(
+                f"  warning: {k[:12]}… doesn't look like an OpenRouter "
+                f"key (expected sk-or-…). Storing anyway.",
+            ))
+        seen.add(k)
+        cleaned.append(k)
+
+    # Merge into providers.yaml — preserve existing entries.
+    yaml_path = Path.home() / ".korpha" / "providers.yaml"
+    if yaml_path.exists():
+        existing = yaml.safe_load(yaml_path.read_text()) or {}
+    else:
+        existing = {}
+    providers = list(existing.get("providers") or [])
+
+    # Don't double-add: if an entry already has this api_key, skip.
+    existing_keys: set[str] = {
+        str(p.get("api_key") or "") for p in providers
+        if p.get("preset") == "openrouter-free"
+    }
+    added = 0
+    for i, k in enumerate(cleaned, start=1):
+        if k in existing_keys:
+            typer.echo(_dim(f"  skipping already-registered key #{i}"))
+            continue
+        providers.append({
+            "preset": "openrouter-free",
+            "label": f"openrouter-free-{len(existing_keys) + added + 1}",
+            "tiers": {"pro": pro_model, "workhorse": workhorse_model},
+            "api_key": k,
+        })
+        added += 1
+
+    existing["providers"] = providers
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    yaml_path.write_text(yaml.safe_dump(existing, sort_keys=False))
+
+    typer.echo(_green(
+        f"✓ Added {added} new OpenRouter free-tier key(s) "
+        f"(total openrouter-free accounts now: "
+        f"{len(existing_keys) + added}).",
+    ))
+    typer.echo(_dim(
+        "Restart the server (or wait for next reload) to pick them up. "
+        "The cascade will rotate through them on 429 + fall through to "
+        "paid providers when free quota's exhausted.",
+    ))
+
+
 @auth_app.command("logout")
 def auth_logout_cmd(
     provider: Annotated[str, typer.Argument(

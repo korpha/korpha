@@ -222,6 +222,18 @@ def _parse_entry(
             raise ProviderConfigError(
                 f"{source}: providers[{index}].tiers.{tier_name} must be a non-empty model id"
             )
+        # Guardrail: openrouter-free MUST point at :free model variants.
+        # A $0-balance key on a paid model fails silently at request
+        # time; surfacing the error at config-load gives the operator
+        # a clear message instead of mysterious 401s in production.
+        if preset == "openrouter-free" and not model.endswith(":free"):
+            raise ProviderConfigError(
+                f"{source}: providers[{index}].tiers.{tier_name}={model!r} "
+                f"is not a :free model. The 'openrouter-free' preset "
+                f"only accepts model ids ending in ':free' (e.g. "
+                f"'deepseek/deepseek-chat-v4:free'). Use the regular "
+                f"'openrouter' preset for paid models."
+            )
         tier_models[tier] = model
 
     # Subscription presets (codex-cli, future claude-code-cli) don't use

@@ -434,10 +434,22 @@ def deepseek_provider() -> OpenAICompatibleProvider:
     )
 
 
-# Convenience preset: OpenRouter
+# Convenience preset: OpenRouter (paid models — requires balance on the account)
 def openrouter_provider() -> OpenAICompatibleProvider:
     return OpenAICompatibleProvider(
         name="openrouter",
+        base_url="https://openrouter.ai/api/v1",
+        extra_headers={"HTTP-Referer": "https://github.com/korpha/korpha"},
+    )
+
+
+# Convenience preset: OpenRouter free-tier — separate provider so we
+# can hard-enforce :free model suffix at config-load time. A $0-balance
+# key pointed at a paid model 401s silently; pinning the suffix prevents
+# that footgun.
+def openrouter_free_provider() -> OpenAICompatibleProvider:
+    return OpenAICompatibleProvider(
+        name="openrouter-free",
         base_url="https://openrouter.ai/api/v1",
         extra_headers={"HTTP-Referer": "https://github.com/korpha/korpha"},
     )
@@ -570,6 +582,7 @@ PROVIDER_PRESETS: dict[str, Callable[[], OpenAICompatibleProvider]] = {
     "opencode-go": opencode_go_provider,
     "opencode-zen": opencode_zen_provider,
     "openrouter": openrouter_provider,
+    "openrouter-free": openrouter_free_provider,
     "together": together_provider,
     "groq": groq_provider,
     "cerebras": cerebras_provider,
