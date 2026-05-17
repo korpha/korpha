@@ -35,6 +35,11 @@ class SkillProvenance(StrEnum):
     ``~/.korpha/skills/agent_created/``. Curator may auto-archive
     after a usage-based decay window."""
 
+    HERMES_PORT = "hermes_port"
+    """Faithful port of a skill that ships with Hermes Agent (Nous
+    Research). Provenance marker so we can credit upstream + track
+    what to re-sync when Hermes ships changes. Never auto-archived."""
+
 
 @dataclass(frozen=True)
 class SkillSpec:
