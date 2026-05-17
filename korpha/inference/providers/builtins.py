@@ -234,7 +234,7 @@ def _opencode_zen_profile() -> ProviderProfile:
 def _openrouter_profile() -> ProviderProfile:
     return ProviderProfile(
         name="openrouter",
-        label="OpenRouter",
+        label="OpenRouter (paid)",
         provider_factory=lambda: OpenAICompatibleProvider(
             name="openrouter",
             base_url="https://openrouter.ai/api/v1",
@@ -260,18 +260,101 @@ def _openrouter_profile() -> ProviderProfile:
         setup_fields=[
             SetupField(
                 env_var="OPENROUTER_API_KEY",
-                description="API key from OpenRouter",
+                description=(
+                    "API key from OpenRouter with credit/balance — "
+                    "for paid models. Use openrouter-free profile "
+                    "for $0 free-tier keys."
+                ),
                 setup_url="https://openrouter.ai/keys",
             ),
         ],
         setup_url="https://openrouter.ai",
         description=(
-            "Aggregator — one key, hundreds of models. Useful for "
-            "one-off experiments or rare models the other profiles "
-            "don't cover. ~10% markup over direct."
+            "Aggregator — one key, hundreds of models. PAID models "
+            "only — needs balance on the OpenRouter account. For "
+            "$0-balance free-tier keys, use 'OpenRouter (free)' "
+            "profile instead."
         ),
         source="builtin",
         emoji="🔀",
+    )
+
+
+# ---------------------------------------------------------------------------
+# OpenRouter (free tier) — $0 balance keys pinned to :free models
+# ---------------------------------------------------------------------------
+#
+# OpenRouter offers a separate model lineup with a ``:free`` suffix
+# (e.g. ``deepseek/deepseek-chat-v3:free``). These run at $0 but are
+# rate-limited per-key (~50 requests/day on the free tier as of 2026).
+#
+# Why a separate profile from `openrouter`:
+#   1. tier_models MUST end in `:free` — pointing a $0-balance key at
+#      a paid model 401s silently. Hard-pinning prevents that footgun.
+#   2. The cascade router can prefer free accounts for low-stakes work
+#      and fall through to paid keys only when free quota is exhausted.
+#   3. Free-tier rate limits are per-key, so plumbing N free keys as
+#      N ProviderAccounts lets the PR-B 429-quota model rotate through
+#      them automatically.
+
+
+def _openrouter_free_profile() -> ProviderProfile:
+    return ProviderProfile(
+        name="openrouter-free",
+        label="OpenRouter (free tier)",
+        provider_factory=lambda: OpenAICompatibleProvider(
+            name="openrouter-free",
+            base_url="https://openrouter.ai/api/v1",
+            extra_headers={
+                "HTTP-Referer": "https://github.com/korpha/korpha",
+            },
+        ),
+        auth_type=AuthType.API_KEY,
+        api_mode=ApiMode.CHAT_COMPLETIONS,
+        base_url="https://openrouter.ai/api/v1",
+        tier_capabilities={
+            InferenceTier.PRO: TierCapability(
+                default_model="deepseek/deepseek-chat-v4:free",
+                context_length=128_000,
+                supports_streaming=True,
+                supports_reasoning=True,
+                cost=CostHint(input_per_1m_usd=0.0, output_per_1m_usd=0.0),
+            ),
+            InferenceTier.WORKHORSE: TierCapability(
+                default_model="meta-llama/llama-3.3-70b-instruct:free",
+                context_length=128_000,
+                supports_streaming=True,
+                cost=CostHint(input_per_1m_usd=0.0, output_per_1m_usd=0.0),
+            ),
+        },
+        setup_fields=[
+            SetupField(
+                env_var="OPENROUTER_API_KEY_FREE",
+                description=(
+                    "Free-tier OpenRouter key (no balance loaded). "
+                    "Add multiple via /app/credentials or `aigenteur "
+                    "setup providers` — each becomes its own account "
+                    "and the cascade rotates through them on 429."
+                ),
+                setup_url="https://openrouter.ai/keys",
+            ),
+        ],
+        setup_url="https://openrouter.ai/keys",
+        install_hint=(
+            "Get free keys at https://openrouter.ai/keys (no balance "
+            "needed). Add 10+ keys for production-grade volume — each "
+            "gets ~50 req/day on the free tier."
+        ),
+        description=(
+            "OpenRouter's $0 free-tier — pinned to :free model "
+            "variants (DeepSeek V4 free, Llama 3.3 70B free, etc.). "
+            "Rate-limited per key (~50/day); plumb multiple keys for "
+            "throughput. Cost = $0 per token. Cascade rotates through "
+            "them on 429 + falls through to paid providers when "
+            "quota's exhausted."
+        ),
+        source="builtin",
+        emoji="🆓",
     )
 
 
@@ -444,6 +527,7 @@ def _register_all_builtins() -> None:
         _opencode_go_profile,
         _opencode_zen_profile,
         _openrouter_profile,
+        _openrouter_free_profile,
         _local_ollama_profile,
         _codex_cli_profile,
         _claude_code_profile,
