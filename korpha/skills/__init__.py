@@ -115,6 +115,10 @@ def _autoload_builtins() -> None:
     )
     consultant.register_skills()
     domain_intel.register_skills()
+    # Video-gen plugin registry — register built-in adapters
+    # (HyperFrames + HeyGen) so plugins have peers to enumerate.
+    from korpha.video.builtins import register_builtin_video_providers
+    register_builtin_video_providers()
     github.register_skills()
     knowledge.register_skills()
     linear.register_skills()
