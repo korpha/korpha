@@ -5364,6 +5364,105 @@ def build_dashboard_router(
             session.close()
 
     @router.post(
+        "/inference/openrouter-free/add",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def inference_openrouter_free_add(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+        keys: Annotated[str, Form()] = "",
+        pro_model: Annotated[str, Form()] = "deepseek/deepseek-chat-v4:free",
+        workhorse_model: Annotated[str, Form()] = "meta-llama/llama-3.3-70b-instruct:free",
+    ) -> RedirectResponse:
+        """Bulk-add N OpenRouter free-tier keys from a textarea
+        (one key per line). Each becomes its own ProviderAccount
+        under the 'openrouter-free' preset; the cascade rotates
+        through them on 429 and de-dupes against any already in
+        providers.yaml.
+
+        Hard-pinned to :free models — rejected at config load if
+        the operator ever tries to point them at a paid model.
+        """
+        from pathlib import Path
+        from urllib.parse import quote
+        import yaml
+
+        try:
+            # Validate the model suffix up-front so Mike sees the
+            # error before we write anything.
+            for label_field, val in (
+                ("PRO model", pro_model), ("WORKHORSE model", workhorse_model),
+            ):
+                if not val.endswith(":free"):
+                    msg = (
+                        f"{label_field} {val!r} is not a :free model — "
+                        f"openrouter-free only accepts ids ending in ':free'."
+                    )
+                    return RedirectResponse(
+                        f"/app/inference?error={quote(msg)}",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
+
+            raw_keys = [
+                line.strip()
+                for line in (keys or "").splitlines()
+                if line.strip()
+            ]
+            if not raw_keys:
+                return RedirectResponse(
+                    "/app/inference?error=Paste+at+least+one+key.",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            yaml_path = Path.home() / ".korpha" / "providers.yaml"
+            if yaml_path.exists():
+                existing = yaml.safe_load(yaml_path.read_text()) or {}
+            else:
+                existing = {}
+            providers = list(existing.get("providers") or [])
+            existing_keys: set[str] = {
+                str(p.get("api_key") or "") for p in providers
+                if p.get("preset") == "openrouter-free"
+            }
+            already_count = len(existing_keys)
+
+            added = 0
+            duplicates = 0
+            for k in raw_keys:
+                if k in existing_keys:
+                    duplicates += 1
+                    continue
+                existing_keys.add(k)
+                providers.append({
+                    "preset": "openrouter-free",
+                    "label": (
+                        f"openrouter-free-{already_count + added + 1}"
+                    ),
+                    "tiers": {
+                        "pro": pro_model,
+                        "workhorse": workhorse_model,
+                    },
+                    "api_key": k,
+                })
+                added += 1
+
+            existing["providers"] = providers
+            yaml_path.parent.mkdir(parents=True, exist_ok=True)
+            yaml_path.write_text(yaml.safe_dump(existing, sort_keys=False))
+
+            flash_parts = [f"Added {added} OpenRouter free key(s)"]
+            if duplicates:
+                flash_parts.append(f"({duplicates} duplicate(s) skipped)")
+            flash_parts.append("— restart server to pick them up.")
+            return RedirectResponse(
+                f"/app/inference?flash={quote(' '.join(flash_parts))}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    @router.post(
         "/inference/update",
         response_class=HTMLResponse,
         response_model=None,
