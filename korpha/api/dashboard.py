@@ -1801,6 +1801,74 @@ def build_dashboard_router(
             session.close()
 
     @router.post(
+        "/skills/authored/{kind}/{slug}/publish",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def skills_authored_publish(
+        kind: str,
+        slug: str,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> RedirectResponse:
+        """Push this authored skill to the AIgenteur hub.
+
+        Uses the cached hub session from ``~/.korpha/hub_session.json``
+        (populated by ``aigenteur skill hub-login``). If no session is
+        cached, redirects back with a flash explaining how to sign in.
+        Surfaces hub publish errors (rate limit, duplicate name, expired
+        session) as flashes too — never a 500.
+        """
+        try:
+            entry = _find_authored_skill(kind, slug)
+            if entry is None:
+                return RedirectResponse(
+                    "/app/skills/authored",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            from korpha.skills_hub.hub_auth import load_session
+            hub_session = load_session()
+            if hub_session is None:
+                return RedirectResponse(
+                    f"/app/skills/authored/{kind}/{slug}/source?flash=login_required",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            from korpha.skills_hub.hub_publish import (
+                HubPublishError, publish_skill,
+            )
+            try:
+                long_description = ""
+                try:
+                    long_description = entry["primary_file"].read_text(
+                        encoding="utf-8",
+                    )[:8000]
+                except OSError:
+                    pass
+                publish_skill(
+                    hub_session,
+                    name=entry["name"],
+                    display_name=entry["name"],
+                    description=entry.get("description") or entry["name"],
+                    long_description=long_description,
+                    tags=[entry["kind"], "agent-authored"],
+                )
+            except HubPublishError as exc:
+                from urllib.parse import quote
+                return RedirectResponse(
+                    f"/app/skills/authored/{kind}/{slug}/source"
+                    f"?flash=publish_failed&reason={quote(str(exc))}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            return RedirectResponse(
+                f"/app/skills/authored/{kind}/{slug}/source?flash=published",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    @router.post(
         "/skills/authored/{kind}/{slug}/delete",
         response_class=HTMLResponse,
         response_model=None,
