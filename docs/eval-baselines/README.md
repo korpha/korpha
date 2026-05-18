@@ -66,19 +66,36 @@ after `korpha config`.
 
 ## The headline
 
-Eight model deployments tested on the same 7-role / 80-assertion
-fixture set — four cloud, four running on a single RTX 3090. Korpha
-works with any of them; pick what fits your hardware and budget:
+Model deployments tested on the same 7-role / 80-assertion fixture
+set. Korpha works with any of them; pick what fits your hardware
+and budget.
 
-| Model | Where it runs | Pass | Total | Overall | Wall time |
-| ----- | ------------- | ---- | ----- | ------- | --------- |
-| DeepSeek V4 Pro | OpenCode Go (cloud, DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
-| DeepSeek V4 Flash (workhorse) | OpenCode Go (cloud, DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
-| **Ministral-3-14B-Reasoning (Q4_K_M)** | **Local RTX 3090, 11 GB VRAM** | **75** | **80** | **93.8%** | **6 min** |
-| Kimi K2.6 | OpenCode Go (cloud, Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
-| **Gemma-4-31B (Q4_K_M)** | **Local RTX 3090, TurboQuant, 23 GB** | **74** | **80** | **92.5%** | **25 min** |
-| **Qwen3.6-27B (Q4_K_M)** | **Local RTX 3090, TurboQuant turbo3, ~22 GB** | **74** | **80** | **92.5%** | **~68 min** |
-| GLM 5.1   | OpenCode Go (cloud, Zhipu AI)    | 73 | 80 | **91.2%** | 18 min |
+### Cloud models
+
+| Model | Provider | Pass | Total | Overall | Wall time |
+| ----- | -------- | ---- | ----- | ------- | --------- |
+| DeepSeek V4 Pro | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
+| DeepSeek V4 Flash (workhorse) | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
+| Kimi K2.6 | OpenCode Go (Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
+| GLM 5.1 | OpenCode Go (Zhipu AI) | 73 | 80 | **91.2%** | 18 min |
+| nvidia/nemotron-3-super-120b-a12b | OpenRouter | _TBD_ | 80 | _TBD_ | _TBD_ |
+| nvidia/nemotron-3-nano-30b-a3b | OpenRouter | _TBD_ | 80 | _TBD_ | _TBD_ |
+| nvidia/nemotron-3-nano-omni-30b-a3b-reasoning | OpenRouter | _TBD_ | 80 | _TBD_ | _TBD_ |
+| openai/gpt-oss-120b | OpenRouter | _TBD_ | 80 | _TBD_ | _TBD_ |
+| arcee-ai/trinity-large-thinking | OpenRouter | _TBD_ | 80 | _TBD_ | _TBD_ |
+| poolside/laguna-m.1 | OpenRouter | _TBD_ | 80 | _TBD_ | _TBD_ |
+| poolside/laguna-xs.2 | OpenRouter | _TBD_ | 80 | _TBD_ | _TBD_ |
+| baidu/cobuddy | OpenRouter | _TBD_ | 80 | _TBD_ | _TBD_ |
+| nvidia/llama-nemotron-embed-vl-1b-v2 | OpenRouter | _N/A_ | _N/A_ | _embedding-only_ | _N/A_ |
+
+### Local models (RTX 3090, single card)
+
+| Model | VRAM | Pass | Total | Overall | Wall time |
+| ----- | ---- | ---- | ----- | ------- | --------- |
+| Ministral-3-14B-Reasoning (Q4_K_M) | 11 GB | 75 | 80 | **93.8%** | 6 min |
+| Gemma-4-31B (Q4_K_M, TurboQuant) | 23 GB | 74 | 80 | **92.5%** | 25 min |
+| Qwen3.6-27B (Q4_K_M, TurboQuant turbo3) | ~22 GB | 74 | 80 | **92.5%** | ~68 min |
+| Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
 | **Ministral-3-14B-Instruct (Q4_K_M)** | **Local RTX 3090, 11 GB VRAM, non-thinking** | **71** | **80** | **88.8%** | **6 min** |
 
 **Four local options across the quality spectrum:**
