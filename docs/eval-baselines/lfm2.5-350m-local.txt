@@ -1,0 +1,60 @@
+run 1/3…
+run 2/3…
+run 3/3…
+Eval report — provider: lfm2.5-350m-local-3090/LiquidAI/LFM2.5-350M (avg of 3 runs)
+============================================================
+
+Per-role rollup:
+  CEO     12/16  ( 75.0%)  $0.0000
+  CMO      8/10  ( 80.0%)  $0.0000
+  COO     10/13  ( 76.9%)  $0.0000
+  COPYWRITER   9/11  ( 81.8%)  $0.0000
+  CTO      8/11  ( 72.7%)  $0.0000
+  DESIGNER   7/10  ( 70.0%)  $0.0000
+  SUPPORT   7/9   ( 77.8%)  $0.0000
+
+Overall: 61/80 (76.2%)  total cost $0.0000
+
+Per-task detail:
+  ✗ ceo.first_plan  5/6
+      ✗ Has 3-12 reasons / steps as a list: 1/3 runs passed; e.g. 14 bullet lines, max allowed 12
+  ✗ ceo.delegate_dont_diy  1/3
+      ✗ Routes to CTO: 1/3 runs passed; e.g. none of ['[CTO]', 'delegate', 'CTO will', "I'll have the CTO"] present
+      ✗ Leads with the call (delegating IS the call): 0/3 runs passed; e.g. first line too short: 'Fix:**'
+  ✗ ceo.pushback_with_better_path  3/4
+      ✗ Proposes a counter — better path: 0/3 runs passed; e.g. none of ['instead', 'alternative', 'before', 'test', 'try', 'smaller'] present
+  ✓ ceo.brevity_on_simple_yes_no  3/3
+  ✗ cmo.draft_3_cold_email_variants  3/4
+      ✗ Three subject lines (one per variant): 1/3 runs passed; e.g. 'Subject' appears 0 times, min required 3
+  ✓ cmo.specific_headline  3/3
+  ✗ cmo.no_open_questions  2/3
+      ✗ Leads with the draft / label, not preamble: 1/3 runs passed; e.g. first line too short: 'POST:**'
+  ✗ coo.support_triage  4/5
+      ✗ Leads with the punchline: 0/3 runs passed; e.g. first line too short: 'Action Plan:**'
+  ✗ coo.systemize_repetition  1/3
+      ✗ Proposes a system, not a one-off fix: 1/3 runs passed; e.g. none of ['routine', 'schedule', 'automate', 'cron', 'weekly', 'every Monday', 'delegate'] present
+      ✗ Leads with the recommendation: 0/3 runs passed; e.g. first line too short: 'Cite by name: acquisition/activation/retention/revenue/refer'
+  ✓ coo.numeric_weekly_summary  5/5
+  ✗ copywriter.cold_email_opener  3/5
+      ✗ References the specific pain: 1/3 runs passed; e.g. pattern '(2am|2 a\\.m\\.|midnight|sleep|deploy|broken|outage|3am)' not found
+      ✗ Mentions the waitlist (the actual ask): 1/3 runs passed; e.g. pattern '(waitlist|sign up|early access|join the list)' not found
+  ✓ copywriter.headline_subhead  3/3
+  ✓ copywriter.tweet_announcement  3/3
+  ✗ cto.scope_landing_in_2_days  2/4
+      ✗ Leads with the recommendation: 0/3 runs passed; e.g. first line too short: 'Landing Page Plan**'
+      ✗ Picks boring/proven/smallest tech: 1/3 runs passed; e.g. none of ['carrd', 'static', 'single page', 'html', 'framer', 'smallest', 'v1'] present
+  ✗ cto.delegate_typo_fix  2/3
+      ✗ Mentions delegating, even for trivial work: 0/3 runs passed; e.g. none of ['worker', 'copywriter', 'delegate', 'assign', 'route to', 'send to', 'hand off', 'task'] present
+  ✓ cto.options_when_blocked  4/4
+  ✓ designer.landing_page_layout  4/4
+  ✓ designer.button_color_choice  3/3
+  ✗ designer.error_state_spec  0/3
+      ✗ Adds a non-color signal (icon/text/border): 1/3 runs passed; e.g. none of ['icon', 'text label', 'border', 'message', 'label'] present
+      ✗ Calls out the color-alone constraint explicitly: 0/3 runs passed; e.g. none of ['color alone', 'not just color', 'accessible', 'WCAG', 'color blind'] present
+      ✗ Names the next action (sign in / reset / different email): 0/3 runs passed; e.g. pattern '(sign in|log in|reset|already.+account|use a different)' not found
+  ✓ support.refund_request_no_policy  3/3
+  ✗ support.bug_report_repro  1/3
+      ✗ Asks clarifying questions for repro: 0/3 runs passed; e.g. none of ['browser', 'screenshot', 'URL', 'URL', 'console', 'what time', 'when did'] present
+      ✗ Empathy first: 1/3 runs passed; e.g. none of ['sorry', 'appreciate', 'thanks for'] present
+  ✓ support.legal_threat_escalation  3/3
+
