@@ -6722,6 +6722,15 @@ def auth_add_openrouter_free_cmd(
             "label": f"openrouter-free-{len(existing_keys) + added + 1}",
             "tiers": {"pro": pro_model, "workhorse": workhorse_model},
             "api_key": k,
+            # Free-tier quota: tell the router to ignore OpenRouter's
+            # tiny retry_after on free-tier 429 and wait until the
+            # daily reset boundary (00:00 UTC) instead. Without this,
+            # the router honors retry_after → re-trips the limit
+            # immediately → infinite loop.
+            "free_tier_quota": {
+                "window_kind": "daily",
+                "reset_utc": "00:00",
+            },
         })
         added += 1
 
