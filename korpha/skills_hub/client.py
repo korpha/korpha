@@ -178,39 +178,84 @@ class KorphaHubSource(SkillSource):
         return out
 
     def fetch(self, identifier: str) -> SkillBundle:
+        """Resolve /download into a SkillBundle. The hub returns a JSON
+        pointer; we branch on ``kind``:
+
+          first_party — already bundled with this install; raise
+                        ``AlreadyBundled`` so the CLI can print a clean
+                        message and exit 0 (not an error)
+          hosted      — fetch the tarball at tarball_url, extract
+          mirror      — delegate to GitHubSource for the upstream repo
+                        (single-file Python modules unsupported — we
+                        raise ``NotInstallable`` with the rationale)
+        """
         import httpx
 
         url = f"{self.base_url.rstrip('/')}/api/v1/skills/{identifier}/download"
-        target = quarantine_dir() / identifier
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            shutil.rmtree(target)
-
         try:
             resp = httpx.get(url, timeout=self.timeout_seconds, follow_redirects=True)
             resp.raise_for_status()
         except httpx.HTTPError as exc:
             raise RuntimeError(
-                f"Couldn't download {identifier} from Korpha hub: {exc}"
+                f"Couldn't reach Korpha hub for {identifier}: {exc}"
             ) from exc
 
-        target.mkdir(parents=True)
-        # The hub serves a tarball; expand to disk.
+        try:
+            pointer = resp.json()
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(
+                f"Korpha hub returned non-JSON for {identifier}: {exc}"
+            ) from exc
+
+        kind = str(pointer.get("kind", ""))
+        if kind == "first_party":
+            raise AlreadyBundled(
+                pointer.get("message")
+                or f"{identifier!r} ships bundled with AIgenteur — no install needed."
+            )
+        if kind == "hosted":
+            return self._fetch_hosted(identifier, pointer)
+        if kind == "mirror":
+            return self._fetch_mirror(identifier, pointer)
+        raise RuntimeError(
+            f"Korpha hub returned unknown pointer kind {kind!r} for {identifier}"
+        )
+
+    def _fetch_hosted(self, identifier: str, pointer: dict) -> SkillBundle:
+        """Pull a hub-hosted tarball + extract into quarantine."""
+        import httpx
         import io
         import tarfile
 
+        tarball_url = pointer.get("tarball_url", "")
+        if not tarball_url:
+            raise RuntimeError(
+                f"Hosted skill {identifier!r} has no tarball_url"
+            )
+        if tarball_url.startswith("/"):
+            tarball_url = self.base_url.rstrip("/") + tarball_url
+
+        try:
+            resp = httpx.get(tarball_url, timeout=self.timeout_seconds, follow_redirects=True)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(
+                f"Couldn't download tarball for {identifier}: {exc}"
+            ) from exc
+
+        target = quarantine_dir() / identifier
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            shutil.rmtree(target)
+        target.mkdir(parents=True)
         try:
             with tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz") as tar:
-                # Safe extract — reject path traversal + absolute paths
                 for member in tar.getmembers():
                     name = member.name
                     if name.startswith("/") or ".." in Path(name).parts:
                         raise RuntimeError(
                             f"unsafe member path in tarball: {name}"
                         )
-                # Pass filter='data' (Python 3.12+) to enforce safe-extract
-                # rules at tarfile level — defense-in-depth on top of our
-                # own member-name check above.
                 tar.extractall(target, filter="data")
         except tarfile.TarError as exc:
             raise RuntimeError(
@@ -223,6 +268,51 @@ class KorphaHubSource(SkillSource):
             identifier=identifier,
             quarantine_path=target,
         )
+
+    def _fetch_mirror(self, identifier: str, pointer: dict) -> SkillBundle:
+        """Delegate to GitHubSource — the canonical mirror path."""
+        upstream_repo = pointer.get("upstream_repo", "")
+        upstream_path = pointer.get("upstream_path", "") or identifier
+        if not upstream_repo:
+            raise RuntimeError(
+                f"Mirror pointer for {identifier} has no upstream_repo"
+            )
+        # Single-file Python modules can't be installed as standalone
+        # skills — they typically depend on the host project's import
+        # path (e.g. korpha.skills.types). Refuse here with a clear
+        # explanation rather than silently misbehaving.
+        if upstream_path.endswith(".py"):
+            raise NotInstallable(
+                f"{identifier!r} is a single Python file at "
+                f"{upstream_repo}/{upstream_path}. Single-file Python "
+                "skills can't be installed standalone — they need the "
+                "host project's import path. To use it, install the "
+                "project that ships it."
+            )
+        # GitHubSource.fetch() uses the identifier verbatim against the
+        # Contents API — base_path is only consulted by .search(), so
+        # pass the full upstream_path here.
+        gh = GitHubSource(repo=upstream_repo)
+        bundle = gh.fetch(upstream_path)
+        # Rebadge so hub-list shows this as a hub install (not a raw
+        # GitHub install).
+        return SkillBundle(
+            name=identifier,
+            source="korpha",
+            identifier=identifier,
+            quarantine_path=bundle.quarantine_path,
+        )
+
+
+class AlreadyBundled(RuntimeError):
+    """Raised when a hub skill is one that ships with the AIgenteur
+    install — CLI catches this and exits 0 with a friendly message
+    instead of a stacktrace."""
+
+
+class NotInstallable(RuntimeError):
+    """Raised when a hub entry is browse-only (e.g. single-file Python
+    module) and can't be installed standalone."""
 
 
 # ---------------------------------------------------------------------------

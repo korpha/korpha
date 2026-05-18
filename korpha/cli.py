@@ -2069,12 +2069,20 @@ def skill_hub_install(
     if allowed. Lock file records provenance for ``hub-list``.
     """
     _ensure_load_env()
-    from korpha.skills_hub.client import KorphaHubSource, install_skill
+    from korpha.skills_hub.client import (
+        AlreadyBundled, KorphaHubSource, NotInstallable, install_skill,
+    )
 
     src = KorphaHubSource()
     typer.echo(_dim(f"→ fetching {name} from {src.base_url}..."))
     try:
         bundle = src.fetch(name)
+    except AlreadyBundled as exc:
+        typer.echo(_dim(f"✓ {exc}"))
+        return
+    except NotInstallable as exc:
+        typer.echo(_yellow(f"⚠ {exc}"))
+        raise typer.Exit(code=2) from exc
     except Exception as exc:
         typer.echo(_yellow(f"download failed: {exc}"))
         raise typer.Exit(code=1) from exc
