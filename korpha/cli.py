@@ -2255,6 +2255,191 @@ def skill_publish_cmd(
     ))
 
 
+@skill_app.command("hub-login")
+def skill_hub_login(
+    base_url: Annotated[
+        str,
+        typer.Option(
+            "--base-url",
+            help="Hub base URL (default: https://skills.aigenteur.com).",
+        ),
+    ] = "https://skills.aigenteur.com",
+    no_browser: Annotated[
+        bool,
+        typer.Option(
+            "--no-browser",
+            help="Don't open the browser automatically; print URL instead.",
+        ),
+    ] = False,
+) -> None:
+    """Authenticate with the AIgenteur skills hub.
+
+    Opens your browser to the hub's sign-in page (magic-link only —
+    OAuth providers can't redirect to localhost). After you click the
+    link in your inbox, the session token is POSTed back to a one-shot
+    local server and cached at ``~/.korpha/hub_session.json``.
+
+    Re-run any time the cached session expires (~90 days) or to switch
+    accounts (clears the previous session).
+    """
+    from korpha.skills_hub.hub_auth import (
+        HubAuthError, begin_login, clear_session,
+    )
+
+    if clear_session():
+        typer.echo(_dim("Cleared previous hub session."))
+
+    try:
+        session = begin_login(base_url=base_url, open_browser=not no_browser)
+    except HubAuthError as exc:
+        typer.echo(_red(f"Login failed: {exc}"))
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(_green(f"✓ Signed in as {session.email}"))
+    typer.echo(_dim(f"  Session cached at ~/.korpha/hub_session.json"))
+
+
+@skill_app.command("hub-logout")
+def skill_hub_logout() -> None:
+    """Clear the cached hub session."""
+    from korpha.skills_hub.hub_auth import clear_session
+
+    if clear_session():
+        typer.echo(_green("✓ Signed out."))
+    else:
+        typer.echo(_dim("Not signed in."))
+
+
+@skill_app.command("hub-whoami")
+def skill_hub_whoami() -> None:
+    """Show the currently signed-in hub account, if any."""
+    from korpha.skills_hub.hub_auth import load_session
+
+    session = load_session()
+    if session is None:
+        typer.echo(_dim("Not signed in. Run `aigenteur skill hub-login`."))
+        raise typer.Exit(code=1)
+    typer.echo(_green(f"Signed in as {session.email}"))
+    typer.echo(_dim(f"  Hub: {session.base_url}"))
+
+
+@skill_app.command("hub-publish")
+def skill_hub_publish(
+    name: Annotated[
+        str,
+        typer.Argument(
+            help="Dotted skill name to publish (e.g. niche.find_micro_niches)",
+        ),
+    ],
+    display_name: Annotated[
+        str | None,
+        typer.Option(
+            "--display-name",
+            help="Human-readable label. Default: derived from the dotted name.",
+        ),
+    ] = None,
+    description: Annotated[
+        str | None,
+        typer.Option(
+            "--description",
+            help="One-line description for the catalog. Default: from the SkillSpec.",
+        ),
+    ] = None,
+    long_description: Annotated[
+        str,
+        typer.Option(
+            "--long-description",
+            help="Full markdown body for the detail page (optional).",
+        ),
+    ] = "",
+    tag: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--tag",
+            help="Tag (repeatable). Used for catalog filtering.",
+        ),
+    ] = None,
+    license: Annotated[  # noqa: A002
+        str,
+        typer.Option("--license", help="License identifier."),
+    ] = "MIT",
+    upstream_repo: Annotated[
+        str | None,
+        typer.Option(
+            "--upstream-repo",
+            help=(
+                "GitHub repo where the skill source lives — "
+                "'aigenteur/aigenteur_agent' for built-ins, "
+                "your-org/your-repo for forks."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Push a local skill to the AIgenteur hub.
+
+    Requires `aigenteur skill hub-login` first. Skills published this
+    way go under your hub account and start as ``community`` trust
+    until a maintainer promotes them. Rate-limited to 5/day per user.
+    """
+    from korpha.skills import default_registry
+    from korpha.skills_hub.hub_auth import load_session
+    from korpha.skills_hub.hub_publish import (
+        HubPublishError, hub_url_for, publish_skill,
+    )
+
+    session = load_session()
+    if session is None:
+        typer.echo(_red("Not signed in. Run `aigenteur skill hub-login` first."))
+        raise typer.Exit(code=1)
+
+    # Resolve missing fields from the local SkillSpec if registered.
+    specs = {s.name: s for s in default_registry.list_specs()}
+    spec = specs.get(name)
+    if spec is None and description is None:
+        typer.echo(_red(
+            f"Skill {name!r} not found in the local registry, and no "
+            "--description given. Either register the skill locally "
+            "first, or pass --description explicitly."
+        ))
+        raise typer.Exit(code=1)
+
+    resolved_display = display_name or _derive_display_name(name)
+    resolved_description = description or (spec.description if spec else "")
+
+    typer.echo(_dim(f"Publishing {name!r} to {session.base_url}…"))
+    try:
+        result = publish_skill(
+            session,
+            name=name,
+            display_name=resolved_display,
+            description=resolved_description,
+            long_description=long_description,
+            license=license,
+            tags=tag or [],
+            upstream_repo=upstream_repo,
+        )
+    except HubPublishError as exc:
+        typer.echo(_red(f"Publish failed: {exc}"))
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(_green(f"✓ Published {name}"))
+    typer.echo(_dim(f"  trust: {result.get('trust_level')}"))
+    typer.echo(_dim(f"  url:   {hub_url_for(session, name)}"))
+
+
+def _derive_display_name(dotted_name: str) -> str:
+    """'niche.find_micro_niches' → 'Niche · find micro niches'."""
+    parts = dotted_name.split(".", 1)
+    if len(parts) == 1:
+        return parts[0].replace("_", " ").title()
+    namespace, leaf = parts
+    return (
+        namespace.replace("_", " ").title()
+        + " · "
+        + leaf.replace("_", " ")
+    )
+
+
 @skill_app.command("hub-list")
 def skill_hub_list() -> None:
     """List skills installed from the hub (provenance + scan verdicts).

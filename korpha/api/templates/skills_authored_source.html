@@ -3,6 +3,22 @@
 {% block breadcrumbs %}Authored skills · {{ entry.name }}{% endblock %}
 {% block body %}
 <div class="src-shell">
+  {% set flash = request.query_params.get('flash') %}
+  {% if flash == 'published' %}
+    <div class="src-flash src-flash-ok">
+      ✓ Published to <a href="https://skills.aigenteur.com/skills/{{ entry.name }}" target="_blank" rel="noopener">skills.aigenteur.com</a>.
+    </div>
+  {% elif flash == 'login_required' %}
+    <div class="src-flash src-flash-warn">
+      Sign in to the hub first. In a terminal, run:
+      <code>aigenteur skill hub-login</code>
+    </div>
+  {% elif flash == 'publish_failed' %}
+    <div class="src-flash src-flash-err">
+      Publish failed: {{ request.query_params.get('reason') or 'unknown error' }}
+    </div>
+  {% endif %}
+
   <div class="src-header">
     <div>
       <h1 class="src-title">{{ entry.name }}</h1>
@@ -14,7 +30,15 @@
         · last touched {{ entry.mtime.strftime('%b %d %Y, %H:%M UTC') }}
       </p>
     </div>
-    <a href="/app/skills/authored" class="src-back">← All authored</a>
+    <div class="src-header-actions">
+      <form method="post"
+            action="/app/skills/authored/{{ entry.kind }}/{{ entry.slug }}/publish"
+            onsubmit="return confirm('Publish {{ entry.name }} to skills.aigenteur.com? Other operators can install it from there.');"
+            style="display:inline;">
+        <button type="submit" class="src-publish">↗ Publish to hub</button>
+      </form>
+      <a href="/app/skills/authored" class="src-back">← All authored</a>
+    </div>
   </div>
 
   <pre class="src-code">{{ source_text }}</pre>
@@ -53,6 +77,36 @@
     white-space: nowrap;
   }
   .src-back:hover { color: var(--text); }
+  .src-header-actions {
+    display: flex; gap: 10px; align-items: center;
+  }
+  .src-publish {
+    background: var(--accent, #e7c14b); color: var(--bg);
+    border: none; padding: 5px 12px; border-radius: 6px;
+    font-size: 12.5px; cursor: pointer; font-weight: 500;
+  }
+  .src-publish:hover { filter: brightness(1.1); }
+  .src-flash {
+    padding: 10px 14px; border-radius: 6px; margin: 0 0 14px;
+    font-size: 13px; line-height: 1.5;
+  }
+  .src-flash code {
+    background: var(--bg); padding: 1px 6px; border-radius: 3px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+  }
+  .src-flash a { color: inherit; text-decoration: underline; }
+  .src-flash-ok {
+    background: rgba(80, 200, 120, 0.12); color: #5fd482;
+    border: 1px solid rgba(80, 200, 120, 0.32);
+  }
+  .src-flash-warn {
+    background: rgba(231, 193, 75, 0.12); color: #e7c14b;
+    border: 1px solid rgba(231, 193, 75, 0.32);
+  }
+  .src-flash-err {
+    background: rgba(220, 80, 80, 0.12); color: #ff8888;
+    border: 1px solid rgba(220, 80, 80, 0.32);
+  }
   .src-code {
     background: var(--bg-elev); border: 1px solid var(--border);
     border-radius: 8px; padding: 16px; margin: 0;
