@@ -92,11 +92,12 @@ and budget.
 
 | Model | VRAM | Pass | Total | Overall | Wall time |
 | ----- | ---- | ---- | ----- | ------- | --------- |
+| **Gemma-4-E2B-it (Q4_K_M)** | **~3 GB** | **77** | **80** | **96.2%** | **8 min** |
 | Ministral-3-14B-Reasoning (Q4_K_M) | 11 GB | 75 | 80 | **93.8%** | 6 min |
 | Gemma-4-31B (Q4_K_M, TurboQuant) | 23 GB | 74 | 80 | **92.5%** | 25 min |
 | Qwen3.6-27B (Q4_K_M, TurboQuant turbo3) | ~22 GB | 74 | 80 | **92.5%** | ~68 min |
 | Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
-| **LiquidAI LFM2.5-350M (Q4_K_M)** | **~850 MiB** | **61** | **80** | **76.2%** | **~20 s** |
+| LiquidAI LFM2.5-350M (Q4_K_M) | ~850 MiB | 61 | 80 | **76.2%** | ~20 s |
 | **Ministral-3-14B-Instruct (Q4_K_M)** | **Local RTX 3090, 11 GB VRAM, non-thinking** | **71** | **80** | **88.8%** | **6 min** |
 
 **Four local options across the quality spectrum:**
