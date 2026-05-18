@@ -60,6 +60,52 @@
 
   <p class="tm-muted">Source: <code>{{ source }}</code></p>
 
+  <section class="tm-section" style="border-left:3px solid #2da44e;">
+    <h2 class="tm-section-title">
+      <span style="font-size:22px;">🆓</span>
+      Add OpenRouter free-tier keys (bulk)
+    </h2>
+    <p class="tm-blurb">
+      Paste your free-tier OpenRouter keys (one per line). Each becomes
+      its own account pinned to <code>:free</code> models. The cascade
+      rotates through them on 429 and falls through to paid providers
+      when the day's quota is exhausted.
+      <br/>
+      <span class="tm-muted">
+        Get free keys at
+        <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>
+        — no balance needed. Each key allows ~50 requests/day on the
+        free tier.
+      </span>
+    </p>
+    <form method="post" action="/app/inference/openrouter-free/add" class="tm-cred-form">
+      <div class="tm-cred-row">
+        <label style="width:100%;">
+          Keys (one per line)
+          <textarea name="keys" rows="6" required
+                    style="width:100%;font-family:monospace;font-size:13px;"
+                    placeholder="sk-or-v1-aaaaaaa...&#10;sk-or-v1-bbbbbbb...&#10;sk-or-v1-ccccccc..."></textarea>
+        </label>
+      </div>
+      <div class="tm-cred-row">
+        <label>PRO model
+          <input type="text" name="pro_model"
+                 value="deepseek/deepseek-chat-v4:free" />
+        </label>
+        <label>WORKHORSE model
+          <input type="text" name="workhorse_model"
+                 value="meta-llama/llama-3.3-70b-instruct:free" />
+        </label>
+        <button type="submit" class="tm-hire-btn">Add keys</button>
+      </div>
+      <p class="tm-muted" style="margin-top:8px;font-size:13px;">
+        Both model fields must end in <code>:free</code> — the system
+        rejects paid models on free keys at config-load time so a
+        $0-balance key can never accidentally 401 on a paid model.
+      </p>
+    </form>
+  </section>
+
   {% if not accounts %}
     <p class="tm-blurb">
       No inference accounts configured. Run
