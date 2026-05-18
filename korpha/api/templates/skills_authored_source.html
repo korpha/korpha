@@ -31,12 +31,18 @@
       </p>
     </div>
     <div class="src-header-actions">
-      <form method="post"
+      <span id="src-hub-status" class="src-hub-status src-hub-status-checking">
+        checking hub session…
+      </span>
+      <form id="src-publish-form" method="post"
             action="/app/skills/authored/{{ entry.kind }}/{{ entry.slug }}/publish"
             onsubmit="return confirm('Publish {{ entry.name }} to skills.aigenteur.com? Other operators can install it from there.');"
-            style="display:inline;">
+            style="display:none;">
         <button type="submit" class="src-publish">↗ Publish to hub</button>
       </form>
+      <button id="src-hub-signin" type="button" class="src-publish" style="display:none;">
+        Sign in to hub
+      </button>
       <a href="/app/skills/authored" class="src-back">← All authored</a>
     </div>
   </div>
@@ -115,5 +121,76 @@
     white-space: pre-wrap; word-break: break-all; overflow-x: auto;
     max-height: 720px;
   }
+  .src-hub-status {
+    font-size: 11.5px; color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .src-hub-status-signed { color: #5fd482; }
+  .src-hub-status-anonymous { color: var(--text-faint); }
 </style>
+<script>
+  (function() {
+    var statusEl = document.getElementById('src-hub-status');
+    var publishForm = document.getElementById('src-publish-form');
+    var signinBtn = document.getElementById('src-hub-signin');
+
+    function setSignedIn(email) {
+      statusEl.className = 'src-hub-status src-hub-status-signed';
+      statusEl.textContent = 'signed in to hub as ' + email;
+      publishForm.style.display = 'inline';
+      signinBtn.style.display = 'none';
+    }
+    function setAnonymous() {
+      statusEl.className = 'src-hub-status src-hub-status-anonymous';
+      statusEl.textContent = 'not signed in to hub';
+      publishForm.style.display = 'none';
+      signinBtn.style.display = 'inline';
+    }
+
+    function checkStatus() {
+      return fetch('/app/hub-cli/status', {credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(s) {
+          if (s.signed_in) { setSignedIn(s.email); return true; }
+          setAnonymous(); return false;
+        })
+        .catch(function() { setAnonymous(); return false; });
+    }
+
+    signinBtn.addEventListener('click', function() {
+      signinBtn.disabled = true;
+      signinBtn.textContent = 'opening hub…';
+      fetch('/app/hub-cli/start', {method: 'POST', credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var popup = window.open(d.hub_login_url, 'aigenteur_hub_login',
+            'width=520,height=720,popup=yes');
+          if (!popup) {
+            alert('Popup blocked. Allow popups for this site, then ' +
+                  'click "Sign in to hub" again.');
+            signinBtn.disabled = false;
+            signinBtn.textContent = 'Sign in to hub';
+            return;
+          }
+          var deadline = Date.now() + 600000;
+          var iv = setInterval(function() {
+            checkStatus().then(function(signedIn) {
+              if (signedIn) {
+                clearInterval(iv);
+                try { popup.close(); } catch(e) {}
+                signinBtn.disabled = false;
+                signinBtn.textContent = 'Sign in to hub';
+              } else if (popup.closed || Date.now() > deadline) {
+                clearInterval(iv);
+                signinBtn.disabled = false;
+                signinBtn.textContent = 'Sign in to hub';
+              }
+            });
+          }, 1500);
+        });
+    });
+
+    checkStatus();
+  })();
+</script>
 {% endblock %}
