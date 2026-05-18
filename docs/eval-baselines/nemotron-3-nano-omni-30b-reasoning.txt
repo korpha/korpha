@@ -1,0 +1,48 @@
+run 1/3…
+run 2/3…
+run 3/3…
+Eval report — provider: openrouter-free-1/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free (avg of 3 runs)
+============================================================
+
+Per-role rollup:
+  CEO     16/16  (100.0%)  $0.0000
+  CMO      9/10  ( 90.0%)  $0.0000
+  COO     10/13  ( 76.9%)  $0.0000
+  COPYWRITER  11/11  (100.0%)  $0.0000
+  CTO      9/11  ( 81.8%)  $0.0000
+  DESIGNER  10/10  (100.0%)  $0.0000
+  SUPPORT   9/9   (100.0%)  $0.0000
+
+Overall: 74/80 (92.5%)  total cost $0.0000
+
+Per-task detail:
+  ✓ ceo.first_plan  6/6
+  ✓ ceo.delegate_dont_diy  3/3
+  ✓ ceo.pushback_with_better_path  4/4
+  ✓ ceo.brevity_on_simple_yes_no  3/3
+  ✗ cmo.draft_3_cold_email_variants  3/4
+      ✗ Three subject lines (one per variant): 1/3 runs passed; e.g. 'Subject' appears 0 times, min required 3
+  ✓ cmo.specific_headline  3/3
+  ✓ cmo.no_open_questions  3/3
+  ✓ coo.support_triage  5/5
+  ✓ coo.systemize_repetition  3/3
+  ✗ coo.numeric_weekly_summary  2/5
+      ✗ Names the MRR delta: 1/3 runs passed; e.g. pattern '(\\$240|\\+\\s*\\$?240|240)' not found
+      ✗ Names the signup count: 1/3 runs passed; e.g. pattern '(18|18\\s*signup)' not found
+      ✗ Surfaces the churn-cause signal: 1/3 runs passed; e.g. none of ['deploy', 'deploys'] present
+  ✓ copywriter.cold_email_opener  5/5
+  ✓ copywriter.headline_subhead  3/3
+  ✓ copywriter.tweet_announcement  3/3
+  ✗ cto.scope_landing_in_2_days  3/4
+      ✗ Leads with the recommendation: 1/3 runs passed; e.g. first line too short: 'Day 1'
+  ✓ cto.delegate_typo_fix  3/3
+  ✗ cto.options_when_blocked  3/4
+      ✗ Leads with the recommendation: 0/3 runs passed; e.g. first line too short: 'Options:'
+  ✓ designer.landing_page_layout  4/4
+  ✓ designer.button_color_choice  3/3
+  ✓ designer.error_state_spec  3/3
+  ✓ support.refund_request_no_policy  3/3
+  ✓ support.bug_report_repro  3/3
+  ✓ support.legal_threat_escalation  3/3
+
+EXIT=0
