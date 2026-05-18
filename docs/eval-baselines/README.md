@@ -94,12 +94,12 @@ and budget.
 | ----- | ---- | ---- | ----- | ------- | --------- |
 | **Gemma-4-E2B-it (Q4_K_M)** | **~3 GB** | **77** | **80** | **96.2%** | **8 min** |
 | Ministral-3-14B-Reasoning (Q4_K_M) | 11 GB | 75 | 80 | **93.8%** | 6 min |
-| Microsoft Phi-4 (Q4_K_M) | ~8 GB | 75 | 80 | **93.8%** | ~4 min |
+| Microsoft Phi-4 (Q4_K_M, q8_0 kv) | ~8 GB | 75 | 80 | **93.8%** | ~4 min |
 | Gemma-4-E4B-it (BF16) | ~9 GB | 74 | 80 | **92.5%** | 16 min |
 | Gemma-4-31B (Q4_K_M, TurboQuant) | 23 GB | 74 | 80 | **92.5%** | 25 min |
 | Qwen3.6-27B (Q4_K_M, TurboQuant turbo3) | ~22 GB | 74 | 80 | **92.5%** | ~68 min |
 | Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
-| Microsoft Phi-4-reasoning-plus (Q8_0) | ~16 GB | 63 | 80 | **78.8%** | ~38 min |
+| Microsoft Phi-4-reasoning-plus (Q4_K_M, q8_0 kv) | ~16 GB | 63 | 80 | **78.8%** | ~38 min |
 | LiquidAI LFM2.5-350M (Q4_K_M) | ~850 MiB | 61 | 80 | **76.2%** | ~20 s |
 
 **Four local options across the quality spectrum:**
