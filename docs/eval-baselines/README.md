@@ -99,8 +99,8 @@ and budget.
 | Gemma-4-31B (Q4_K_M, TurboQuant) | 23 GB | 74 | 80 | **92.5%** | 25 min |
 | Qwen3.6-27B (Q4_K_M, TurboQuant turbo3) | ~22 GB | 74 | 80 | **92.5%** | ~68 min |
 | Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
+| Microsoft Phi-4-reasoning-plus (Q8_0) | ~16 GB | 63 | 80 | **78.8%** | ~38 min |
 | LiquidAI LFM2.5-350M (Q4_K_M) | ~850 MiB | 61 | 80 | **76.2%** | ~20 s |
-| **Ministral-3-14B-Instruct (Q4_K_M)** | **Local RTX 3090, 11 GB VRAM, non-thinking** | **71** | **80** | **88.8%** | **6 min** |
 
 **Four local options across the quality spectrum:**
 
@@ -126,6 +126,18 @@ and budget.
   thinking layer. Faster, more predictable, slightly lower
   adherence. Useful for Workhorse-tier dispatch / format / draft
   work where Korpha's prompt does the structural heavy lifting.
+
+**Reasoning ≠ free win — counterexample (Phi-4-reasoning-plus):**
+The Plus variant gets 78.8% — **5pp lower than Microsoft's non-
+reasoning Phi-4 (93.8%) on the same eval, same hardware**. Failure
+pattern is striking: it passes the structural assertions but blows
+every brevity cap. e.g. `cmo.specific_headline` (cap: 200 words)
+returns 4,150 words; `copywriter.tweet_announcement` (cap: 60)
+returns 4,729. The reasoning trace bleeds into the visible response.
+For cofounder workloads where formatting + word caps are the
+primary failure mode, the unconditional reasoning layer is a net
+negative. Use it for pure problem-solving tasks (math, code) where
+the verbosity is the answer, not where the answer is "3 bullets".
 
 **Same-base A/B (Reasoning vs Instruct, both Ministral-3-14B):**
 The reasoning variant gains +5pp overall (88.8% → 93.8%) at
