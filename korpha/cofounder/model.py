@@ -67,6 +67,19 @@ class AgentRole(SQLModel, table=True):
     role_type: RoleType = Field(index=True)
     title: str
     specialty: str | None = Field(default=None)  # e.g. "designer", "copywriter"
+    description: str | None = Field(
+        default=None,
+        description=(
+            "Paragraph-long persona / voice / what-they're-good-at "
+            "blurb. Used by the CEO + workforce router when picking "
+            "between similar-specialty workers (e.g. 'copywriter who "
+            "writes punchy 60-word tweets' vs 'copywriter who writes "
+            "800-word teardown blog posts'). Specialty alone is a "
+            "keyword; description gives the router context to route "
+            "on voice, format, and domain — much better signal than "
+            "the single-word specialty when N similar workers exist."
+        ),
+    )
     is_active: bool = Field(default=True, index=True)
     hired_at: datetime = timestamp_field()
     fired_at: datetime | None = Field(default=None)

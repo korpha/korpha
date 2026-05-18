@@ -1780,17 +1780,40 @@ class CEO:
             return ""
         if not rows:
             return ""
-        specialties = sorted({
-            r.specialty for r in rows if r.specialty
-        })
-        if not specialties:
+
+        # Group workers by specialty. When N workers share a specialty,
+        # the agent's persona description tells the CEO how to pick
+        # ('copywriter who writes 60-word tweets' vs 'copywriter who
+        # writes 800-word teardowns'). Without description we just
+        # show the specialty keyword — same as before.
+        by_specialty: dict[str, list[AgentRole]] = {}
+        for r in rows:
+            if not r.specialty:
+                continue
+            by_specialty.setdefault(r.specialty, []).append(r)
+        if not by_specialty:
             return ""
-        return (
-            "- Available specialty workers (use "
-            "[WORKER:specialty] tag when the work fits): "
-            + ", ".join(specialties)
-            + ".\n"
-        )
+
+        lines = ["- Available specialty workers (use [WORKER:specialty] tag):"]
+        for specialty in sorted(by_specialty):
+            workers = by_specialty[specialty]
+            if len(workers) == 1 and not workers[0].description:
+                lines.append(f"  - {specialty}")
+                continue
+            for w in workers:
+                if w.description:
+                    # Truncate long descriptions so the CEO prompt
+                    # doesn't balloon if N workers each carry a long
+                    # blurb.
+                    blurb = w.description.strip().replace("\n", " ")
+                    if len(blurb) > 180:
+                        blurb = blurb[:177] + "..."
+                    lines.append(
+                        f"  - {specialty} ({w.title}): {blurb}",
+                    )
+                else:
+                    lines.append(f"  - {specialty} ({w.title})")
+        return "\n".join(lines) + "\n"
 
     async def _transform_output(
         self,
