@@ -14,6 +14,7 @@ annotations``. FastAPI uses runtime type introspection to detect
 injection silently (same caveat as server.py).
 """
 import contextlib
+import os
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -1799,6 +1800,120 @@ def build_dashboard_router(
             )
         finally:
             session.close()
+
+    # ---- In-dashboard hub-login ---------------------------------------
+    #
+    # Lets the user sign in to skills.aigenteur.com without dropping
+    # to a terminal — see korpha/skills_hub/hub_dashboard_auth.py for
+    # the state-store + flow description.
+
+    _HUB_BASE_URL = os.environ.get(
+        "AIGENTEUR_HUB_URL", "https://skills.aigenteur.com",
+    )
+
+    def _hub_cors_origin() -> str:
+        """The hub origin that's allowed to POST the token back. Locked
+        down to one — not *— to keep random tabs from forging callbacks."""
+        return _HUB_BASE_URL.rstrip("/")
+
+    @router.post("/hub-cli/start", response_model=None)
+    def hub_cli_start(request: Request) -> JSONResponse:
+        """Begin a hub-login round-trip. Issues a state token + builds
+        the hub login URL with cli_return pointing back to our callback."""
+        from urllib.parse import urlencode
+
+        from korpha.skills_hub.hub_dashboard_auth import start
+
+        state = start()
+        callback_url = str(request.url_for("hub_cli_callback")) + f"?state={state}"
+        login_url = (
+            f"{_HUB_BASE_URL.rstrip('/')}/login?"
+            + urlencode({"cli_return": callback_url, "state": state})
+        )
+        return JSONResponse({
+            "state": state,
+            "hub_login_url": login_url,
+        })
+
+    @router.options("/hub-cli/callback", response_model=None)
+    def hub_cli_callback_preflight() -> JSONResponse:
+        """CORS preflight for the hub → loopback POST. Allows ONLY the
+        configured hub origin, not '*' (defense-in-depth on top of the
+        state check)."""
+        return JSONResponse(
+            content={"ok": True},
+            headers={
+                "Access-Control-Allow-Origin": _hub_cors_origin(),
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Access-Control-Max-Age": "600",
+            },
+        )
+
+    @router.post(
+        "/hub-cli/callback",
+        name="hub_cli_callback",
+        response_model=None,
+    )
+    async def hub_cli_callback(request: Request) -> JSONResponse:
+        """Receive the hub session token from the magic-link verify
+        page. Validates the state, persists the session at
+        ~/.korpha/hub_session.json, returns CORS-friendly 200.
+
+        On any failure, returns 4xx — the popup's JS surfaces it.
+        """
+        from korpha.skills_hub.hub_auth import HubSession, save_session
+        from korpha.skills_hub.hub_dashboard_auth import consume
+
+        cors_headers = {
+            "Access-Control-Allow-Origin": _hub_cors_origin(),
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        }
+
+        state = request.query_params.get("state", "")
+        if not consume(state):
+            return JSONResponse(
+                {"ok": False, "error": "invalid_state"},
+                status_code=403,
+                headers=cors_headers,
+            )
+
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse(
+                {"ok": False, "error": "bad_json"},
+                status_code=400,
+                headers=cors_headers,
+            )
+
+        token = str(body.get("token", "")).strip()
+        email = str(body.get("email", "")).strip()
+        if not token or not email:
+            return JSONResponse(
+                {"ok": False, "error": "missing_fields"},
+                status_code=400,
+                headers=cors_headers,
+            )
+
+        save_session(HubSession(
+            base_url=_HUB_BASE_URL.rstrip("/"),
+            cookie=token,
+            email=email,
+        ))
+        return JSONResponse({"ok": True}, headers=cors_headers)
+
+    @router.get("/hub-cli/status", response_model=None)
+    def hub_cli_status() -> JSONResponse:
+        """Polled by the dashboard JS — flips signed_in=True the moment
+        the callback persists the session."""
+        from korpha.skills_hub.hub_auth import load_session
+
+        s = load_session()
+        if s is None:
+            return JSONResponse({"signed_in": False})
+        return JSONResponse({"signed_in": True, "email": s.email})
 
     @router.post(
         "/skills/authored/{kind}/{slug}/publish",
