@@ -1,0 +1,46 @@
+run 1/3…
+run 2/3…
+run 3/3…
+Eval report — provider: openrouter-free-1/poolside/laguna-m.1:free (avg of 3 runs)
+============================================================
+
+Per-role rollup:
+  CEO     16/16  (100.0%)  $0.0000
+  CMO      8/10  ( 80.0%)  $0.0000
+  COO     12/13  ( 92.3%)  $0.0000
+  COPYWRITER  11/11  (100.0%)  $0.0000
+  CTO     11/11  (100.0%)  $0.0000
+  DESIGNER  10/10  (100.0%)  $0.0000
+  SUPPORT   8/9   ( 88.9%)  $0.0000
+
+Overall: 76/80 (95.0%)  total cost $0.0000
+
+Per-task detail:
+  ✓ ceo.first_plan  6/6
+  ✓ ceo.delegate_dont_diy  3/3
+  ✓ ceo.pushback_with_better_path  4/4
+  ✓ ceo.brevity_on_simple_yes_no  3/3
+  ✗ cmo.draft_3_cold_email_variants  2/4
+      ✗ Numbers/labels the 3 variants explicitly: 1/3 runs passed; e.g. pattern '(Variant|Opener|Angle|Subject)\\s*[:#]?\\s*[1-3]' not found
+      ✗ Three subject lines (one per variant): 0/3 runs passed; e.g. 'Subject' appears 0 times, min required 3
+  ✓ cmo.specific_headline  3/3
+  ✓ cmo.no_open_questions  3/3
+  ✗ coo.support_triage  4/5
+      ✗ Leads with the punchline: 1/3 runs passed; e.g. first line too short: 'Support Triage: 10 Tickets'
+  ✓ coo.systemize_repetition  3/3
+  ✓ coo.numeric_weekly_summary  5/5
+  ✓ copywriter.cold_email_opener  5/5
+  ✓ copywriter.headline_subhead  3/3
+  ✓ copywriter.tweet_announcement  3/3
+  ✓ cto.scope_landing_in_2_days  4/4
+  ✓ cto.delegate_typo_fix  3/3
+  ✓ cto.options_when_blocked  4/4
+  ✓ designer.landing_page_layout  4/4
+  ✓ designer.button_color_choice  3/3
+  ✓ designer.error_state_spec  3/3
+  ✓ support.refund_request_no_policy  3/3
+  ✗ support.bug_report_repro  2/3
+      ✗ Doesn't commit to fix ETA without Founder approval: 1/3 runs passed; e.g. forbidden substring present: 'ETA'
+  ✓ support.legal_threat_escalation  3/3
+
+EXIT=0
