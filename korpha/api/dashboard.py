@@ -5444,6 +5444,15 @@ def build_dashboard_router(
                         "workhorse": workhorse_model,
                     },
                     "api_key": k,
+                    # Free-tier quota: ignore OpenRouter's tiny
+                    # retry_after on free-tier 429 and wait for the
+                    # daily reset boundary (00:00 UTC). Without this
+                    # the router honors retry_after → re-trips the
+                    # limit immediately → infinite loop.
+                    "free_tier_quota": {
+                        "window_kind": "daily",
+                        "reset_utc": "00:00",
+                    },
                 })
                 added += 1
 
