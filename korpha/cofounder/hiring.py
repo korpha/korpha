@@ -80,6 +80,7 @@ class HiringService:
         *,
         title: str | None = None,
         specialty: str | None = None,
+        description: str | None = None,
         source: str = "manual",
         reason: str | None = None,
         founder_id: UUID | None = None,
@@ -107,6 +108,7 @@ class HiringService:
             role_type=role_type,
             title=title or _DEFAULT_TITLES.get(role_type, role_type.value.upper()),
             specialty=specialty,
+            description=description,
             is_active=True,
         )
         self.session.add(role)

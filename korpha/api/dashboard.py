@@ -2976,6 +2976,7 @@ def build_dashboard_router(
         request: Request,
         session: Annotated[Session, Depends(require_session)],
         specialty: Annotated[str, Form()] = "",
+        description: Annotated[str, Form()] = "",
     ) -> RedirectResponse:
         try:
             from korpha.cofounder.hiring import HiringService
@@ -2988,10 +2989,14 @@ def build_dashboard_router(
                     "/app/team?error=Specialty+must+be+lowercase+one-token",
                     status_code=status.HTTP_303_SEE_OTHER,
                 )
+            desc = (description or "").strip() or None
+            if desc and len(desc) > 1000:
+                desc = desc[:1000]
             HiringService(session).hire(
                 ctx["business"].id, RoleType.WORKER,
                 title=spec.replace("-", " ").title(),
                 specialty=spec,
+                description=desc,
                 source="dashboard:hire",
             )
             return RedirectResponse(

@@ -80,6 +80,15 @@ class HireWorkerSkill(Skill):
                 "Recorded in the audit log for the founder's "
                 "monthly review."
             ),
+            "description": (
+                "Optional 1-3 sentence persona / voice / what "
+                "they're good at. Used by the CEO router to pick "
+                "between similar-specialty workers (e.g. when you "
+                "have two copywriters — one for punchy tweets, "
+                "one for long teardowns). Specialty alone is a "
+                "keyword; description gives the router context to "
+                "route on voice/format/domain. ≤1000 chars."
+            ),
         },
         default_tier=InferenceTier.WORKHORSE,
         provenance=SkillProvenance.BUILTIN,
@@ -106,6 +115,9 @@ class HireWorkerSkill(Skill):
             specialty.replace("-", " ").title()
         )
         reason = str(args.get("reason") or "").strip() or None
+        description = str(args.get("description") or "").strip() or None
+        if description and len(description) > 1000:
+            description = description[:1000]
 
         hiring = HiringService(ctx.session)
         role = hiring.hire(
@@ -113,6 +125,7 @@ class HireWorkerSkill(Skill):
             RoleType.WORKER,
             title=title,
             specialty=specialty,
+            description=description,
             source=(
                 f"hr.hire_worker:{reason[:80]}"
                 if reason else "hr.hire_worker"
