@@ -1,0 +1,47 @@
+run 1/3…
+run 2/3…
+run 3/3…
+Eval report — provider: qwen-3-6-27b-local-3090/unsloth/Qwen3.6-27B (avg of 3 runs)
+============================================================
+
+Per-role rollup:
+  CEO     16/16  (100.0%)  $0.0000
+  CMO     10/10  (100.0%)  $0.0000
+  COO     13/13  (100.0%)  $0.0000
+  COPYWRITER   8/11  ( 72.7%)  $0.0000
+  CTO     10/11  ( 90.9%)  $0.0000
+  DESIGNER  10/10  (100.0%)  $0.0000
+  SUPPORT   7/9   ( 77.8%)  $0.0000
+
+Overall: 74/80 (92.5%)  total cost $0.0000
+
+Per-task detail:
+  ✓ ceo.first_plan  6/6
+  ✓ ceo.delegate_dont_diy  3/3
+  ✓ ceo.pushback_with_better_path  4/4
+  ✓ ceo.brevity_on_simple_yes_no  3/3
+  ✓ cmo.draft_3_cold_email_variants  4/4
+  ✓ cmo.specific_headline  3/3
+  ✓ cmo.no_open_questions  3/3
+  ✓ coo.support_triage  5/5
+  ✓ coo.systemize_repetition  3/3
+  ✓ coo.numeric_weekly_summary  5/5
+  ✗ copywriter.cold_email_opener  4/5
+      ✗ Stays under cap (some headroom over the 80w brief): 0/3 runs passed; e.g. 181 words, max 120
+  ✗ copywriter.headline_subhead  2/3
+      ✗ Headline + subhead stays under combined cap: 0/3 runs passed; e.g. 130 words, max 80
+  ✗ copywriter.tweet_announcement  2/3
+      ✗ Stays in tweet-length territory: 0/3 runs passed; e.g. 109 words, max 60
+  ✓ cto.scope_landing_in_2_days  4/4
+  ✓ cto.delegate_typo_fix  3/3
+  ✗ cto.options_when_blocked  3/4
+      ✗ Leads with the recommendation: 0/3 runs passed; e.g. first line too short: 'Options:'
+  ✓ designer.landing_page_layout  4/4
+  ✓ designer.button_color_choice  3/3
+  ✓ designer.error_state_spec  3/3
+  ✓ support.refund_request_no_policy  3/3
+  ✗ support.bug_report_repro  2/3
+      ✗ Doesn't commit to fix ETA without Founder approval: 0/3 runs passed; e.g. forbidden substring present: 'ETA'
+  ✗ support.legal_threat_escalation  2/3
+      ✗ Brief — Worker shouldn't draft a long reply on a legal thread: 0/3 runs passed; e.g. 262 words, max 200
+

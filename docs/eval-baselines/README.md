@@ -66,8 +66,8 @@ after `korpha config`.
 
 ## The headline
 
-Seven model deployments tested on the same 7-role / 80-assertion
-fixture set — four cloud, three running on a single RTX 3090. Korpha
+Eight model deployments tested on the same 7-role / 80-assertion
+fixture set — four cloud, four running on a single RTX 3090. Korpha
 works with any of them; pick what fits your hardware and budget:
 
 | Model | Where it runs | Pass | Total | Overall | Wall time |
@@ -77,10 +77,11 @@ works with any of them; pick what fits your hardware and budget:
 | **Ministral-3-14B-Reasoning (Q4_K_M)** | **Local RTX 3090, 11 GB VRAM** | **75** | **80** | **93.8%** | **6 min** |
 | Kimi K2.6 | OpenCode Go (cloud, Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
 | **Gemma-4-31B (Q4_K_M)** | **Local RTX 3090, TurboQuant, 23 GB** | **74** | **80** | **92.5%** | **25 min** |
+| **Qwen3.6-27B (Q4_K_M)** | **Local RTX 3090, TurboQuant turbo3, ~22 GB** | **74** | **80** | **92.5%** | **~68 min** |
 | GLM 5.1   | OpenCode Go (cloud, Zhipu AI)    | 73 | 80 | **91.2%** | 18 min |
 | **Ministral-3-14B-Instruct (Q4_K_M)** | **Local RTX 3090, 11 GB VRAM, non-thinking** | **71** | **80** | **88.8%** | **6 min** |
 
-**Three local options across the quality spectrum:**
+**Four local options across the quality spectrum:**
 
 - **Ministral-3-14B-Reasoning** — 10.8 GB VRAM, 32k context, 6 min
   eval, **93.8%**. Tops cloud Kimi + cloud Gemma-31B on prompt
@@ -92,6 +93,13 @@ works with any of them; pick what fits your hardware and budget:
   turbo3), 25 min eval, **92.5%**. Bigger model = much longer
   context for multi-turn cofounder conversation. Needs a 24 GB
   card (3090 / 4090 / 7900 XTX).
+- **Qwen3.6-27B** — ~22 GB VRAM, 262k context (TurboQuant turbo3),
+  ~68 min eval, **92.5%**. Bigger param count than Ministral 14B
+  but loses to it on adherence (verbose copywriter, header-before-
+  punchline CTO) — same failure shape as cloud Kimi K2.6. Pick this
+  if you want the long-context window + are okay trading some
+  format discipline for it; pick Gemma-4-31B at the same VRAM tier
+  for faster runs.
 - **Ministral-3-14B-Instruct** — 10.8 GB VRAM, 32k context, 6 min
   eval, **88.8%**. Same base as the Reasoning variant but no
   thinking layer. Faster, more predictable, slightly lower
