@@ -229,8 +229,9 @@ class OpenAICompatibleProvider(Provider):
             headers.update(self.extra_headers)
         return headers
 
-    @staticmethod
-    def _build_payload(request: CompletionRequest, model: str) -> dict[str, Any]:
+    def _build_payload(
+        self, request: CompletionRequest, model: str,
+    ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model,
             "messages": [_message_to_openai(m) for m in request.messages],
@@ -243,6 +244,17 @@ class OpenAICompatibleProvider(Provider):
             payload["tools"] = list(request.tools)
         if request.stop:
             payload["stop"] = list(request.stop)
+        # Anthropic 1-hour prompt cache: when sending to Anthropic
+        # (api.anthropic.com or a proxy that opts in via
+        # anthropic-version header), mark the stable prefix (system
+        # prompt + last tool def) with cache_control so the next call
+        # within 60 minutes pays only output tokens. ~85-90% off
+        # first-turn input cost on returning sessions.
+        from korpha.inference.prompt_cache import (
+            apply_cache_markers, is_anthropic_endpoint,
+        )
+        if is_anthropic_endpoint(self.base_url, self.extra_headers):
+            apply_cache_markers(payload, model=model)
         return payload
 
     def _parse_response(
