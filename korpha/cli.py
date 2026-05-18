@@ -6763,6 +6763,90 @@ def auth_logout_cmd(
         typer.echo(_yellow("Nothing to clear."))
 
 
+proxy_app = typer.Typer(
+    name="proxy",
+    help=(
+        "OpenAI-compatible HTTP proxy on top of your OAuth-authed "
+        "subscriptions. Point Aider / Cline / Continue / Cursor / "
+        "any IDE that speaks the OpenAI API at http://127.0.0.1:8645"
+        "/v1 and they'll route through your Grok / Claude / GPT subs."
+    ),
+)
+app.add_typer(proxy_app)
+
+
+@proxy_app.command("serve")
+def proxy_serve_cmd(
+    host: Annotated[str, typer.Option(
+        "--host",
+        help=(
+            "Bind address. Default 127.0.0.1 — DO NOT expose the "
+            "proxy to the public internet, it has no auth (your "
+            "OAuth tokens would be free to use)."
+        ),
+    )] = "127.0.0.1",
+    port: Annotated[int, typer.Option(
+        "--port", help="TCP port. Default 8645.",
+    )] = 8645,
+) -> None:
+    """Start the OAuth proxy server. Foreground process — Ctrl-C to stop."""
+    _ensure_load_env()
+    import uvicorn
+    from korpha.proxy.server import build_proxy_app
+
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        typer.echo(_yellow(
+            f"⚠ Binding to {host} — NOT localhost. Anyone who can "
+            f"reach this port gets free use of your OAuth subscriptions. "
+            f"Only do this on a trusted LAN.",
+        ))
+
+    typer.echo(_bold(
+        f"\nAIgenteur OAuth proxy starting on http://{host}:{port}/v1",
+    ))
+    typer.echo(_dim(
+        "Point your IDE at it:\n"
+        f"  OPENAI_API_BASE=http://{host}:{port}/v1\n"
+        f"  OPENAI_API_KEY=any-non-empty-string\n",
+    ))
+    typer.echo(_dim(
+        "Available models will be listed at /v1/models — only aliases "
+        "whose OAuth provider is signed in show up.\n"
+    ))
+
+    uvicorn.run(
+        build_proxy_app(),
+        host=host,
+        port=port,
+        log_level="info",
+        access_log=False,
+    )
+
+
+@proxy_app.command("status")
+def proxy_status_cmd(
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port")] = 8645,
+) -> None:
+    """Show which model aliases are available right now."""
+    _ensure_load_env()
+    from korpha.proxy.aliases import all_aliases
+
+    typer.echo(_bold(f"\nProxy URL: http://{host}:{port}/v1"))
+    typer.echo(_dim("(run `aigenteur proxy serve` to actually launch it)\n"))
+    typer.echo(_bold("Model aliases"))
+    for a in all_aliases():
+        mark = _green("✓") if a.available() else _dim("✗")
+        provider = _dim(f"[{a.provider}]")
+        typer.echo(
+            f"  {mark} {a.alias:<20} {provider:<22} → {a.real_model}",
+        )
+    typer.echo(_dim(
+        "\n  ✓ = OAuth provider configured (alias usable from IDE)\n"
+        "  ✗ = need to sign in first (e.g. `aigenteur auth add xai-oauth`)",
+    ))
+
+
 budget_app = typer.Typer(
     name="budget",
     help=(
