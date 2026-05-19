@@ -135,6 +135,7 @@ Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
 | 🟢 | **Gemma-4-E2B-it (Q4_K_M)** | **~3 GB** | **77** | **80** | **96.2%** | **8 min** |
 | 🟢 | Ministral-3-14B-Reasoning (Q4_K_M) | 11 GB | 75 | 80 | **93.8%** | 6 min |
 | 🟢 | Microsoft Phi-4 (Q4_K_M, q8_0 kv) | ~8 GB | 75 | 80 | **93.8%** | ~4 min |
+| 🟢 | Qwen3.5-9B (Q4_K_M, q8_0 kv, reasoning) | ~9 GB | 75 | 80 | **93.8%** | ~40 min |
 | 🟢 | IBM Granite-4.1-8B (Q4_K_M, q8_0 kv) | ~8 GB | 74 | 80 | **92.5%** | ~100 min |
 | 🟢 | Gemma-4-E4B-it (BF16) | ~9 GB | 74 | 80 | **92.5%** | 16 min |
 | 🟢 | Gemma-4-31B (Q4_K_M, TurboQuant) | 23 GB | 74 | 80 | **92.5%** | 25 min |
