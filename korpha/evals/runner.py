@@ -211,6 +211,11 @@ async def run_task(
                     task.id, _RETRY_ATTEMPTS, exc,
                 )
     if response is None:
+        # Infra failure (provider error, timeout, subprocess crash) —
+        # drop from denominator with results=[]. The model gets no
+        # points but also no penalty; this is an infra issue, not a
+        # capability issue. Render_report annotates dropped tasks
+        # explicitly so the percentage isn't silently boosted.
         return TaskRunResult(
             task=task, response="", results=[],
             error=str(last_exc) if last_exc else "unknown",
@@ -367,6 +372,30 @@ def render_report(report: EvalReport) -> str:
         f"({report.overall_pass_rate * 100:.1f}%)  "
         f"total cost ${report.total_cost_usd:.4f}"
     )
+
+    # Honest reporting: when tasks were dropped due to infra failures
+    # (provider error, subprocess crash, rate-limit beyond retries),
+    # call them out explicitly. They DON'T affect the percentage
+    # (results=[] means dropped from denominator — the model isn't
+    # penalised for an infra issue), but the reader needs to know
+    # the denominator isn't the full task count.
+    dropped: list[tuple[str, str]] = []
+    for role in report.roles:
+        for tr in role.tasks:
+            if tr.error and not tr.results:
+                dropped.append((tr.task.id, tr.error[:140]))
+    if dropped:
+        lines.append("")
+        lines.append(
+            f"⚠ {len(dropped)} task(s) dropped from denominator "
+            f"due to infra failure (provider error / subprocess "
+            f"crash). NOT counted against the model — score reflects "
+            f"only the {sum(r.total_assertions for r in report.roles)} "
+            f"assertions that ran cleanly. Dropped:"
+        )
+        for tid, err in dropped:
+            lines.append(f"  - {tid}: {err}")
+
     lines.append("")
     lines.append("Per-task detail:")
     for role in report.roles:

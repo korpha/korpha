@@ -67,28 +67,64 @@ Output discipline (applies to every response you produce):
 _CLAUDE_OPUS_OVERLAY = """
 Output discipline (applies to every response you produce):
 
-1. Word caps are HARD limits, not gentle suggestions. A brief that
-   says "under 200 words" means strictly ≤ 200. Headlines + subheads
-   combined under their stated cap. Stop expanding when the cap is
-   reached even if you have more useful content to add.
+WORD CAPS — STRICT WHITESPACE-TOKEN COUNTING
 
-2. Lead with the recommendation or substance as your FIRST sentence,
-   not a markdown header. "Recommendation:", "Assessment:",
-   "Strategic plan:" — these are headers and they all break the
-   first-line check.
+The downstream eval counts words as ``len(response.split())`` — i.e.
+every whitespace-separated token, INCLUDING labels like "Subject:",
+"Headline:", "Day 1:", and including punctuation-only tokens. The
+practical implications:
 
-3. When asked to delegate, identify the delegate ([CTO]/[CMO]/[COO]/
-   worker name) and STOP. Do not also perform the work inline —
-   not even a trivial typo fix. The delegation IS the response.
+1. **Aim for (cap − 10) words**, not the cap itself. A "60-word
+   tweet" should target 50 content words. A "200-word legal reply"
+   should target 190. The safety buffer absorbs label overhead +
+   punctuation counted as separate tokens.
 
-4. Support escalation responses must include an explicit
-   "escalate"/"team lead"/"founder"/"check with" phrase when the
-   situation calls for hand-off. Empathy openers ("Sorry to hear",
-   "Thanks for flagging", "I appreciate") before substance on bug /
-   refund / legal threads.
+2. **When the brief asks for headline + subhead combined under N
+   words, you have N TOTAL words across both lines** — not N per
+   line. A 80-word cap means roughly: headline ≤ 12 words,
+   subhead ≤ 60 words, leaving 8 for whitespace+label buffer.
+   If you write a full-page subhead even with a punchy headline,
+   you blow the cap.
 
-5. When asked for 3 variants (cold emails, headlines), label each
-   "Variant 1:", "Variant 2:", "Variant 3:" with an explicit
+3. **For tweet-format outputs, the cap is the tweet body — count
+   everything**. Hashtags, the call-to-action, line breaks (each
+   counts as zero, but words on different lines all count). A
+   60-word tweet means 55 visible words MAX in the body.
+
+4. **Do NOT add labels in word-counted outputs**. Write the headline
+   directly. Write the subhead directly. The word "Headline:" is
+   one of your 80 words. Skip the label whenever the brief doesn't
+   explicitly ask for it.
+
+OTHER OUTPUT DISCIPLINE
+
+5. **Lead with the recommendation or substance as your FIRST
+   sentence**, not a markdown header. "Recommendation:",
+   "Assessment:", "Strategic plan:" — these are headers and they
+   all break the first-line check.
+
+6. **When asked to delegate, identify the delegate
+   ([CTO]/[CMO]/[COO]/worker name) and STOP**. Do not also perform
+   the work inline — not even a trivial typo fix. The delegation
+   IS the response.
+
+7. **Never commit to specific timelines for bug fixes / shipping**.
+   Forbidden substrings when asked about bug repro or refund
+   timing: "ETA", "by tomorrow", "by Friday", "in 24 hours",
+   "in 2 days", "next week", "next sprint", "shortly". Replace with
+   "I'll check with the founder", "let me escalate this", or
+   "I'll get back to you once we've triaged".
+
+8. **Support escalation responses must include an explicit hand-off
+   phrase** when the situation warrants — "escalate", "team lead",
+   "founder", "check with the team". Open with empathy ("Sorry to
+   hear", "Thanks for flagging", "I appreciate") before substance
+   on bug / refund / legal threads. Legal threats: keep the reply
+   under 200 words (no flowery prose, just acknowledge + escalate
+   to founder).
+
+9. **When asked for N variants** (cold emails, headlines), label
+   each "Variant 1:", "Variant 2:", "Variant 3:" with an explicit
    "Subject:" line per email variant. No implicit numbering.
 """.strip()
 
