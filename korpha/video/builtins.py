@@ -108,14 +108,132 @@ class HeyGenBackend(VideoGenProvider):
         )
 
 
+class GrokImagineBackend(VideoGenProvider):
+    """Text-to-video via xAI's Grok Imagine. Uses the user's existing
+    SuperGrok subscription via xai_oauth — no per-call billing, no
+    API key needed beyond what ``korpha auth add xai-oauth`` writes.
+
+    Pairs naturally with the X Search skill: founders who already
+    subscribed to X Premium+ to use Grok get video generation for
+    free as part of the same subscription.
+    """
+
+    name = "grok-imagine"
+
+    # Endpoint name based on xAI's OpenAI-compatibility surface
+    # (https://api.x.ai/v1/...). The Grok Imagine endpoint URL +
+    # model id may change as xAI publishes the official spec — if the
+    # API shape shifts, only this class needs updating.
+    _ENDPOINT_URL = "https://api.x.ai/v1/videos/generations"
+    _DEFAULT_MODEL = "grok-imagine"
+
+    def capabilities(self) -> VideoGenCapabilities:
+        return VideoGenCapabilities(
+            text_to_video=True,
+            image_to_video=True,  # accepts reference_image_url
+            audio_driven=False,
+            max_duration_seconds=10.0,  # typical Grok Imagine clip
+            aspect_ratios=("16:9", "9:16", "1:1"),
+            has_watermark=False,
+        )
+
+    def available(self) -> bool:
+        """True iff the user has completed `korpha auth add xai-oauth`
+        and the token vault has a non-expired access token."""
+        try:
+            from korpha.inference.xai_oauth import is_configured
+            return is_configured()
+        except Exception:
+            return False
+
+    async def generate(self, request: VideoGenRequest) -> VideoGenResult:
+        """POST to xAI's video-gen endpoint with the OAuth bearer.
+
+        Returns the rendered video URL. If the subscription doesn't
+        include Grok Imagine, raises VideoGenError with the upstream
+        message so the caller can show a clear upgrade hint.
+        """
+        if not self.available():
+            raise VideoGenError(
+                "Grok Imagine needs SuperGrok auth — run `korpha "
+                "auth add xai-oauth` first (uses your X Premium+ "
+                "subscription, no API key)."
+            )
+        try:
+            from korpha.inference.xai_oauth import get_auth
+            auth = get_auth()
+        except Exception as exc:
+            raise VideoGenError(
+                f"Couldn't read xAI OAuth state: {exc}"
+            ) from exc
+
+        import httpx
+        payload: dict = {
+            "model": self._DEFAULT_MODEL,
+            "prompt": request.prompt,
+        }
+        if request.duration_seconds:
+            payload["duration_seconds"] = float(request.duration_seconds)
+        if request.aspect_ratio:
+            payload["aspect_ratio"] = request.aspect_ratio
+        if request.reference_image_url:
+            payload["reference_image_url"] = request.reference_image_url
+        if request.seed is not None:
+            payload["seed"] = int(request.seed)
+        if request.extra:
+            for k, v in request.extra.items():
+                payload.setdefault(k, v)
+
+        headers = {
+            "Authorization": f"Bearer {auth.access_token}",
+            "Content-Type": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                resp = await client.post(
+                    self._ENDPOINT_URL, json=payload, headers=headers,
+                )
+            if resp.status_code >= 400:
+                raise VideoGenError(
+                    f"Grok Imagine {resp.status_code}: "
+                    f"{resp.text[:400]}"
+                )
+            data = resp.json()
+        except httpx.HTTPError as exc:
+            raise VideoGenError(f"Grok Imagine HTTP error: {exc}") from exc
+
+        # Two likely shapes (OpenAI-compat + xAI-specific):
+        #   {"data": [{"url": "https://..."}]}
+        #   {"url": "https://..."}
+        video_url: str | None = None
+        if isinstance(data.get("data"), list) and data["data"]:
+            video_url = data["data"][0].get("url")
+        if not video_url:
+            video_url = data.get("url") or data.get("video_url")
+        if not video_url:
+            raise VideoGenError(
+                f"Grok Imagine returned no video URL in response: "
+                f"{str(data)[:300]}"
+            )
+
+        return VideoGenResult(
+            video_url=video_url,
+            duration_seconds=request.duration_seconds,
+            cost_usd=Decimal("0"),  # subscription-billed
+            backend_name="grok-imagine",
+            raw=data,
+        )
+
+
 def register_builtin_video_providers() -> None:
-    """Register the two built-in adapters. Called once at module load
+    """Register the built-in adapters. Called once at module load
     from korpha.skills.__init__ so the registry is populated by the
     time the CMO router needs it."""
     from korpha.video.registry import register_provider
 
     register_provider(HyperFramesBackend())
     register_provider(HeyGenBackend())
+    register_provider(GrokImagineBackend())
 
 
 __all__ = [
