@@ -115,7 +115,7 @@ SQLite was built without FTS5. Either:
 DB schema is out of date.
 
 ```bash
-korpha migrate
+korpha db-migrate
 ```
 
 If it errors, the schema may have drifted. Backup
@@ -123,7 +123,7 @@ If it errors, the schema may have drifted. Backup
 
 ```bash
 cp ~/.korpha/korpha.db ~/.korpha/korpha.db.bak
-korpha migrate --force
+korpha db-migrate --force
 ```
 
 ### "browser automation: playwright not installed"

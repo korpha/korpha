@@ -13,7 +13,7 @@ needs:
   3. ZIP fallback on Windows when ``.git/`` is missing (the customer
      installed from a release tarball rather than ``git clone``).
   4. ``uv sync --frozen`` to refresh deps (we use uv, not pip).
-  5. ``korpha migrate`` to bring the DB schema up.
+  5. ``korpha db-migrate`` to bring the DB schema up.
   6. Optional systemd / launchd / Task-Scheduler restart hint.
 
 Robustness layer (HUP protection): customers run this over SSH in
@@ -410,16 +410,21 @@ def step_uv_sync(repo: Path) -> tuple[bool, str]:
 
 
 def step_db_migrate(repo: Path) -> tuple[bool, str]:
-    """Run ``korpha migrate`` to bring the DB schema up to head.
+    """Run ``korpha db-migrate`` to bring the DB schema up to head.
 
     Invokes via the same venv we just synced (``uv run``) so we don't
     drag in a stale CLI from the operator's global PATH.
+
+    Command name is ``db-migrate`` (not ``migrate``) — the top-level
+    ``korpha migrate`` namespace belongs to the host-migration
+    subgroup (bundle/restore/inspect/check). Calling bare ``korpha
+    migrate`` would print --help and exit non-zero.
     """
     uv = shutil.which("uv")
     if uv is None:
         return False, "uv not found — cannot run migrations"
     proc = subprocess.run(
-        [uv, "run", "korpha", "migrate"],
+        [uv, "run", "korpha", "db-migrate"],
         cwd=repo, capture_output=True, text=True, check=False,
     )
     if proc.returncode != 0:
