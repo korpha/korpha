@@ -9705,6 +9705,360 @@ def debrief(
     ))
 
 
+
+# ---------------------------------------------------------------------------
+# `korpha migrate` — bundle/restore Korpha state across machines.
+#
+# Built on top of `korpha backup` / `korpha restore` (which already
+# tar the data dir), adding a manifest with source-machine metadata
+# and a cred-audit list. The audit drives a re-login wizard on the
+# target since some creds (Codex CLI OAuth, Claude Code keychain)
+# can't transfer cleanly between machines.
+# ---------------------------------------------------------------------------
+
+
+migrate_app = typer.Typer(
+    help=(
+        "Move your AIgenteur install between machines. "
+        "Bundles your data dir + a manifest of credentials that need "
+        "re-login on the target."
+    )
+)
+app.add_typer(migrate_app, name="migrate")
+
+
+@migrate_app.command("bundle")
+def migrate_bundle(
+    output: Annotated[Path | None, typer.Option(
+        "--output", "-o",
+        help=(
+            "Destination bundle. Default: "
+            "./korpha-migration-<host>-<date>.tar.gz"
+        ),
+    )] = None,
+) -> None:
+    """Snapshot the Korpha data dir + machine-tied cred audit into
+    a single ``.tar.gz`` ready to ship to a new machine.
+
+    Restore on the target with ``korpha migrate restore <bundle>``.
+    The plain ``korpha backup`` tarball is still available — this
+    command produces a richer bundle with a re-auth wizard hook.
+    """
+    _ensure_load_env()
+    import socket as _socket
+    from datetime import datetime as _dt
+    from pathlib import Path as _P
+
+    from korpha.migrate.bundle import create_migration_bundle
+
+    base_str = os.environ.get("KORPHA_DATA_DIR")
+    base = _P(base_str) if base_str else (_P.home() / ".korpha")
+    if not base.is_dir():
+        typer.echo(_red(
+            f"No Korpha data dir at {base}. Run `korpha init` first."
+        ))
+        raise typer.Exit(code=1)
+
+    if output is None:
+        host = _socket.gethostname().split(".")[0]
+        stamp = _dt.now().strftime("%Y%m%d-%H%M%S")
+        output = _P(f"./korpha-migration-{host}-{stamp}.tar.gz").resolve()
+    else:
+        output = output.expanduser().resolve()
+
+    typer.echo(f"Bundling {base} → {output}")
+
+    try:
+        result = create_migration_bundle(base, output)
+    except FileNotFoundError as exc:
+        typer.echo(_red(str(exc)))
+        raise typer.Exit(code=1) from exc
+    except OSError as exc:
+        typer.echo(_red(f"bundle failed: {exc}"))
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(_green(
+        f"✓ Bundle written ({_human_bytes(result.bytes_written)})."
+    ))
+
+    present = [
+        c for c in result.manifest.credentials_machine_tied
+        if c.is_present
+    ]
+    if present:
+        typer.echo("")
+        typer.echo(_yellow(
+            f"⚠ {len(present)} credential(s) need re-login on the "
+            "target machine:"
+        ))
+        for c in present:
+            typer.echo(f"  • {c.name}")
+            typer.echo(_dim(f"      re-auth: {c.reauth_command}"))
+        typer.echo(_dim(
+            "  The restore wizard walks these prompts for you."
+        ))
+
+    typer.echo("")
+    typer.echo(_dim(
+        "  Restore on the target with: "
+        f"korpha migrate restore {output.name}"
+    ))
+
+
+@migrate_app.command("restore")
+def migrate_restore(
+    bundle: Annotated[Path, typer.Argument(
+        help="Path to a bundle produced by `korpha migrate bundle` "
+             "or a plain `korpha backup` tarball.",
+    )],
+    force: Annotated[bool, typer.Option(
+        "--force",
+        help="Overwrite existing KORPHA_DATA_DIR contents without "
+             "prompting.",
+    )] = False,
+    skip_wizard: Annotated[bool, typer.Option(
+        "--skip-wizard",
+        help="Restore data only — don't walk the cred re-auth prompts. "
+             "Useful for unattended pipelines; you'll need to re-login "
+             "to Codex/Claude/etc. manually before agents work.",
+    )] = False,
+) -> None:
+    """Restore Korpha state from a migration bundle.
+
+    If the bundle has a manifest, walks an interactive re-auth wizard
+    for credentials that can't transfer cleanly between machines
+    (Codex CLI OAuth, Claude Code keychain).
+    """
+    _ensure_load_env()
+    from pathlib import Path as _P
+
+    from korpha.migrate.restore import (
+        format_source_banner,
+        reauth_steps_from_manifest,
+        restore_bundle,
+    )
+
+    base_str = os.environ.get("KORPHA_DATA_DIR")
+    base = _P(base_str) if base_str else (_P.home() / ".korpha")
+
+    try:
+        result = restore_bundle(bundle, base, force=force)
+    except FileNotFoundError as exc:
+        typer.echo(_red(str(exc)))
+        raise typer.Exit(code=1) from exc
+    except FileExistsError as exc:
+        typer.echo(_red(str(exc)))
+        typer.echo(_dim(
+            "  Tip: back the existing dir up first with "
+            "`korpha backup`, then re-run with --force."
+        ))
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(_green(f"✓ Data dir restored to {result.data_dir}"))
+
+    if result.manifest is None:
+        typer.echo(_dim(
+            "  (plain backup tarball — no manifest, no re-auth wizard)"
+        ))
+        return
+
+    typer.echo(_dim(f"  {format_source_banner(result.manifest)}"))
+    pending = result.manifest.pending
+    if pending.cron_jobs or pending.background_tasks:
+        typer.echo(_dim(
+            f"  Pending state: {pending.cron_jobs} cron job(s), "
+            f"{pending.background_tasks} background task(s) — "
+            "will resume on next korpha start."
+        ))
+
+    steps = reauth_steps_from_manifest(result.manifest)
+    if not steps:
+        typer.echo(_green("✓ No machine-tied credentials to re-auth."))
+        return
+
+    if skip_wizard:
+        typer.echo(_yellow(
+            f"⚠ {len(steps)} credential(s) need re-login — wizard "
+            "skipped. Run these manually:"
+        ))
+        for s in steps:
+            typer.echo(f"  • {s.name}: {s.command}")
+        return
+
+    typer.echo("")
+    typer.echo(_yellow(
+        f"⚠ {len(steps)} credential(s) need re-login on this machine."
+    ))
+    typer.echo(_dim(
+        "  For each step, the wizard shows the command — run it in "
+        "another terminal, then press ENTER here. Type `skip` to "
+        "defer a step."
+    ))
+
+    skipped = 0
+    completed = 0
+    for i, step in enumerate(steps, 1):
+        typer.echo("")
+        typer.echo(f"[{i}/{len(steps)}] {step.name}")
+        typer.echo(_dim(f"      {step.rationale}"))
+        typer.echo(f"      run: {step.command}")
+        answer = typer.prompt(
+            "  press ENTER when done, or type `skip`",
+            default="",
+            show_default=False,
+        ).strip().lower()
+        if answer == "skip":
+            skipped += 1
+            typer.echo(_yellow("  ⏭  skipped"))
+        else:
+            completed += 1
+            typer.echo(_green("  ✓ confirmed"))
+
+    typer.echo("")
+    if skipped:
+        typer.echo(_yellow(
+            f"⚠ {skipped} step(s) skipped — re-run `korpha migrate "
+            "restore` (or do them manually) before relying on those "
+            "agents."
+        ))
+    typer.echo(_green(
+        f"✓ Restore complete: {completed} re-auth(s) confirmed, "
+        f"{skipped} skipped."
+    ))
+
+
+@migrate_app.command("inspect")
+def migrate_inspect(
+    bundle: Annotated[Path, typer.Argument(
+        help="Path to a bundle produced by `korpha migrate bundle`.",
+    )],
+) -> None:
+    """Print the manifest from a bundle without restoring it.
+
+    Useful for previewing what a bundle contains before committing
+    to ``korpha migrate restore``.
+    """
+    _ensure_load_env()
+    from korpha.migrate.restore import format_source_banner
+    from korpha.migrate import load_manifest
+
+    bundle_resolved = bundle.expanduser().resolve()
+    if not bundle_resolved.is_file():
+        typer.echo(_red(f"bundle not found: {bundle_resolved}"))
+        raise typer.Exit(code=1)
+
+    manifest = load_manifest(bundle_resolved)
+    if manifest is None:
+        typer.echo(_yellow(
+            "No migration manifest found — this looks like a plain "
+            "`korpha backup` tarball. Restore is fine; the re-auth "
+            "wizard just won't engage."
+        ))
+        return
+
+    typer.echo(format_source_banner(manifest))
+    typer.echo(_dim(f"  data dir: {manifest.source.data_dir}"))
+    typer.echo(_dim(f"  korpha version: {manifest.korpha_version}"))
+    if manifest.bundle_size_bytes:
+        typer.echo(_dim(
+            f"  bundle size: {_human_bytes(manifest.bundle_size_bytes)}"
+        ))
+
+    pending = manifest.pending
+    if pending.cron_jobs or pending.background_tasks or pending.active_business_id:
+        typer.echo("")
+        typer.echo("Pending state:")
+        typer.echo(f"  cron jobs: {pending.cron_jobs}")
+        typer.echo(f"  background tasks: {pending.background_tasks}")
+        if pending.active_business_id:
+            typer.echo(f"  active business: {pending.active_business_id}")
+
+    present = [
+        c for c in manifest.credentials_machine_tied if c.is_present
+    ]
+    if present:
+        typer.echo("")
+        typer.echo("Machine-tied credentials needing re-auth on target:")
+        for c in present:
+            typer.echo(f"  • {c.name}")
+            typer.echo(_dim(f"      {c.reauth_command}"))
+    else:
+        typer.echo(_green(
+            "✓ No machine-tied credentials — bundle restores clean."
+        ))
+
+
+@migrate_app.command("check")
+def migrate_check(
+    bundle: Annotated[Path | None, typer.Option(
+        "--bundle",
+        help="Optional bundle to check compatibility against.",
+    )] = None,
+) -> None:
+    """Probe this machine for restore readiness.
+
+    Runs python version, disk space, and target-dir-empty checks.
+    Pass ``--bundle`` to also compare the bundle's source python
+    version against this machine.
+
+    Returns non-zero if any check FAILS hard. WARN/INFO entries are
+    printed for visibility but don't block.
+    """
+    _ensure_load_env()
+    from pathlib import Path as _P
+
+    from korpha.migrate import (
+        CheckLevel,
+        has_blocking_failures,
+        load_manifest,
+        run_readiness_checks,
+    )
+
+    base_str = os.environ.get("KORPHA_DATA_DIR")
+    base = _P(base_str) if base_str else (_P.home() / ".korpha")
+
+    manifest = None
+    if bundle is not None:
+        bundle_resolved = bundle.expanduser().resolve()
+        if not bundle_resolved.is_file():
+            typer.echo(_red(f"bundle not found: {bundle_resolved}"))
+            raise typer.Exit(code=1)
+        manifest = load_manifest(bundle_resolved)
+
+    typer.echo(f"Readiness check — target data dir: {base}")
+    if manifest is not None:
+        typer.echo(_dim(
+            f"  bundle source: {manifest.source.hostname} "
+            f"(py {manifest.source.python_version})"
+        ))
+
+    typer.echo("")
+    checks = run_readiness_checks(base, manifest=manifest)
+    for c in checks:
+        symbol_map = {
+            CheckLevel.PASS: _green("✓"),
+            CheckLevel.INFO: _dim("i"),
+            CheckLevel.WARN: _yellow("⚠"),
+            CheckLevel.FAIL: _red("✗"),
+        }
+        typer.echo(
+            f"  {symbol_map[c.level]} {c.name}: {c.message}"
+        )
+
+    if has_blocking_failures(checks):
+        typer.echo("")
+        typer.echo(_red(
+            "One or more checks FAILED — restore will not succeed "
+            "until you fix them."
+        ))
+        raise typer.Exit(code=1)
+
+    typer.echo("")
+    typer.echo(_green("✓ Ready to restore."))
+
+
+
+
 def main() -> None:
     app()
 
