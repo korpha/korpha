@@ -8127,12 +8127,15 @@ app.add_typer(disk_app)
 
 def _human_bytes(n: int) -> str:
     """Format ``n`` bytes as a short human string ('1.2 GB')."""
+    sign = "-" if n < 0 else ""
+    value = float(abs(n))
     for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(n) < 1024 or unit == "TB":
+        if value < 1024 or unit == "TB":
             if unit == "B":
-                return f"{n} {unit}"
-            return f"{n / 1024**(['B','KB','MB','GB','TB'].index(unit)):.1f} {unit}"
-    return f"{n} B"
+                return f"{sign}{int(value)} {unit}"
+            return f"{sign}{value:.1f} {unit}"
+        value /= 1024
+    return f"{sign}{int(value)} B"
 
 
 def _dir_size(path: Path) -> int:
