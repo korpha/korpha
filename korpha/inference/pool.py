@@ -175,9 +175,17 @@ class InferencePool:
             response: CompletionResponse | None = None
             transient_error: Exception | None = None
             rate_limited = False
+            # Per-model output-discipline overlay: appends a small
+            # nudge to the system message for known closed models
+            # whose default output habits don't match our role-prompt
+            # scaffolding (no-op for open-weights). See
+            # ``korpha/cofounder/prompt_overlays.py``.
+            from korpha.cofounder.prompt_overlays import apply_overlay
+            model_id = account.tier_models.get(request.tier, "")
+            dispatched = apply_overlay(request, model_id)
             for attempt_idx in range(same_account_attempts):
                 try:
-                    response = await provider.complete(request, account)
+                    response = await provider.complete(dispatched, account)
                 except RateLimitError as exc:
                     transient_error = exc
                     rate_limited = True
@@ -241,7 +249,11 @@ class InferencePool:
                 raise
 
             provider = self.registry.get_provider(account.provider_name)
-            iterator = provider.stream_complete(request, account)
+            # Per-model overlay (see complete() above for rationale).
+            from korpha.cofounder.prompt_overlays import apply_overlay
+            model_id = account.tier_models.get(request.tier, "")
+            dispatched_stream = apply_overlay(request, model_id)
+            iterator = provider.stream_complete(dispatched_stream, account)
             try:
                 first_chunk = await iterator.__anext__()
             except RateLimitError as exc:
