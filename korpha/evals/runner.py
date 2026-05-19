@@ -179,16 +179,20 @@ async def run_task(
     # mapping); the pool selects from its configured accounts.
     _ = account
 
-    # Bounded retry on transient provider errors. A failed task used
-    # to register as a flat 0/N for the task's assertions, which
-    # silently dropped points on a momentary rate-limit / subprocess
-    # crash / session race — punishing the MODEL for an INFRA glitch.
-    # Three attempts with short backoff; if all three fail, then
-    # surface the error (and only then deduct points). Aligns the eval
-    # with production behavior where the cascade retries automatically.
+    # Aggressive retry on transient provider errors. The principle:
+    # every task in the fixture set must actually RUN — we don't
+    # accept "dropped due to infra" except as an absolute last
+    # resort. A sustained provider outage gets escalating waits so
+    # we ride it out instead of giving up.
+    #
+    # 8 attempts × backoffs (1s, 3s, 10s, 30s, 60s, 180s, 300s) =
+    # ≈ 10 min ceiling per task before we declare permanent failure.
+    # In practice the API recovers in seconds and the first retry
+    # is enough; the long tail covers genuinely sustained outages
+    # (e.g. Cloudflare WAF block, model temporarily unavailable).
     import asyncio
-    _RETRY_ATTEMPTS = 3
-    _RETRY_BACKOFF_SECONDS = (1.0, 3.0)  # between attempt 1→2, 2→3
+    _RETRY_BACKOFF_SECONDS = (1.0, 3.0, 10.0, 30.0, 60.0, 180.0, 300.0)
+    _RETRY_ATTEMPTS = len(_RETRY_BACKOFF_SECONDS) + 1  # 8 total
     last_exc: Exception | None = None
     response = None
     for attempt in range(_RETRY_ATTEMPTS):
@@ -206,9 +210,11 @@ async def run_task(
                 )
                 await asyncio.sleep(delay)
             else:
-                logger.warning(
-                    "eval task %s failed after %d attempts: %s",
-                    task.id, _RETRY_ATTEMPTS, exc,
+                logger.error(
+                    "eval task %s PERMANENTLY failed after %d attempts "
+                    "(%.0fs of backoff): %s",
+                    task.id, _RETRY_ATTEMPTS,
+                    sum(_RETRY_BACKOFF_SECONDS), exc,
                 )
     if response is None:
         # Infra failure (provider error, timeout, subprocess crash) —
