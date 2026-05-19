@@ -35,6 +35,7 @@ from korpha.migrate import (
     scan_machine_tied,
 )
 from korpha.migrate.readiness import (
+    _MIN_PYTHON,
     check_bundle_compatibility,
     check_data_dir_empty,
     check_disk_space,
@@ -348,6 +349,29 @@ def test_python_version_check_fails_on_high_floor() -> None:
     c = check_python_version(required=(99, 0))
     assert c.level == CheckLevel.FAIL
     assert "99.0" in c.message
+
+
+def test_min_python_matches_pyproject() -> None:
+    """Drift-guard: readiness._MIN_PYTHON must track pyproject's
+    ``requires-python`` floor. If someone bumps one without the
+    other, this test catches it."""
+    import re
+    import tomllib
+
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    data = tomllib.loads(pyproject.read_text())
+    requires = data["project"]["requires-python"]
+    m = re.match(r"^>=\s*(\d+)\.(\d+)", requires)
+    assert m is not None, (
+        f"Cannot parse requires-python={requires!r}; this guard "
+        "only handles '>=X.Y' form — update the guard if pyproject "
+        "switches to a different constraint shape."
+    )
+    pyproject_floor = (int(m.group(1)), int(m.group(2)))
+    assert _MIN_PYTHON == pyproject_floor, (
+        f"readiness._MIN_PYTHON={_MIN_PYTHON} drifted from "
+        f"pyproject requires-python={requires!r}. They must match."
+    )
 
 
 def test_disk_space_warn_on_high_minimum(tmp_path: Path) -> None:
