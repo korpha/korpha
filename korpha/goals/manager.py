@@ -41,6 +41,13 @@ def continuation_prompt_for(goal_text: str) -> str:
     return CONTINUATION_PROMPT_TEMPLATE.format(goal=goal_text)
 
 
+class GoalReplaceConflict(RuntimeError):
+    """Raised by ``GoalManager.set()`` when called against a thread
+    that already has an ACTIVE goal and ``force=False``. Prevents
+    silent replacement that could race two judges against the
+    same thread."""
+
+
 class GoalManager:
     """Per-thread goal API + judge-driven loop helpers.
 
@@ -101,10 +108,19 @@ class GoalManager:
         goal_text: str,
         *,
         max_turns: int = DEFAULT_MAX_TURNS,
+        force: bool = False,
     ) -> Goal:
-        """Set or replace the active goal on this thread. Any
-        previous active goal is moved to CLEARED so we don't
-        race two judges against the same thread."""
+        """Set or replace the active goal on this thread.
+
+        Refuses to replace an existing ACTIVE goal unless ``force=True``
+        — avoids racing two judges against the same thread when the
+        continuation loop is mid-flight. Caller (CLI / slash handler)
+        surfaces ``GoalReplaceConflict`` as a friendly "clear first,
+        or pass --force" message.
+
+        Paused / cleared / achieved goals never trip the guard —
+        only ACTIVE means "judge could be running right now".
+        """
         goal_text = (goal_text or "").strip()
         if not goal_text:
             raise ValueError("goal text cannot be empty")
@@ -113,6 +129,13 @@ class GoalManager:
 
         existing = self.active()
         if existing is not None:
+            if not force:
+                raise GoalReplaceConflict(
+                    f"An active goal exists ({existing.turns_used}/"
+                    f"{existing.max_turns} turns): {existing.text}. "
+                    "Run `/goal clear` first, or pass --force to "
+                    "replace it mid-run."
+                )
             existing.status = GoalStatus.CLEARED
             existing.paused_reason = "replaced-by-new-goal"
             existing.finished_at = utcnow()

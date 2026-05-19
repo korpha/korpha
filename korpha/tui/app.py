@@ -775,7 +775,8 @@ class KorphaTUI(App[None]):
                 "  [cyan]/note[/]       — list/add/remove bounded MEMORY/USER notes\n"
                 "  [cyan]/cron[/]       — list/run/toggle/delete agentless cron jobs\n"
                 "  [cyan]/kanban[/]     — list/add/move/archive C-suite board cards\n"
-                "  [cyan]/team[/]       — list/hire/fire org chart members\n\n"
+                "  [cyan]/team[/]       — list/hire/fire org chart members\n"
+                "  [cyan]/goal[/]       — set/status/pause/resume/clear standing goal\n\n"
                 "  [bold cyan]Diagnostics[/]\n"
                 "  [cyan]/skills[/]     — list installed skills\n"
                 "  [cyan]/me[/]         — show founder + business identity\n"
@@ -978,11 +979,60 @@ class KorphaTUI(App[None]):
                     "/note add <memory|user> <text> | "
                     "/note remove <memory|user> <substring>[/]\n"
                 )
+        elif cmd == "goal":
+            await self._dispatch_goal_slash(raw)
         else:
             self._chat_log.write(
                 f"[red]Unknown slash command:[/] /{cmd}. "
                 f"Try /help.\n"
             )
+
+    async def _dispatch_goal_slash(self, raw: str) -> None:
+        """Handle /goal in chat. Parses via the shared parser, runs
+        against the active thread's GoalManager, writes the reply
+        into the chat log."""
+        from sqlmodel import Session, select as _select
+
+        from korpha.business.model import Business
+        from korpha.cofounder.model import (
+            Thread, ThreadPlatform, ThreadStatus,
+        )
+        from korpha.db._session import get_engine
+        from korpha.goals import GoalManager, execute_goal_slash, parse_goal_slash
+
+        intent = parse_goal_slash(raw)
+        try:
+            engine = get_engine()
+        except Exception as exc:
+            self._chat_log.write(f"[red]/goal failed:[/] {exc}\n")
+            return
+
+        with Session(engine) as session:
+            business = session.exec(_select(Business)).first()
+            if business is None:
+                self._chat_log.write(
+                    "[red]/goal needs a business — onboard first.[/]\n",
+                )
+                return
+            thread = session.exec(
+                _select(Thread)
+                .where(Thread.business_id == business.id)
+                .where(Thread.platform == ThreadPlatform.WEB)
+                .where(Thread.status == ThreadStatus.ACTIVE)
+                .order_by(Thread.last_message_at.desc())  # type: ignore[attr-defined]
+                .limit(1)
+            ).first()
+            if thread is None:
+                self._chat_log.write(
+                    "[red]No active web thread for this business.[/]\n",
+                )
+                return
+            mgr = GoalManager(
+                session=session, thread_id=thread.id,
+                business_id=business.id, cost_tracker=None,
+            )
+            reply = execute_goal_slash(intent, mgr)
+        self._chat_log.write(f"[cyan]{reply}[/]\n")
 
     async def _interrupt_active_stream(self) -> None:
         if self.client is None or self._active_request_id is None:

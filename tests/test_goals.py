@@ -137,13 +137,15 @@ def test_set_creates_active_goal(session: Session) -> None:
 
 
 def test_set_replaces_existing_active_goal(session: Session) -> None:
+    """Replacement requires force=True since the mid-run guard
+    landed (Hermes /goal parity). Replace mechanics unchanged."""
     biz, thread = _seed(session)
     mgr = GoalManager(
         session=session, thread_id=thread, business_id=biz,
         cost_tracker=_stub_cost_tracker(),
     )
     first = mgr.set("first")
-    second = mgr.set("second")
+    second = mgr.set("second", force=True)
     # First moved to CLEARED, second is active
     session.refresh(first)
     assert first.status == GoalStatus.CLEARED

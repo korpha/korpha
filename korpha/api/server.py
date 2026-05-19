@@ -805,6 +805,51 @@ def build_app() -> FastAPI:
             platform=ThreadPlatform.WEB,
             content=body.message,
         )
+
+        # /goal slash command — intercept before the LLM call. Same
+        # parser the TUI + future gateway adapters use, so behaviour
+        # can't drift between surfaces. The reply is streamed as a
+        # single content+done SSE pair so the front-end render path
+        # doesn't need to special-case it.
+        from korpha.goals import (
+            GoalManager, execute_goal_slash, is_goal_slash, parse_goal_slash,
+        )
+        if is_goal_slash(body.message):
+            intent = parse_goal_slash(body.message)
+            mgr = GoalManager(
+                session=session, thread_id=decision.thread_id,
+                business_id=business.id, cost_tracker=None,
+            )
+            reply = execute_goal_slash(intent, mgr)
+            # Persist as a normal outbound so the chat history shows
+            # the slash command's reply alongside the user message.
+            router.route_outbound(
+                business_id=business.id,
+                founder_id=founder.id,
+                platform=ThreadPlatform.WEB,
+                content=reply,
+                requesting_agent_role_id=decision.delivering_agent_role_id,
+            )
+
+            async def _slash_events() -> AsyncIterator[str]:
+                yield (
+                    "data: "
+                    + jsonlib.dumps({"type": "content", "text": reply})
+                    + "\n\n"
+                )
+                yield (
+                    "data: "
+                    + jsonlib.dumps({
+                        "type": "done",
+                        "content": reply,
+                        "skills_used": [],
+                    })
+                    + "\n\n"
+                )
+
+            return StreamingResponse(
+                _slash_events(), media_type="text/event-stream",
+            )
         memory = MemoryService(session=session)
         history = memory.load_recent(
             business_id=business.id,

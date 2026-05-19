@@ -3632,6 +3632,14 @@ def _resolve_active_thread(session, business_id):
     ).first()
 
 
+@goal_app.callback(invoke_without_command=True)
+def goal_default(ctx: typer.Context) -> None:
+    """Bare `korpha goal` (no subcommand) aliases to `goal status` —
+    matches the Hermes /goal convention."""
+    if ctx.invoked_subcommand is None:
+        goal_status()
+
+
 @goal_app.command("set")
 def goal_set(
     text: Annotated[str, typer.Argument(
@@ -3641,14 +3649,23 @@ def goal_set(
         "--max-turns",
         help="Cap on judge-driven continuations (default 20).",
     )] = 20,
+    force: Annotated[bool, typer.Option(
+        "--force",
+        help=(
+            "Replace an active goal even if it's mid-run. Without "
+            "this flag, set refuses when an ACTIVE goal exists to "
+            "avoid racing two judges on the same thread."
+        ),
+    )] = False,
 ) -> None:
     """Set / replace the active goal on the founder's most-recent
-    web chat thread. Existing active goal moves to CLEARED."""
+    web chat thread. Refuses to clobber an ACTIVE goal unless
+    --force is passed."""
     _ensure_load_env()
     from sqlmodel import Session, select as _select
     from korpha.business.model import Business
     from korpha.db._session import get_engine
-    from korpha.goals import GoalManager
+    from korpha.goals import GoalManager, GoalReplaceConflict
 
     engine = get_engine()
     with Session(engine) as session:
@@ -3668,7 +3685,10 @@ def goal_set(
             business_id=business.id, cost_tracker=None,
         )
         try:
-            goal = mgr.set(text, max_turns=max_turns)
+            goal = mgr.set(text, max_turns=max_turns, force=force)
+        except GoalReplaceConflict as exc:
+            typer.echo(_yellow(str(exc)))
+            raise typer.Exit(code=2) from exc
         except ValueError as exc:
             typer.echo(_red(str(exc)))
             raise typer.Exit(code=1) from exc
