@@ -1,0 +1,72 @@
+  run 1/3…
+  run 2/3…
+  run 3/3…
+Eval report — provider: qwen3.5-2b-local-3090/unsloth/Qwen3.5-2B (avg of 3 runs)
+============================================================
+
+Per-role rollup:
+  CEO     10/16  ( 62.5%)  $0.0000
+  CMO      6/10  ( 60.0%)  $0.0000
+  COO      4/13  ( 30.8%)  $0.0000
+  COPYWRITER   7/11  ( 63.6%)  $0.0000
+  CTO      9/11  ( 81.8%)  $0.0000
+  DESIGNER   7/10  ( 70.0%)  $0.0000
+  SUPPORT   6/9   ( 66.7%)  $0.0000
+
+Overall: 49/80 (61.3%)  total cost $0.0000
+
+Per-task detail:
+  ✗ ceo.first_plan  5/6
+      ✗ Has 3-12 reasons / steps as a list: 1/3 runs passed; e.g. 23 bullet lines, max allowed 12
+  ✗ ceo.delegate_dont_diy  1/3
+      ✗ Routes to CTO: 1/3 runs passed; e.g. none of ['[CTO]', 'delegate', 'CTO will', "I'll have the CTO"] present
+      ✗ Leads with the call (delegating IS the call): 1/3 runs passed; e.g. empty response
+  ✗ ceo.pushback_with_better_path  2/4
+      ✗ Proposes a counter — better path: 0/3 runs passed; e.g. none of ['instead', 'alternative', 'before', 'test', 'try', 'smaller'] present
+      ✗ Leads with the recommendation: 0/3 runs passed; e.g. empty response
+  ✗ ceo.brevity_on_simple_yes_no  2/3
+      ✗ Leads with the call (ship or wait — terse is correct): 1/3 runs passed; e.g. empty response
+  ✗ cmo.draft_3_cold_email_variants  2/4
+      ✗ Numbers/labels the 3 variants explicitly: 1/3 runs passed; e.g. pattern '(Variant|Opener|Angle|Subject)\\s*[:#]?\\s*[1-3]' not found
+      ✗ Three subject lines (one per variant): 0/3 runs passed; e.g. 'Subject' appears 0 times, min required 3
+  ✓ cmo.specific_headline  3/3
+  ✗ cmo.no_open_questions  1/3
+      ✗ Leads with the draft / label, not preamble: 0/3 runs passed; e.g. empty response
+      ✗ Mentions the actual ask (waitlist): 0/3 runs passed; e.g. pattern '(waitlist|sign up|early access|join)' not found
+  ✗ coo.support_triage  1/5
+      ✗ Leads with the punchline: 1/3 runs passed; e.g. empty response
+      ✗ Calls out the deploy-bucket count specifically: 1/3 runs passed; e.g. pattern '5' not found
+      ✗ Names the lead bucket: 1/3 runs passed; e.g. none of ['deploy', 'deploys'] present
+      ✗ Lays out actions as a list: 1/3 runs passed; e.g. only 0 bullet lines, need at least 2
+  ✗ coo.systemize_repetition  1/3
+      ✗ Proposes a system, not a one-off fix: 1/3 runs passed; e.g. none of ['routine', 'schedule', 'automate', 'cron', 'weekly', 'every Monday', 'delegate'] present
+      ✗ Leads with the recommendation: 1/3 runs passed; e.g. empty response
+  ✗ coo.numeric_weekly_summary  2/5
+      ✗ Names the MRR delta: 1/3 runs passed; e.g. pattern '(\\$240|\\+\\s*\\$?240|240)' not found
+      ✗ Names the signup count: 1/3 runs passed; e.g. pattern '(18|18\\s*signup)' not found
+      ✗ Surfaces the churn-cause signal: 1/3 runs passed; e.g. none of ['deploy', 'deploys'] present
+  ✗ copywriter.cold_email_opener  3/5
+      ✗ References the specific pain: 1/3 runs passed; e.g. pattern '(2am|2 a\\.m\\.|midnight|sleep|deploy|broken|outage|3am)' not found
+      ✗ Mentions the waitlist (the actual ask): 1/3 runs passed; e.g. pattern '(waitlist|sign up|early access|join the list)' not found
+  ✗ copywriter.headline_subhead  2/3
+      ✗ Headline references the actual product action: 1/3 runs passed; e.g. pattern '(deploy|ship|push|rollback|1-click|one click|click)' not found
+  ✗ copywriter.tweet_announcement  2/3
+      ✗ Includes the call to action: 0/3 runs passed; e.g. pattern '(waitlist|sign up|early access|join|first 100)' not found
+  ✓ cto.scope_landing_in_2_days  4/4
+  ✓ cto.delegate_typo_fix  3/3
+  ✗ cto.options_when_blocked  2/4
+      ✗ Leads with the recommendation: 1/3 runs passed; e.g. first line too short: 'Plan: Hosting Target Selection**'
+      ✗ Lists ≥2 options: 1/3 runs passed; e.g. only 0 bullet lines, need at least 2
+  ✗ designer.landing_page_layout  1/4
+      ✗ References layout zone vocabulary: 0/3 runs passed; e.g. none of ['above the fold', 'above-the-fold', 'hero', 'header'] present
+      ✗ Mentions the primary CTA target: 1/3 runs passed; e.g. none of ['waitlist', 'CTA', 'primary cta', 'join'] present
+      ✗ Addresses mobile-first / accessibility: 1/3 runs passed; e.g. none of ['mobile', 'responsive', 'viewport', 'thumb', '44px', 'tap target'] present
+  ✓ designer.button_color_choice  3/3
+  ✓ designer.error_state_spec  3/3
+  ✓ support.refund_request_no_policy  3/3
+  ✗ support.bug_report_repro  1/3
+      ✗ Asks clarifying questions for repro: 0/3 runs passed; e.g. none of ['browser', 'screenshot', 'URL', 'URL', 'console', 'what time', 'when did'] present
+      ✗ Empathy first: 0/3 runs passed; e.g. none of ['sorry', 'appreciate', 'thanks for'] present
+  ✗ support.legal_threat_escalation  2/3
+      ✗ Escalates to Founder explicitly: 1/3 runs passed; e.g. none of ['founder', 'escalat', 'team lead', 'owner'] present
+
