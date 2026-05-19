@@ -42,6 +42,11 @@ class OpenAICompatibleProvider(Provider):
 
     name: str
     base_url: str
+    extra_body: dict[str, Any] | None = None
+    """Optional fields merged into every chat/completions payload.
+    Used for backend-specific toggles that aren't in the standard
+    OpenAI schema — e.g. Ollama Cloud accepts ``think: true|false``
+    to control reasoning mode on Nemotron / MiniMax / etc."""
     """Base URL up to (but not including) `/chat/completions`. e.g. `https://ollama.com/v1`."""
 
     timeout_seconds: float = 60.0
@@ -236,6 +241,10 @@ class OpenAICompatibleProvider(Provider):
             "model": model,
             "messages": [_message_to_openai(m) for m in request.messages],
         }
+        if self.extra_body:
+            # Backend-specific fields (e.g. Ollama Cloud `think: bool`).
+            # Merged early so request-derived keys can still override.
+            payload.update(self.extra_body)
         if request.max_tokens is not None:
             payload["max_tokens"] = request.max_tokens
         if request.temperature is not None:

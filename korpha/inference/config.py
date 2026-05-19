@@ -179,6 +179,15 @@ def _parse_entry(
         # users with codex >= 0.x but a quirky environment — opt in by
         # setting ``transport: subprocess`` on the providers.yaml entry.
         transport = str(entry.get("transport") or "responses").strip().lower()
+        # Optional reasoning effort (low|medium|high|xhigh|max). Only
+        # applied to the native Responses path — the subprocess CLI
+        # picks its own default and we don't override there yet.
+        effort = entry.get("reasoning_effort")
+        if effort is not None and not isinstance(effort, str):
+            raise ProviderConfigError(
+                f"{source}: providers[{index}].reasoning_effort must be "
+                f"a string (low|medium|high|xhigh|max), got {type(effort).__name__}"
+            )
         if transport == "subprocess":
             provider = CodexCLIProvider()
         else:
@@ -186,14 +195,24 @@ def _parse_entry(
                 from korpha.inference.providers.codex_responses import (
                     CodexResponsesProvider,
                 )
-                provider = CodexResponsesProvider()
+                provider = CodexResponsesProvider(reasoning_effort=effort)
             except ImportError:
                 provider = CodexCLIProvider()
     elif preset == "claude-code-cli":
         # Same shape for Claude Code: auth lives in keychain/OAuth set
         # up by `claude` on first run. ChatGPT subscription → codex-cli;
         # Claude Pro / Max → claude-code-cli; both pay $0 marginal.
-        provider = ClaudeCodeProvider()
+        # reasoning_effort translates to the CLI's --effort flag.
+        effort = entry.get("reasoning_effort")
+        if effort is not None and not isinstance(effort, str):
+            raise ProviderConfigError(
+                f"{source}: providers[{index}].reasoning_effort must be "
+                f"a string (low|medium|high|xhigh|max), got {type(effort).__name__}"
+            )
+        if effort:
+            provider = ClaudeCodeProvider(extra_args=("--effort", effort))
+        else:
+            provider = ClaudeCodeProvider()
     elif preset in PROVIDER_PRESETS:
         provider = PROVIDER_PRESETS[preset]()
     else:
@@ -322,10 +341,22 @@ def _build_custom_provider(
             str(k): str(v) for k, v in extra_headers_raw.items()
         }
 
+    extra_body_raw = entry.get("extra_body")
+    extra_body: dict[str, Any] | None = None
+    if extra_body_raw is not None:
+        if not isinstance(extra_body_raw, dict):
+            raise ProviderConfigError(
+                f"{source}: providers[{index}].extra_body must be a "
+                "mapping — used for backend-specific payload fields "
+                "(e.g. Ollama Cloud `think: true|false`)"
+            )
+        extra_body = dict(extra_body_raw)
+
     return OpenAICompatibleProvider(
         name=name,
         base_url=base_url,
         extra_headers=extra_headers,
+        extra_body=extra_body,
     )
 
 

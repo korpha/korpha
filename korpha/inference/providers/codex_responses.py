@@ -56,6 +56,13 @@ class CodexResponsesProvider(Provider):
 
     timeout_seconds: float = 180.0
 
+    reasoning_effort: str | None = None
+    """Optional ``reasoning.effort`` value to send to the Responses
+    API — one of ``low`` / ``medium`` / ``high`` / ``xhigh`` / ``max``.
+    ``None`` (default) lets the subscription pick its own heuristic;
+    set explicitly when you want the model to think harder than the
+    subscription's auto-routing would choose."""
+
     async def complete(
         self,
         request: CompletionRequest,
@@ -80,6 +87,8 @@ class CodexResponsesProvider(Provider):
             "instructions": instructions,
             "input": user_input,
         }
+        if self.reasoning_effort:
+            payload["reasoning"] = {"effort": self.reasoning_effort}
         # Note: ``chatgpt.com/backend-api/codex/responses`` rejects
         # ``max_output_tokens`` (returns 400 "Unsupported parameter").
         # The subscription routes inside Codex pick limits automatically.
@@ -195,6 +204,8 @@ class CodexResponsesProvider(Provider):
             "instructions": instructions,
             "input": user_input,
         }
+        if self.reasoning_effort:
+            payload["reasoning"] = {"effort": self.reasoning_effort}
         headers = {
             "Authorization": f"Bearer {auth.access_token}",
             "Content-Type": "application/json",
