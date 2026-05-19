@@ -52,6 +52,27 @@ class BrowserTask:
     attribute usage in SharedResourceUsage rows for monthly review.
     None means the task is company-wide / unattributed."""
 
+    user_data_dir: str | None = None
+    """Path to a persistent Chromium profile. When set, the provider
+    uses ``launch_persistent_context`` so cookies + storage survive
+    across runs — required for social-media posting where the
+    operator logs in once and the agent reuses the session.
+
+    When None, the provider uses a fresh ephemeral context (default
+    for scraping)."""
+
+    visual_fallback: bool = False
+    """Engage screenshot-driven action mode when the accessibility-
+    tree loop can't make progress. Off by default because vision
+    calls are ~10x slower + costlier per step. Turn on for sites
+    with heavy shadow DOMs (LinkedIn, Instagram) where acc-tree
+    returns nothing useful."""
+
+    initial_dwell_seconds: float = 0.0
+    """After loading ``start_url``, wait this long before the first
+    action step. Useful for letting JS-heavy SPAs settle (LinkedIn
+    feeds, IG modals). Most fetches don't need it."""
+
 
 @dataclass
 class BrowserResult:

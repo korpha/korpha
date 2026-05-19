@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Social posting · {{ business.name }}{% endblock %}
+{% block breadcrumbs %}Social posting{% endblock %}
+{% block body %}
+<div class="tm-shell">
+  <div class="tm-header">
+    <div>
+      <h1 class="tm-title">Social posting</h1>
+      <p class="tm-blurb">
+        Each <strong>business line</strong> has its own saved browser
+        profile per platform — different brand voices, different
+        accounts, completely separate sessions. Click <strong>Log in</strong>
+        on a row to open a real browser window, sign in once with the
+        right brand account, then close it. Future posts from that
+        line reuse the saved session.
+      </p>
+      <p class="tm-muted" style="margin-top:8px;">
+        No API keys, no scrapers, no ToS-violating adapters: it's
+        literally your logged-in browser, driven by the agent only
+        when you tell it to.
+      </p>
+    </div>
+  </div>
+
+  {% if flash %}
+    <div class="tm-flash">✓ {{ flash|replace('+', ' ') }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="tm-flash tm-flash-warn">{{ error|replace('+', ' ') }}</div>
+  {% endif %}
+
+  {% if not units %}
+    <div class="tm-flash tm-flash-warn">
+      ⚠ You don't have any business lines configured yet. Create one
+      from <a href="/app/units">/app/units</a> first — each line gets its
+      own X / LinkedIn / etc. account.
+    </div>
+  {% else %}
+
+  {% for p in platforms %}
+    <section class="tm-section">
+      <h2 class="tm-section-title">
+        {{ p.label }}
+        {% if p.requires_visual_fallback %}
+          <small class="tm-muted" style="font-weight: normal; margin-left: 8px;">
+            vision-driven (shadow DOM)
+          </small>
+        {% endif %}
+      </h2>
+      <table class="tm-table">
+        <thead>
+          <tr>
+            <th>Business line</th>
+            <th>Last login</th>
+            <th>Last post</th>
+            <th>Login</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in p.per_unit %}
+            <tr>
+              <td>
+                <strong>{{ row.unit_name }}</strong><br/>
+                <small class="tm-muted">{{ row.unit_slug }}</small>
+              </td>
+              <td>
+                {% if row.logged_in %}
+                  {% if row.last_login_display %}
+                    <code>{{ row.last_login_display }}</code>
+                  {% else %}
+                    <span class="tm-muted">profile saved</span>
+                  {% endif %}
+                {% else %}
+                  <span class="tm-muted">not logged in</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.last_post_display %}
+                  <code>{{ row.last_post_display }}</code>
+                {% else %}
+                  <span class="tm-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <form method="post"
+                      action="/app/social/login/{{ p.slug }}/{{ row.unit_id }}"
+                      style="display:inline;">
+                  <button type="submit" class="tm-hire-btn">
+                    {% if row.logged_in %}Re-login{% else %}Log in{% endif %}
+                  </button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endfor %}
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">Compose &amp; post</h2>
+    <p class="tm-muted" style="margin-bottom: 12px;">
+      Pick a platform + the business line you want to post AS, paste
+      the text, submit. The agent opens a Chromium window (visible by
+      default so you can watch) and drives the compose flow.
+    </p>
+    <form method="post" id="social-post-form"
+          action="/app/social/post/x/{{ units[0].id }}"
+          class="tm-cred-form">
+      <div class="tm-cred-row">
+        <label>Platform
+          <select id="social-platform-picker">
+            {% for p in platforms %}
+              <option value="{{ p.slug }}">{{ p.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>From business line
+          <select id="social-unit-picker">
+            {% for u in units %}
+              <option value="{{ u.id }}">{{ u.name }} ({{ u.slug }})</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="tm-cred-row" style="flex-direction: column; align-items: stretch;">
+        <label>Post text
+          <textarea name="text"
+                    rows="5"
+                    placeholder="What's the post body?"
+                    style="width: 100%; font-family: inherit;"></textarea>
+        </label>
+      </div>
+      <div class="tm-cred-row">
+        <label>
+          <input type="checkbox" name="headless" />
+          Run hidden (headless) — faster but you won't see the browser
+        </label>
+        <button type="submit" class="tm-hire-btn">Post</button>
+      </div>
+    </form>
+    <script>
+      (function() {
+        const form = document.getElementById('social-post-form');
+        const platform = document.getElementById('social-platform-picker');
+        const unit = document.getElementById('social-unit-picker');
+        function sync() {
+          form.action = '/app/social/post/' + platform.value + '/' + unit.value;
+        }
+        platform.addEventListener('change', sync);
+        unit.addEventListener('change', sync);
+        sync();
+      })();
+    </script>
+  </section>
+
+  {% endif %}
+
+  <section class="tm-section">
+    <h2 class="tm-section-title">CLI parity</h2>
+    <p class="tm-muted">
+      Everything on this page mirrors <code>korpha social</code>:
+    </p>
+    <ul class="tm-muted">
+      <li><code>korpha social status</code> — same table per business line</li>
+      <li><code>korpha social login &lt;slug&gt; --unit &lt;line-slug&gt;</code> — opens the login window for that line</li>
+      <li><code>korpha social post &lt;slug&gt; --unit &lt;line-slug&gt; --text "..."</code> — drives the post</li>
+      <li><code>korpha social post &lt;slug&gt; --unit &lt;line&gt; --file post.md --dry-run</code> — preview the goal without opening a browser</li>
+    </ul>
+    <p class="tm-muted">
+      Profile root on disk: <code>{{ profile_root }}</code>
+    </p>
+  </section>
+</div>
+{% endblock %}

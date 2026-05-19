@@ -5748,6 +5748,210 @@ def build_dashboard_router(
         finally:
             session.close()
 
+    # ---------------------------------------------------------------
+    # /app/social — persistent-profile social posting
+    # Generic "drive my browser" capability for Mike's social media
+    # marketing. First login per platform is interactive (opens a
+    # headed Chromium window from the server's environment), then
+    # subsequent posts reuse the saved session.
+    # ---------------------------------------------------------------
+
+    @router.get("/social", response_class=HTMLResponse)
+    def social_view(
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> HTMLResponse:
+        try:
+            from datetime import datetime as _dt
+
+            from korpha.browser.profile_store import default_profile_store
+            from korpha.business.model import Business
+            from korpha.business_units.model import BusinessUnit
+            from korpha.social import list_platforms
+
+            store = default_profile_store()
+            meta = store.load_meta()
+            ctx = _ctx(session, active="social")
+
+            # All units for the active business, sorted for stable
+            # UI order (newest-first feels natural since active line
+            # development tends to be top-of-mind).
+            active = session.exec(select(Business)).first()
+            units: list[BusinessUnit] = []
+            if active is not None:
+                units = list(session.exec(
+                    select(BusinessUnit)
+                    .where(BusinessUnit.business_id == active.id)
+                    .order_by(BusinessUnit.created_at.desc())
+                ).all())
+
+            # Build one card per platform with a unit selector + per-
+            # unit status. Mike sees "X — KDP Activity Books logged in,
+            # Evergreen not yet" at a glance.
+            platforms = []
+            for p in list_platforms():
+                per_unit = []
+                for u in units:
+                    row = meta.get((p.slug, str(u.id)))
+                    logged_in = store.profile_exists(p.slug, str(u.id))
+                    per_unit.append({
+                        "unit_id": str(u.id),
+                        "unit_slug": u.slug,
+                        "unit_name": u.name,
+                        "logged_in": logged_in,
+                        "last_login_display": (
+                            _dt.fromtimestamp(row.last_login_at).strftime(
+                                "%Y-%m-%d %H:%M"
+                            ) if (row and row.last_login_at) else None
+                        ),
+                        "last_post_display": (
+                            _dt.fromtimestamp(row.last_post_at).strftime(
+                                "%Y-%m-%d %H:%M"
+                            ) if (row and row.last_post_at) else None
+                        ),
+                    })
+                platforms.append({
+                    "slug": p.slug,
+                    "label": p.label,
+                    "compose_url": p.compose_url,
+                    "requires_visual_fallback": p.requires_visual_fallback,
+                    "per_unit": per_unit,
+                })
+
+            ctx["platforms"] = platforms
+            ctx["units"] = [
+                {"id": str(u.id), "slug": u.slug, "name": u.name}
+                for u in units
+            ]
+            ctx["profile_root"] = str(store.root)
+            ctx["flash"] = request.query_params.get("flash")
+            ctx["error"] = request.query_params.get("error")
+            return templates.TemplateResponse(
+                request, "social.html", ctx,
+            )
+        finally:
+            session.close()
+
+    @router.post(
+        "/social/login/{slug}/{unit_id}",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def social_login_action(
+        slug: str,
+        unit_id: str,
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+    ) -> RedirectResponse:
+        try:
+            import asyncio
+
+            from korpha.browser.profile_store import (
+                default_profile_store,
+                get_platform,
+            )
+            from korpha.social import open_login_window
+
+            try:
+                get_platform(slug)
+            except KeyError:
+                return RedirectResponse(
+                    "/app/social?error=Unknown+platform",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            store = default_profile_store()
+            try:
+                asyncio.run(open_login_window(slug, unit_id, store=store))
+            except (RuntimeError, ValueError) as exc:
+                msg = str(exc).replace(" ", "+")
+                return RedirectResponse(
+                    f"/app/social?error={msg}",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            return RedirectResponse(
+                f"/app/social?flash=Saved+session+for+{slug}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
+    @router.post(
+        "/social/post/{slug}/{unit_id}",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    def social_post_action(
+        slug: str,
+        unit_id: str,
+        request: Request,
+        session: Annotated[Session, Depends(require_session)],
+        text: Annotated[str, Form()] = "",
+        headless: Annotated[str, Form()] = "",
+    ) -> RedirectResponse:
+        try:
+            import asyncio
+
+            from korpha.browser.profile_store import (
+                default_profile_store,
+                get_platform,
+            )
+            from korpha.social import PostRequest, post_to_platform
+
+            body = text.strip()
+            if not body:
+                return RedirectResponse(
+                    "/app/social?error=Post+text+cannot+be+empty",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            try:
+                get_platform(slug)
+            except KeyError:
+                return RedirectResponse(
+                    "/app/social?error=Unknown+platform",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            store = default_profile_store()
+            if not store.profile_exists(slug, unit_id):
+                return RedirectResponse(
+                    f"/app/social?error=Log+in+to+{slug}+for+this+unit+first",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+
+            try:
+                from korpha.api.server import _build_pool_pieces
+                from korpha.inference import InferencePool as _Pool
+                providers_list, accounts_list = _build_pool_pieces()
+            except Exception:  # noqa: BLE001
+                return RedirectResponse(
+                    "/app/social?error=No+inference+provider+configured",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            pool = _Pool(  # type: ignore[arg-type]
+                providers=providers_list, accounts=accounts_list,
+            )
+
+            req = PostRequest(
+                text=body,
+                headless=(headless == "on"),
+            )
+            outcome = asyncio.run(post_to_platform(
+                slug, unit_id, req, store=store, pool=pool,
+            ))
+            if outcome.success:
+                return RedirectResponse(
+                    f"/app/social?flash=Posted+to+{slug}+(${outcome.cost_usd:.4f})",
+                    status_code=status.HTTP_303_SEE_OTHER,
+                )
+            err = (outcome.error or "post failed").replace(" ", "+")
+            return RedirectResponse(
+                f"/app/social?error={err}",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+        finally:
+            session.close()
+
     return router
 
 
