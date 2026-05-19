@@ -104,6 +104,7 @@ and budget.
 | IBM Granite-4.1-3B (Q4_K_M, q8_0 kv) | ~4 GB | 69 | 80 | **86.2%** | ~90 min |
 | Microsoft Phi-4-reasoning-plus (Q4_K_M, q8_0 kv) | ~16 GB | 63 | 80 | **78.8%** | ~38 min |
 | LiquidAI LFM2.5-350M (Q4_K_M) | ~850 MiB | 61 | 80 | **76.2%** | ~20 s |
+| Qwen3.5-2B (Q4_K_M, q8_0 kv, reasoning) | ~3 GB | 49 | 80 | **61.3%** | ~54 min |
 
 **Four local options across the quality spectrum:**
 
