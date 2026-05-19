@@ -142,6 +142,7 @@ Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
 | 🟢 | Qwen3.6-27B (Q4_K_M, TurboQuant turbo3) | ~22 GB | 74 | 80 | **92.5%** | ~68 min |
 | 🟢 | IBM Granite-4.1-30B (Q4_K_M, TurboQuant turbo4) | ~16 GB | 73 | 80 | **91.2%** | ~125 min |
 | 🟡 | Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
+| 🟡 | Ministral-3-3B-Instruct (Q4_K_M, q8_0 kv) | ~3 GB | 71 | 80 | **88.8%** | ~12 min |
 | 🟡 | IBM Granite-4.1-3B (Q4_K_M, q8_0 kv) | ~4 GB | 69 | 80 | **86.2%** | ~90 min |
 | 🟡 | Qwen3.5-4B (Q4_K_M, q8_0 kv, reasoning) | ~5 GB | 68 | 80 | **85.0%** | ~45 min |
 | 🔴 | Microsoft Phi-4-reasoning-plus (Q4_K_M, q8_0 kv) | ~16 GB | 63 | 80 | **78.8%** | ~38 min |
@@ -157,6 +158,43 @@ Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
   (empty replies, 4000-word "tweets", reasoning trace bleeding into
   user-visible output). Not what you want a founder's first
   impression of AIgenteur to look like.
+
+### Proprietary models — tested, none beat the open-weights top
+
+AIgenteur ships native integrations for the two big-name closed-model
+subscription paths (Codex CLI for GPT-5.x via the
+``chatgpt.com/backend-api/codex/responses`` endpoint, Claude Code CLI
+for Anthropic models — both use OAuth, $0 marginal cost on a Plus /
+Pro / Max subscription). So we tested both with their **highest
+reasoning setting** to see if they earn a recommendation.
+
+**Publish rule:** a closed-weights model only shows up here as a
+recommendation if it beats the open-weights leader (DeepSeek V4 Pro
+at 96.2%). Below that, it's tested for completeness + listed for
+honesty, but not surfaced as a pick.
+
+| Status | Model | Setting | Pass | Total | Overall | Wall time |
+| :---: | ----- | ------- | ---- | ----- | ------- | --------- |
+| 🟡 | OpenAI GPT-5.4 | `reasoning_effort: high` (max thinking) | 73 | 80 | **91.2%** | ~24 min |
+| 🟡 | Anthropic Claude Opus 4.7 | `--effort max` (max thinking) | 70 | 80 | **87.5%** | ~38 min |
+
+**Neither closed model with max thinking beats DeepSeek V4 Pro
+(96.2%), Ministral-3-14B-Reasoning (93.8%, local, 11 GB VRAM), or
+Gemma-4-E2B-it (96.2%, local, ~3 GB VRAM).** Same failure pattern
+we see in many thinking models: the reasoning trace bleeds into
+the visible budget, brevity caps get blown ("Headline + subhead"
+returned 168 words against a cap of 80; "tweet" returned 122
+against 60), and required structural markers go missing
+("Numbers/labels the 3 variants" failed 0/3 runs on GPT-5.4).
+
+If you have a Codex or Claude subscription you can plug in via
+`korpha config` and use them — they work, just not better than
+open-weights at the response-format-adherence workload AIgenteur
+optimises for. **For production deployment we recommend open-weights**
+per the picks at the top of this doc.
+
+Raw run results: [`gpt-5.4-thinking-high.txt`](gpt-5.4-thinking-high.txt),
+[`claude-opus-4.7-effort-max.txt`](claude-opus-4.7-effort-max.txt).
 
 **Four local options across the quality spectrum:**
 
