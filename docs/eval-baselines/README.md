@@ -142,6 +142,7 @@ Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
 | 🟢 | IBM Granite-4.1-30B (Q4_K_M, TurboQuant turbo4) | ~16 GB | 73 | 80 | **91.2%** | ~125 min |
 | 🟡 | Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
 | 🟡 | IBM Granite-4.1-3B (Q4_K_M, q8_0 kv) | ~4 GB | 69 | 80 | **86.2%** | ~90 min |
+| 🟡 | Qwen3.5-4B (Q4_K_M, q8_0 kv, reasoning) | ~5 GB | 68 | 80 | **85.0%** | ~45 min |
 | 🔴 | Microsoft Phi-4-reasoning-plus (Q4_K_M, q8_0 kv) | ~16 GB | 63 | 80 | **78.8%** | ~38 min |
 | 🔴 | LiquidAI LFM2.5-350M (Q4_K_M) | ~850 MiB | 61 | 80 | **76.2%** | ~20 s |
 | 🔴 | Qwen3.5-2B (Q4_K_M, q8_0 kv, reasoning) | ~3 GB | 49 | 80 | **61.3%** | ~54 min |
