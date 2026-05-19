@@ -30,18 +30,29 @@ from korpha.goals.judge import (
 )
 from korpha.goals.manager import (
     GoalManager,
+    GoalReplaceConflict,
     continuation_prompt_for,
 )
 from korpha.goals.model import Goal, GoalStatus
+from korpha.goals.slash import (
+    GoalSlashIntent,
+    execute_goal_slash,
+    is_goal_slash,
+    parse_goal_slash,
+)
 
 __all__ = [
     "DEFAULT_MAX_CONSECUTIVE_PARSE_FAILURES",
     "DEFAULT_MAX_TURNS",
     "Goal",
     "GoalManager",
+    "GoalReplaceConflict",
+    "GoalSlashIntent",
     "GoalStatus",
     "JUDGE_SYSTEM_PROMPT",
     "JudgeVerdict",
     "continuation_prompt_for",
-    "parse_judge_response",
+    "execute_goal_slash",
+    "is_goal_slash",
+    "parse_goal_slash",
 ]
