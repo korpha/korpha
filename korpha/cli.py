@@ -9705,7 +9705,6 @@ def debrief(
     ))
 
 
-
 # ---------------------------------------------------------------------------
 # `korpha migrate` — bundle/restore Korpha state across machines.
 #
@@ -10055,7 +10054,6 @@ def migrate_check(
 
     typer.echo("")
     typer.echo(_green("✓ Ready to restore."))
-
 
 
 # ---------------------------------------------------------------------------
@@ -10422,6 +10420,97 @@ def social_post(
         raise typer.Exit(code=1)
 
 
+@app.command()
+def update(
+    no_backup: Annotated[bool, typer.Option(
+        "--no-backup",
+        help="Skip the pre-update backup. Default backs up the data "
+             "dir before pulling so a botched update is always recoverable.",
+    )] = False,
+    check: Annotated[bool, typer.Option(
+        "--check",
+        help="Only fetch + report how many commits behind you are. "
+             "Doesn't modify anything.",
+    )] = False,
+    yes: Annotated[bool, typer.Option(
+        "--yes", "-y",
+        help="Reserved for unattended runs (no interactive prompts). "
+             "Today nothing prompts; flag is here for forward compat.",
+    )] = False,
+) -> None:
+    """Update Korpha to the latest origin/main.
+
+    Steps: pre-update backup → git pull (or ZIP fallback) → uv sync
+    → korpha migrate. Survives SSH-disconnect mid-update via SIGHUP
+    protection. Linux + macOS + Windows-native.
+
+    Recovery: if anything fails, your data dir is untouched and the
+    pre-update backup lives at
+    ``$KORPHA_DATA_DIR/backups/pre-update/pre-update-<stamp>.tar.gz``.
+    Restore with ``korpha restore <that-path>``.
+    """
+    _ensure_load_env()
+    from korpha.updater import (
+        finalize_hangup_protection,
+        install_hangup_protection,
+        log_step,
+        run_update,
+    )
+
+    hup_state = install_hangup_protection()
+
+    def _emit(line: str) -> None:
+        typer.echo(line)
+        log_step(hup_state, line)
+
+    try:
+        _emit("Updating Korpha…")
+        result = run_update(
+            skip_backup=no_backup,
+            check_only=check,
+            yes=yes,
+        )
+
+        if result.fork_detected:
+            _emit(_yellow(
+                "⚠ origin appears to be a fork — pulling YOUR fork's main, "
+                "not the official Korpha main. That's usually what you want; "
+                "noting it for transparency."
+            ))
+
+        for step in result.steps_run:
+            _emit(f"  • {step}")
+
+        if result.starting_sha and result.ending_sha and result.starting_sha != result.ending_sha:
+            _emit(_dim(
+                f"  HEAD: {result.starting_sha} → {result.ending_sha}"
+            ))
+
+        if result.success:
+            if result.method == "check-only":
+                _emit(_green("✓ Check complete."))
+                return
+            _emit(_green("✓ Update complete."))
+            if result.backup_path:
+                _emit(_dim(
+                    f"  pre-update backup: {result.backup_path}"
+                ))
+            _emit(_dim(
+                "  Restart your `korpha server` to pick up the changes. "
+                "If you run under systemd: `systemctl --user restart korpha`."
+            ))
+        else:
+            _emit(_red(f"✗ Update failed: {result.error}"))
+            if result.backup_path:
+                _emit(_dim(
+                    "  Your data dir is untouched. Restore with: "
+                    f"korpha restore {result.backup_path}"
+                ))
+            raise typer.Exit(code=1)
+    finally:
+        finalize_hangup_protection(hup_state)
+
+
 def _build_pool_for_cli() -> "InferencePool":
     """Build an InferencePool from configured providers, raising a
     friendly error when no provider is set up.
@@ -10439,8 +10528,6 @@ def _build_pool_for_cli() -> "InferencePool":
         raise typer.Exit(code=1)
     providers_list, accounts_list = pool_setup
     return InferencePool(providers=providers_list, accounts=accounts_list)  # type: ignore[arg-type]
-
-
 
 
 def main() -> None:
