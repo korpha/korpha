@@ -186,7 +186,7 @@ automatically. You only answer the Day-0 question once.
 - ✅ Approval gate with per-(action × platform) autonomy + trust envelope that auto-promotes after N consecutive approvals
 - ✅ Conversation router with sticky threads (24h TTL) + single-voice rule
 - ✅ Cost tracking integrated with the inference pool
-- ✅ **Alembic migrations** — `korpha migrate` for safe schema upgrades
+- ✅ **Alembic migrations** — `korpha db-migrate` for safe schema upgrades
 - ✅ Immutable activity log on every state transition
 
 ## Quickstart

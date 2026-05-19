@@ -53,7 +53,7 @@ Notifier ABC for future surfaces (SMS, push, Discord webhooks).
 commerce.create_payment_link (Stripe). Both compose → propose → approve →
 execute, both audit-logged, both trust-envelope-aware.
 
-**Migrations** — Alembic baselined; `korpha migrate` CLI.
+**Migrations** — Alembic baselined; `korpha db-migrate` CLI.
 
 ## Phase 2 — channels (needs your tokens / accounts)
 

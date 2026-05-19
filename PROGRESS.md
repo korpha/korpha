@@ -514,8 +514,8 @@ Skill registry now exposes 10 built-in skills covering the entire BRIEF lifecycl
 - `alembic.ini` + `alembic/env.py` reading `KORPHA_DB_URL` so one config works for SQLite (default) and Postgres
 - `script.py.mako` auto-imports `sqlmodel` so generated migrations reference SQLModel types out of the box
 - Initial migration `fbc95410cbce_initial_schema.py` captures all 13 tables
-- CLI `korpha migrate [--revision head]` runs `alembic upgrade`
-- `korpha init` now stamps alembic head after create_all() so init+migrate stays consistent
+- CLI `korpha db-migrate [--revision head]` runs `alembic upgrade`
+- `korpha init` now stamps alembic head after create_all() so init+db-migrate stays consistent
 - Verified up/down roundtrip works on SQLite
 
 ### Final state at end of Day 2 (extended-extended)
