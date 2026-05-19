@@ -73,6 +73,11 @@ class _Action:
     direction: str = "down"
     result: str | None = None
     reason: str | None = None
+    x: float | None = None
+    y: float | None = None
+    """Pixel coordinates emitted by the visual step (``click_xy`` /
+    ``type_at``). Acc-tree actions leave these None and address via
+    ``ref`` instead."""
 
 
 @dataclass
@@ -109,12 +114,18 @@ class PlaywrightActionProvider(BrowserProvider):
                 "&& playwright install chromium"
             ) from exc
 
-        async with self._lock:
-            if self._playwright is None:
-                self._playwright = await async_playwright().start()
-                self._browser = await self._playwright.chromium.launch(
-                    headless=task.headless
-                )
+        # Persistent-profile tasks bypass the shared browser instance.
+        # ``launch_persistent_context`` returns a Context directly and
+        # is tied to one user_data_dir, so it can't be cached across
+        # tasks with different profiles. Per-task launch is the
+        # correct shape; the slot guard below keeps concurrency=1.
+        if getattr(task, "user_data_dir", None) is None:
+            async with self._lock:
+                if self._playwright is None:
+                    self._playwright = await async_playwright().start()
+                    self._browser = await self._playwright.chromium.launch(
+                        headless=task.headless
+                    )
 
         # Gate concurrent action loops via the shared pool. Action
         # loops are heavier than fetches (LLM-driven, multi-step) so
@@ -126,11 +137,26 @@ class PlaywrightActionProvider(BrowserProvider):
             return await self._run_under_slot(task)
 
     async def _run_under_slot(self, task: BrowserTask) -> BrowserResult:
-        ctx = await self._browser.new_context(
-            user_agent=task.user_agent or self.user_agent,
-            extra_http_headers=task.extra_http_headers or None,
-        )
-        page = await ctx.new_page()
+        from playwright.async_api import async_playwright
+
+        ephemeral_pw: Any = None
+        ephemeral_ctx: Any = None
+        user_data_dir = getattr(task, "user_data_dir", None)
+        if user_data_dir is not None:
+            ephemeral_pw = await async_playwright().start()
+            ephemeral_ctx = await ephemeral_pw.chromium.launch_persistent_context(
+                user_data_dir,
+                headless=task.headless,
+                user_agent=task.user_agent or self.user_agent,
+                extra_http_headers=task.extra_http_headers or None,
+            )
+            ctx = ephemeral_ctx
+        else:
+            ctx = await self._browser.new_context(
+                user_agent=task.user_agent or self.user_agent,
+                extra_http_headers=task.extra_http_headers or None,
+            )
+        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
         action_log: list[dict[str, Any]] = []
         result_text = ""
         final_screenshot: bytes | None = None
@@ -142,20 +168,50 @@ class PlaywrightActionProvider(BrowserProvider):
                     timeout=int(task.timeout_seconds * 1000),
                     wait_until="domcontentloaded",
                 )
+                dwell = getattr(task, "initial_dwell_seconds", 0.0) or 0.0
+                if dwell > 0:
+                    await asyncio.sleep(dwell)
 
+            empty_snapshot_streak = 0
+            visual_fallback_used = False
             for step in range(1, self.max_steps + 1):
                 snapshot = await _accessibility_snapshot(page)
+                use_visual = (
+                    getattr(task, "visual_fallback", False)
+                    and (
+                        not snapshot
+                        or empty_snapshot_streak >= 1
+                    )
+                )
                 rendered_text = ""
                 if task.extract_text:
                     rendered_text = await _page_text(page, self.text_limit)
-                action, step_cost = await self._ask_for_action(
-                    task=task,
-                    snapshot=snapshot,
-                    rendered_text=rendered_text,
-                    step=step,
-                )
+                if use_visual:
+                    from korpha.browser.providers.visual_actions import (
+                        run_visual_step,
+                    )
+                    visual_fallback_used = True
+                    action, step_cost = await run_visual_step(
+                        page=page,
+                        task=task,
+                        pool=self.pool,
+                        business_id=self.business_id,
+                        step=step,
+                        max_steps=self.max_steps,
+                    )
+                else:
+                    action, step_cost = await self._ask_for_action(
+                        task=task,
+                        snapshot=snapshot,
+                        rendered_text=rendered_text,
+                        step=step,
+                    )
                 cumulative_cost += step_cost
                 action_log.append(_action_to_log(action))
+                if not snapshot:
+                    empty_snapshot_streak += 1
+                else:
+                    empty_snapshot_streak = 0
 
                 if action.kind == "done":
                     result_text = action.result or ""
@@ -167,14 +223,22 @@ class PlaywrightActionProvider(BrowserProvider):
                         extracted_text=result_text,
                         title=await page.title(),
                         screenshot_png=final_screenshot,
-                        raw={"steps": action_log, "cost_usd": cumulative_cost},
+                        raw={
+                            "steps": action_log,
+                            "cost_usd": cumulative_cost,
+                            "visual_fallback_used": visual_fallback_used,
+                        },
                     )
                 if action.kind == "abort":
                     return BrowserResult(
                         success=False,
                         final_url=page.url,
                         error=f"agent aborted: {action.reason or '(no reason)'}",
-                        raw={"steps": action_log, "cost_usd": cumulative_cost},
+                        raw={
+                            "steps": action_log,
+                            "cost_usd": cumulative_cost,
+                            "visual_fallback_used": visual_fallback_used,
+                        },
                     )
 
                 try:
@@ -210,6 +274,9 @@ class PlaywrightActionProvider(BrowserProvider):
                 await page.close()
             with contextlib.suppress(Exception):
                 await ctx.close()
+            if ephemeral_pw is not None:
+                with contextlib.suppress(Exception):
+                    await ephemeral_pw.stop()
 
     async def close(self) -> None:
         import contextlib
@@ -341,6 +408,25 @@ async def _execute_action(
         await page.evaluate(f"window.scrollBy(0, {delta})")
         return
 
+    if action.kind == "click_xy":
+        if action.x is None or action.y is None:
+            raise BrowserError("click_xy requires x and y")
+        await page.mouse.click(action.x, action.y)
+        return
+    if action.kind == "type_at":
+        if action.x is not None and action.y is not None:
+            await page.mouse.click(action.x, action.y)
+        text = action.text or ""
+        await page.keyboard.type(text)
+        if action.submit:
+            await page.keyboard.press("Enter")
+        return
+    if action.kind == "key":
+        if not action.text:
+            raise BrowserError("key requires text (the key name)")
+        await page.keyboard.press(action.text)
+        return
+
     if action.ref is None or not _REF_RE.match(action.ref):
         raise BrowserError(f"action {action.kind!r}: invalid ref {action.ref!r}")
     valid_refs = {row["ref"] for row in snapshot}
@@ -366,9 +452,15 @@ async def _execute_action(
 _REF_RE = re.compile(r"^@e\d+$")
 
 
+_KNOWN_ACTION_KINDS = frozenset({
+    "click", "type", "navigate", "scroll", "done", "abort",
+    "click_xy", "type_at", "key",
+})
+
+
 def _parse_action(parsed: dict[str, Any]) -> _Action:
     kind = str(parsed.get("action") or "").strip()
-    if kind not in ("click", "type", "navigate", "scroll", "done", "abort"):
+    if kind not in _KNOWN_ACTION_KINDS:
         raise BrowserError(f"unknown action kind {kind!r}")
     return _Action(
         kind=kind,
@@ -379,6 +471,8 @@ def _parse_action(parsed: dict[str, Any]) -> _Action:
         direction=str(parsed.get("direction", "down")),
         result=parsed.get("result"),
         reason=parsed.get("reason"),
+        x=parsed.get("x"),
+        y=parsed.get("y"),
     )
 
 

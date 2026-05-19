@@ -10058,6 +10058,390 @@ def migrate_check(
 
 
 
+# ---------------------------------------------------------------------------
+# `korpha social` — persistent-profile browser sessions for social posting.
+# Generic capability: we ship "drive my browser" not platform integrations.
+# Each platform has a saved Chromium profile under
+# $KORPHA_DATA_DIR/browser-profiles/<slug>/ — first login is interactive
+# (headed Chromium), subsequent posts reuse the saved session.
+# ---------------------------------------------------------------------------
+
+
+social_app = typer.Typer(
+    help=(
+        "Post to social media via persistent-profile browser sessions. "
+        "First login is interactive (one-time per platform); after "
+        "that the agent posts on your behalf using the saved session."
+    )
+)
+app.add_typer(social_app, name="social")
+
+
+def _social_resolve_unit(
+    raw: str | None, *, allow_none: bool = False,
+) -> tuple[str, str] | None:
+    """Resolve a user-supplied unit slug-or-id to ``(id, display)``.
+
+    Accepts the BusinessUnit slug (preferred — Mike-readable) OR the
+    UUID. When ``raw`` is None and the active business has exactly one
+    unit, defaults to it. Multiple units + no input → asks the user
+    to pick (or returns None if ``allow_none``).
+
+    Returns None when the active business has no units yet (caller
+    must surface the "create a business line first" error).
+    """
+    with Session(_engine()) as session:
+        active = session.exec(select(Business)).first()
+        if active is None:
+            return None
+        units = list(session.exec(
+            select(BusinessUnit).where(BusinessUnit.business_id == active.id)
+        ).all())
+    if not units:
+        return None
+
+    if raw:
+        for u in units:
+            if u.slug == raw or str(u.id) == raw:
+                return (str(u.id), f"{u.name} ({u.slug})")
+        # Not found — fail loudly so the operator can re-pick.
+        names = ", ".join(u.slug for u in units)
+        typer.echo(_red(
+            f"no business line with slug/id {raw!r}. known: {names}"
+        ))
+        raise typer.Exit(code=1)
+
+    if len(units) == 1:
+        u = units[0]
+        return (str(u.id), f"{u.name} ({u.slug})")
+
+    if allow_none:
+        return None
+
+    # Multi-unit picker (interactive).
+    typer.echo("Multiple business lines found — pick one:")
+    for i, u in enumerate(units, 1):
+        typer.echo(f"  {i}. {u.name}  ({u.slug})")
+    choice = typer.prompt(
+        "  Enter slug, number, or UUID", default=units[0].slug
+    ).strip()
+    if choice.isdigit():
+        idx = int(choice)
+        if 1 <= idx <= len(units):
+            picked = units[idx - 1]
+            return (str(picked.id), f"{picked.name} ({picked.slug})")
+    for u in units:
+        if u.slug == choice or str(u.id) == choice:
+            return (str(u.id), f"{u.name} ({u.slug})")
+    typer.echo(_red(f"no business line matched {choice!r}"))
+    raise typer.Exit(code=1)
+
+
+@social_app.command("status")
+def social_status() -> None:
+    """Show login state + last-post timestamp per (platform, business
+    line)."""
+    _ensure_load_env()
+    from datetime import datetime as _dt
+
+    from korpha.browser.profile_store import default_profile_store
+    from korpha.social import list_platforms
+
+    store = default_profile_store()
+    meta = store.load_meta()
+
+    # Pull all business units up front so we can show human names.
+    units_by_id: dict[str, BusinessUnit] = {}
+    with Session(_engine()) as session:
+        active = session.exec(select(Business)).first()
+        if active is not None:
+            for u in session.exec(
+                select(BusinessUnit).where(BusinessUnit.business_id == active.id)
+            ).all():
+                units_by_id[str(u.id)] = u
+
+    typer.echo(f"Browser profile root: {store.root}")
+    typer.echo("")
+    if not units_by_id:
+        typer.echo(_yellow(
+            "⚠ No business lines configured. Set one up first "
+            "(`korpha business-unit-create` or via /app/units), then "
+            "log into a platform for that line."
+        ))
+        return
+
+    typer.echo(
+        f"  {'platform':<28}  {'business line':<28}  "
+        f"{'logged in':<18}  last post"
+    )
+    typer.echo(
+        f"  {'─' * 28}  {'─' * 28}  {'─' * 18}  {'─' * 18}"
+    )
+    for p in list_platforms():
+        loggedin_ids = store.list_loggedin_units(p.slug)
+        all_ids = set(loggedin_ids) | {
+            uid for (slug, uid) in meta.keys() if slug == p.slug
+        }
+        if not all_ids:
+            # Show the platform anyway with the first unit as a "—"
+            # placeholder so Mike can see he hasn't set this up yet.
+            first_unit = next(iter(units_by_id.values()))
+            typer.echo(
+                f"  {p.label:<28}  {first_unit.slug:<28}  "
+                f"{_dim('not logged in'):<18}  {_dim('—')}"
+            )
+            continue
+        for uid in sorted(all_ids):
+            unit_name = (
+                units_by_id[uid].slug if uid in units_by_id
+                else f"(orphan {uid[:8]}…)"
+            )
+            row = meta.get((p.slug, uid))
+            if uid in loggedin_ids and row and row.last_login_at:
+                login_str = _dt.fromtimestamp(row.last_login_at).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+            elif uid in loggedin_ids:
+                login_str = _yellow("profile but no timestamp")
+            else:
+                login_str = _dim("not logged in")
+            if row and row.last_post_at:
+                post_str = _dt.fromtimestamp(row.last_post_at).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+            else:
+                post_str = _dim("—")
+            typer.echo(
+                f"  {p.label:<28}  {unit_name:<28}  "
+                f"{login_str:<18}  {post_str}"
+            )
+
+    typer.echo("")
+    typer.echo(_dim(
+        "  Login with: korpha social login <platform> --unit <line-slug>"
+    ))
+
+
+@social_app.command("login")
+def social_login(
+    slug: Annotated[str, typer.Argument(
+        help="Platform slug. One of: x, linkedin, youtube, facebook, "
+             "instagram, threads.",
+    )],
+    unit: Annotated[str | None, typer.Option(
+        "--unit", "-u",
+        help="Business line (slug or UUID) to log in for. Required "
+             "when you have multiple lines; auto-picked when you have "
+             "just one.",
+    )] = None,
+) -> None:
+    """Open a headed Chromium window to log into a platform for a
+    specific business line.
+
+    The browser stays open until you close it. After login completes,
+    the session is saved under
+    ``$KORPHA_DATA_DIR/browser-profiles/<slug>/<unit-id>/`` and future
+    ``korpha social post <slug> --unit <line>`` calls reuse it.
+    """
+    _ensure_load_env()
+    import asyncio as _asyncio
+
+    from korpha.browser.profile_store import default_profile_store, get_platform
+    from korpha.social import open_login_window
+
+    try:
+        platform = get_platform(slug)
+    except KeyError as exc:
+        typer.echo(_red(str(exc)))
+        raise typer.Exit(code=1) from exc
+
+    resolved = _social_resolve_unit(unit)
+    if resolved is None:
+        typer.echo(_red(
+            "No business lines configured yet. Create one with "
+            "`korpha business-unit-create` (or via /app/units), then "
+            "re-run this command."
+        ))
+        raise typer.Exit(code=1)
+    unit_id, unit_display = resolved
+
+    store = default_profile_store()
+    typer.echo(
+        f"Opening {platform.label} for {unit_display} "
+        "in a headed Chromium window…"
+    )
+    typer.echo(_dim(
+        "  Complete any login + 2FA in the browser, confirm you "
+        "see the right brand account in the top-right, then close "
+        "the window to save the session."
+    ))
+
+    try:
+        _asyncio.run(open_login_window(slug, unit_id, store=store))
+    except (RuntimeError, ValueError) as exc:
+        typer.echo(_red(str(exc)))
+        raise typer.Exit(code=1) from exc
+    except KeyboardInterrupt:
+        typer.echo(_yellow("\n⚠ login cancelled — profile may be incomplete"))
+        raise typer.Exit(code=1) from None
+
+    typer.echo(_green(
+        f"✓ Session saved for {platform.label} / {unit_display}. "
+        f"Test with: korpha social post {slug} --unit <slug> "
+        "--text 'hello' --dry-run"
+    ))
+
+
+@social_app.command("post")
+def social_post(
+    slug: Annotated[str, typer.Argument(
+        help="Platform slug. Must already be logged in for the chosen unit.",
+    )],
+    text: Annotated[str, typer.Option(
+        "--text", "-t",
+        help="The post body. Use --file to read from a file instead.",
+    )] = "",
+    file: Annotated[Path | None, typer.Option(
+        "--file", "-f",
+        help="Read post text from this file (overrides --text).",
+    )] = None,
+    image: Annotated[list[str] | None, typer.Option(
+        "--image",
+        help="Local image path to attach. Repeat for multiple images.",
+    )] = None,
+    unit: Annotated[str | None, typer.Option(
+        "--unit", "-u",
+        help="Business line (slug or UUID) to post from. Required when "
+             "you have multiple lines; auto-picked when you have one.",
+    )] = None,
+    headless: Annotated[bool, typer.Option(
+        "--headless / --headed",
+        help="Run the browser hidden (faster) or headed (you can watch).",
+    )] = False,
+    dry_run: Annotated[bool, typer.Option(
+        "--dry-run",
+        help="Print the goal + profile path but don't actually post.",
+    )] = False,
+) -> None:
+    """Publish a post to ``slug`` from the chosen business line's
+    saved login.
+
+    The action loop opens the platform's compose URL with the saved
+    profile, pastes the text, attaches any images, and clicks the
+    publish button. You'll see exactly what's happening when
+    ``--headed`` is set (default).
+    """
+    _ensure_load_env()
+    import asyncio as _asyncio
+
+    from korpha.browser.profile_store import default_profile_store, get_platform
+    from korpha.social import PostRequest, post_to_platform
+
+    try:
+        platform = get_platform(slug)
+    except KeyError as exc:
+        typer.echo(_red(str(exc)))
+        raise typer.Exit(code=1) from exc
+
+    resolved = _social_resolve_unit(unit)
+    if resolved is None:
+        typer.echo(_red(
+            "No business lines configured. Create one first "
+            "(`korpha business-unit-create` or /app/units)."
+        ))
+        raise typer.Exit(code=1)
+    unit_id, unit_display = resolved
+
+    body = text
+    if file is not None:
+        try:
+            body = file.expanduser().read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            typer.echo(_red(f"could not read {file}: {exc}"))
+            raise typer.Exit(code=1) from exc
+    if not body:
+        typer.echo(_red("post text is empty. Pass --text or --file."))
+        raise typer.Exit(code=1)
+
+    store = default_profile_store()
+    if not store.profile_exists(slug, unit_id):
+        typer.echo(_red(
+            f"No saved login for {platform.label} on {unit_display}. "
+            f"Run `korpha social login {slug} --unit <slug>` first."
+        ))
+        raise typer.Exit(code=1)
+
+    req = PostRequest(
+        text=body,
+        image_paths=tuple(image or ()),
+        headless=headless,
+    )
+
+    if dry_run:
+        from korpha.social import _compose_goal
+        typer.echo(f"Platform: {platform.label}")
+        typer.echo(f"Business line: {unit_display}")
+        typer.echo(f"Compose URL: {platform.compose_url}")
+        typer.echo(f"Profile dir: {store.profile_dir(slug, unit_id)}")
+        typer.echo(f"Headless: {headless}")
+        typer.echo(f"Images: {req.image_paths or '(none)'}")
+        typer.echo("")
+        typer.echo("Goal handed to the action loop:")
+        typer.echo(_dim(_compose_goal(platform, req)))
+        return
+
+    typer.echo(f"Posting to {platform.label} from {unit_display}…")
+    pool = _build_pool_for_cli()
+    try:
+        outcome = _asyncio.run(post_to_platform(
+            slug, unit_id, req, store=store, pool=pool,
+        ))
+    except FileNotFoundError as exc:
+        typer.echo(_red(str(exc)))
+        raise typer.Exit(code=1) from exc
+
+    if outcome.success:
+        typer.echo(_green(
+            f"✓ Posted to {platform.label} from {unit_display}"
+            f" (cost ${outcome.cost_usd:.4f}, "
+            f"{len(outcome.steps)} steps"
+            + (", visual fallback engaged" if outcome.visual_fallback_used else "")
+            + ")"
+        ))
+        if outcome.final_url:
+            typer.echo(_dim(f"  final url: {outcome.final_url}"))
+    else:
+        typer.echo(_red(
+            f"✗ Post failed: {outcome.error or '(no detail)'}"
+        ))
+        if outcome.steps:
+            typer.echo(_dim(
+                f"  action log: {len(outcome.steps)} steps, "
+                f"cost ${outcome.cost_usd:.4f}"
+            ))
+        raise typer.Exit(code=1)
+
+
+def _build_pool_for_cli() -> "InferencePool":
+    """Build an InferencePool from configured providers, raising a
+    friendly error when no provider is set up.
+
+    Reuses the same ``_build_provider_pool`` plumbing other CLI
+    commands lean on; this thin wrapper centralizes the error UX so
+    every entry-point doesn't re-implement the warning.
+    """
+    pool_setup = _build_provider_pool()
+    if pool_setup is None:
+        typer.echo(_red(
+            "no inference provider configured. Run `korpha setup` "
+            "first to wire OpenCode / OpenRouter / Ollama Cloud / etc."
+        ))
+        raise typer.Exit(code=1)
+    providers_list, accounts_list = pool_setup
+    return InferencePool(providers=providers_list, accounts=accounts_list)  # type: ignore[arg-type]
+
+
+
 
 def main() -> None:
     app()
