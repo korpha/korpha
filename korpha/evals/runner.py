@@ -178,11 +178,43 @@ async def run_task(
     # caller-facing intent clear (eval against this account's tier
     # mapping); the pool selects from its configured accounts.
     _ = account
-    try:
-        response = await pool.complete(request)
-    except Exception as exc:
-        logger.warning("eval task %s failed: %s", task.id, exc)
-        return TaskRunResult(task=task, response="", results=[], error=str(exc))
+
+    # Bounded retry on transient provider errors. A failed task used
+    # to register as a flat 0/N for the task's assertions, which
+    # silently dropped points on a momentary rate-limit / subprocess
+    # crash / session race — punishing the MODEL for an INFRA glitch.
+    # Three attempts with short backoff; if all three fail, then
+    # surface the error (and only then deduct points). Aligns the eval
+    # with production behavior where the cascade retries automatically.
+    import asyncio
+    _RETRY_ATTEMPTS = 3
+    _RETRY_BACKOFF_SECONDS = (1.0, 3.0)  # between attempt 1→2, 2→3
+    last_exc: Exception | None = None
+    response = None
+    for attempt in range(_RETRY_ATTEMPTS):
+        try:
+            response = await pool.complete(request)
+            last_exc = None
+            break
+        except Exception as exc:
+            last_exc = exc
+            if attempt + 1 < _RETRY_ATTEMPTS:
+                delay = _RETRY_BACKOFF_SECONDS[attempt]
+                logger.warning(
+                    "eval task %s attempt %d/%d failed: %s — retrying in %.1fs",
+                    task.id, attempt + 1, _RETRY_ATTEMPTS, exc, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.warning(
+                    "eval task %s failed after %d attempts: %s",
+                    task.id, _RETRY_ATTEMPTS, exc,
+                )
+    if response is None:
+        return TaskRunResult(
+            task=task, response="", results=[],
+            error=str(last_exc) if last_exc else "unknown",
+        )
 
     text = response.content
     results: list[AssertionResult] = []
