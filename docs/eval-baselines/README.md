@@ -1,18 +1,58 @@
-# Eval baselines — open-weights model comparison
+# Which open-weights models work with AIgenteur — and which to avoid
 
-Live LLM eval scores for the role prompts (`CEO`, `CMO`, `COO`, `CTO`,
-`COPYWRITER`, `DESIGNER`, `SUPPORT`) shipped after the Round-2 prompt
-audit + brevity-discipline lift.
+We tested every major open-weights model on AIgenteur's actual role
+prompts (`CEO`, `CMO`, `COO`, `CTO`, `COPYWRITER`, `DESIGNER`,
+`SUPPORT`) so you don't have to figure out which one to pick by
+trial-and-error. **Recommendations + warnings are below the
+methodology.** Skip down to "Picks per use case" if you just want
+the bottom line.
 
-**Methodology** — same as Paperclip's ClawEval style: deterministic
-substring / regex / word-count assertions, no LLM-as-judge. Each
-assertion either passes or fails based on the LLM's text output.
-Multiple runs flatten reasoning-model nondeterminism. Provider is just
-the HTTP transport — provider choice doesn't affect the score, only
-latency and cost.
+> ### 🟢 Use these — they work cleanly inside AIgenteur
+> - **Local, ~3 GB VRAM** (laptop iGPU / Steam Deck): **Gemma-4-E2B-it**
+>   — 96.2%, 8 min eval. The standout small-model pick.
+> - **Local, ~8 GB VRAM** (mid-range dGPU): **Microsoft Phi-4** —
+>   93.8%, 4 min eval. Fastest in this tier by a wide margin.
+> - **Local, ~11 GB VRAM** (3060 12GB / 4070): **Ministral-3-14B-Reasoning**
+>   — 93.8%, 6 min eval. The reasoning lift actually pays off at
+>   this size.
+> - **Local, ~22 GB VRAM** (3090 / 4090): **Gemma-4-31B** — 92.5%,
+>   25 min eval. Long context (262k via TurboQuant turbo3).
+> - **Cloud Pro tier**: **DeepSeek V4 Pro** — 96.2%. Frontier
+>   open-weights, OpenCode Go subscription.
+> - **Cloud Workhorse tier**: **DeepSeek V4 Flash** — 96.2%, 3×
+>   faster. Pair with the Pro brain for split-tier routing.
+>
+> ### 🔴 Avoid these — they break AIgenteur's response format
+> - **Qwen3.5-2B** (61.3%) — reasoning trace eats the visible-token
+>   budget, many tasks return *empty content*. Worse than the
+>   850 MiB Liquid model at 3.5× the VRAM. Skip.
+> - **LiquidAI LFM2.5-350M** (76.2%) — only acceptable as a
+>   curiosity for tiny-footprint demos; produces ugly cofounder
+>   responses. Don't ship to founders.
+> - **Microsoft Phi-4-reasoning-plus** (78.8%) — the reasoning
+>   variant *loses* 5pp vs non-reasoning Phi-4 (93.8%) at 2× VRAM.
+>   Use Phi-4 instead.
+>
+> **Why we publish this:** AIgenteur is only as good as the model
+> you plug into it. Picking a 61% adherence model and watching the
+> dashboard render 4000-word "tweets" with reasoning trace
+> bleeding into the visible output is a guaranteed bad first
+> experience — for you and for the cofounder layer above the model.
+> We test broadly so you can pick confidently; we flag the bad
+> picks so nobody has that experience by accident.
 
-**Run with**: `korpha eval --tier pro --runs 3 --max-tokens 64000`
+---
+
+## Methodology + caveats
+
+Scores below come from `korpha eval --tier pro --runs 3 --max-tokens 64000`
 after `korpha config`.
+
+**How scoring works:** deterministic substring / regex / word-count
+assertions over the model's text output — no LLM-as-judge. Each
+assertion passes or fails. Multiple runs flatten reasoning-model
+nondeterminism. Provider is just the HTTP transport — provider
+choice doesn't affect the score, only latency + cost.
 
 > ## What this eval is and isn't — read before quoting the numbers
 >
@@ -64,47 +104,57 @@ after `korpha config`.
 
 ---
 
-## The headline
+## Full results — all models tested
 
-Model deployments tested on the same 7-role / 80-assertion fixture
-set. Korpha works with any of them; pick what fits your hardware
-and budget.
+Every model run through the same 7-role / 80-assertion fixture set.
+Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
+🔴 = will produce broken output, skip.
 
 ### Cloud models
 
-| Model | Provider | Pass | Total | Overall | Wall time |
-| ----- | -------- | ---- | ----- | ------- | --------- |
-| DeepSeek V4 Pro | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
-| DeepSeek V4 Flash (workhorse) | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
-| nvidia/nemotron-3-super-120b-a12b | OpenRouter | 77 | 80 | **96.2%** | ~30 min |
-| arcee-ai/trinity-large-thinking | OpenRouter | 77 | 80 | **96.2%** | ~27 min |
-| openai/gpt-oss-120b | OpenRouter | 76 | 80 | **95.0%** | ~28 min |
-| poolside/laguna-m.1 | OpenRouter | 76 | 80 | **95.0%** | ~26 min |
-| nvidia/nemotron-3-nano-30b-a3b | OpenRouter | 75 | 80 | **93.8%** | ~25 min |
-| poolside/laguna-xs.2 | OpenRouter | 75 | 80 | **93.8%** | ~22 min |
-| Kimi K2.6 | OpenCode Go (Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
-| nvidia/nemotron-3-nano-omni-30b-a3b-reasoning | OpenRouter | 74 | 80 | **92.5%** | ~25 min |
-| baidu/cobuddy | OpenRouter | 74 | 80 | **92.5%** | ~24 min |
-| GLM 5.1 | OpenCode Go (Zhipu AI) | 73 | 80 | **91.2%** | 18 min |
-| nvidia/llama-nemotron-embed-vl-1b-v2 | OpenRouter | _N/A_ | _N/A_ | _embedding-only_ | _N/A_ |
+| Status | Model | Provider | Pass | Total | Overall | Wall time |
+| :---: | ----- | -------- | ---- | ----- | ------- | --------- |
+| 🟢 | DeepSeek V4 Pro | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
+| 🟢 | DeepSeek V4 Flash (workhorse) | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
+| 🟢 | nvidia/nemotron-3-super-120b-a12b | OpenRouter | 77 | 80 | **96.2%** | ~30 min |
+| 🟢 | arcee-ai/trinity-large-thinking | OpenRouter | 77 | 80 | **96.2%** | ~27 min |
+| 🟢 | openai/gpt-oss-120b | OpenRouter | 76 | 80 | **95.0%** | ~28 min |
+| 🟢 | poolside/laguna-m.1 | OpenRouter | 76 | 80 | **95.0%** | ~26 min |
+| 🟢 | nvidia/nemotron-3-nano-30b-a3b | OpenRouter | 75 | 80 | **93.8%** | ~25 min |
+| 🟢 | poolside/laguna-xs.2 | OpenRouter | 75 | 80 | **93.8%** | ~22 min |
+| 🟢 | Kimi K2.6 | OpenCode Go (Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
+| 🟢 | nvidia/nemotron-3-nano-omni-30b-a3b-reasoning | OpenRouter | 74 | 80 | **92.5%** | ~25 min |
+| 🟢 | baidu/cobuddy | OpenRouter | 74 | 80 | **92.5%** | ~24 min |
+| 🟢 | GLM 5.1 | OpenCode Go (Zhipu AI) | 73 | 80 | **91.2%** | 18 min |
+| — | nvidia/llama-nemotron-embed-vl-1b-v2 | OpenRouter | _N/A_ | _N/A_ | _embedding-only_ | _N/A_ |
 
 ### Local models (RTX 3090, single card)
 
-| Model | VRAM | Pass | Total | Overall | Wall time |
-| ----- | ---- | ---- | ----- | ------- | --------- |
-| **Gemma-4-E2B-it (Q4_K_M)** | **~3 GB** | **77** | **80** | **96.2%** | **8 min** |
-| Ministral-3-14B-Reasoning (Q4_K_M) | 11 GB | 75 | 80 | **93.8%** | 6 min |
-| Microsoft Phi-4 (Q4_K_M, q8_0 kv) | ~8 GB | 75 | 80 | **93.8%** | ~4 min |
-| IBM Granite-4.1-8B (Q4_K_M, q8_0 kv) | ~8 GB | 74 | 80 | **92.5%** | ~100 min |
-| Gemma-4-E4B-it (BF16) | ~9 GB | 74 | 80 | **92.5%** | 16 min |
-| Gemma-4-31B (Q4_K_M, TurboQuant) | 23 GB | 74 | 80 | **92.5%** | 25 min |
-| Qwen3.6-27B (Q4_K_M, TurboQuant turbo3) | ~22 GB | 74 | 80 | **92.5%** | ~68 min |
-| IBM Granite-4.1-30B (Q4_K_M, TurboQuant turbo4) | ~16 GB | 73 | 80 | **91.2%** | ~125 min |
-| Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
-| IBM Granite-4.1-3B (Q4_K_M, q8_0 kv) | ~4 GB | 69 | 80 | **86.2%** | ~90 min |
-| Microsoft Phi-4-reasoning-plus (Q4_K_M, q8_0 kv) | ~16 GB | 63 | 80 | **78.8%** | ~38 min |
-| LiquidAI LFM2.5-350M (Q4_K_M) | ~850 MiB | 61 | 80 | **76.2%** | ~20 s |
-| Qwen3.5-2B (Q4_K_M, q8_0 kv, reasoning) | ~3 GB | 49 | 80 | **61.3%** | ~54 min |
+| Status | Model | VRAM | Pass | Total | Overall | Wall time |
+| :---: | ----- | ---- | ---- | ----- | ------- | --------- |
+| 🟢 | **Gemma-4-E2B-it (Q4_K_M)** | **~3 GB** | **77** | **80** | **96.2%** | **8 min** |
+| 🟢 | Ministral-3-14B-Reasoning (Q4_K_M) | 11 GB | 75 | 80 | **93.8%** | 6 min |
+| 🟢 | Microsoft Phi-4 (Q4_K_M, q8_0 kv) | ~8 GB | 75 | 80 | **93.8%** | ~4 min |
+| 🟢 | IBM Granite-4.1-8B (Q4_K_M, q8_0 kv) | ~8 GB | 74 | 80 | **92.5%** | ~100 min |
+| 🟢 | Gemma-4-E4B-it (BF16) | ~9 GB | 74 | 80 | **92.5%** | 16 min |
+| 🟢 | Gemma-4-31B (Q4_K_M, TurboQuant) | 23 GB | 74 | 80 | **92.5%** | 25 min |
+| 🟢 | Qwen3.6-27B (Q4_K_M, TurboQuant turbo3) | ~22 GB | 74 | 80 | **92.5%** | ~68 min |
+| 🟢 | IBM Granite-4.1-30B (Q4_K_M, TurboQuant turbo4) | ~16 GB | 73 | 80 | **91.2%** | ~125 min |
+| 🟡 | Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
+| 🟡 | IBM Granite-4.1-3B (Q4_K_M, q8_0 kv) | ~4 GB | 69 | 80 | **86.2%** | ~90 min |
+| 🔴 | Microsoft Phi-4-reasoning-plus (Q4_K_M, q8_0 kv) | ~16 GB | 63 | 80 | **78.8%** | ~38 min |
+| 🔴 | LiquidAI LFM2.5-350M (Q4_K_M) | ~850 MiB | 61 | 80 | **76.2%** | ~20 s |
+| 🔴 | Qwen3.5-2B (Q4_K_M, q8_0 kv, reasoning) | ~3 GB | 49 | 80 | **61.3%** | ~54 min |
+
+**Status legend:**
+- 🟢 **Ship-ready** (≥90%) — clean output inside AIgenteur's prompt scaffolding.
+- 🟡 **Works but rough** (85–89%) — usable, but expect occasional
+  format slips (long-form bloat, missing the right section label).
+  Fine for hobby use; pick a 🟢 entry for founder-facing demos.
+- 🔴 **Avoid** (<85%) — produces visibly broken cofounder responses
+  (empty replies, 4000-word "tweets", reasoning trace bleeding into
+  user-visible output). Not what you want a founder's first
+  impression of AIgenteur to look like.
 
 **Four local options across the quality spectrum:**
 
