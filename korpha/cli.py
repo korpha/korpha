@@ -8126,7 +8126,13 @@ app.add_typer(disk_app)
 
 
 def _human_bytes(n: int) -> str:
-    """Format ``n`` bytes as a short human string ('1.2 GB')."""
+    """Format ``n`` bytes as a short human string ('1.2 GB').
+
+    Divides ``n`` through units; returns the largest unit where the
+    value is still under 1024. A common bug here is forgetting to
+    actually divide as you climb units — see the test suite for the
+    regression guard.
+    """
     sign = "-" if n < 0 else ""
     value = float(abs(n))
     for unit in ("B", "KB", "MB", "GB", "TB"):
