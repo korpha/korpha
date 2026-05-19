@@ -98,6 +98,7 @@ def _autoload_builtins() -> None:
         landing,
         marketing,
         memory,
+        memory_by_date,
         memory_notes,
         meta,
         niche,
