@@ -116,16 +116,20 @@ Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
 | :---: | ----- | -------- | ---- | ----- | ------- | --------- |
 | 🟢 | DeepSeek V4 Pro | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~75 min |
 | 🟢 | DeepSeek V4 Flash (workhorse) | OpenCode Go (DeepSeek AI) | 77 | 80 | **96.2%** | ~25 min |
-| 🟢 | nvidia/nemotron-3-super-120b-a12b | OpenRouter | 77 | 80 | **96.2%** | ~30 min |
+| 🟢 | nvidia/nemotron-3-super-120b-a12b (Think) | OpenRouter / Ollama Cloud | 77 | 80 | **96.2%** | ~12 min |
 | 🟢 | arcee-ai/trinity-large-thinking | OpenRouter | 77 | 80 | **96.2%** | ~27 min |
+| 🟢 | openai/gpt-oss-20b | Ollama Cloud | 77 | 80 | **96.2%** | **~3.5 min** |
 | 🟢 | openai/gpt-oss-120b | OpenRouter | 76 | 80 | **95.0%** | ~28 min |
 | 🟢 | poolside/laguna-m.1 | OpenRouter | 76 | 80 | **95.0%** | ~26 min |
+| 🟢 | nvidia/nemotron-3-super-120b-a12b (NoThink) | Ollama Cloud (`think: false`) | 75 | 80 | **93.8%** | ~13 min |
 | 🟢 | nvidia/nemotron-3-nano-30b-a3b | OpenRouter | 75 | 80 | **93.8%** | ~25 min |
 | 🟢 | poolside/laguna-xs.2 | OpenRouter | 75 | 80 | **93.8%** | ~22 min |
 | 🟢 | Kimi K2.6 | OpenCode Go (Moonshot AI) | 74 | 80 | **92.5%** | 42 min |
 | 🟢 | nvidia/nemotron-3-nano-omni-30b-a3b-reasoning | OpenRouter | 74 | 80 | **92.5%** | ~25 min |
 | 🟢 | baidu/cobuddy | OpenRouter | 74 | 80 | **92.5%** | ~24 min |
 | 🟢 | GLM 5.1 | OpenCode Go (Zhipu AI) | 73 | 80 | **91.2%** | 18 min |
+| 🟡 | MiniMax-M2.7 Medium | Ollama Cloud | 70 | 80 | **87.5%** | ~24 min |
+| 🟡 | MiniMax-M2.7 Think | Ollama Cloud (`think: true`) | 69 | 80 | **86.2%** | ~25 min |
 | — | nvidia/llama-nemotron-embed-vl-1b-v2 | OpenRouter | _N/A_ | _N/A_ | _embedding-only_ | _N/A_ |
 
 ### Local models (RTX 3090, single card)
