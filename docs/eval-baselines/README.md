@@ -130,9 +130,11 @@ Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
 | 🟢 | nvidia/nemotron-3-super-120b-a12b (Think) | OpenRouter / Ollama Cloud | 77 | 80 | **96.2%** | ~12 min |
 | 🟢 | arcee-ai/trinity-large-thinking | OpenRouter | 77 | 80 | **96.2%** | ~27 min |
 | 🟢 | openai/gpt-oss-20b | Ollama Cloud | 77 | 80 | **96.2%** | **~3.5 min** |
+| 🟢 | RNJ-1-8B | Ollama Cloud | 76 | 80 | **95.0%** | **~3 min** |
 | 🟢 | openai/gpt-oss-120b | OpenRouter | 76 | 80 | **95.0%** | ~28 min |
 | 🟢 | poolside/laguna-m.1 | OpenRouter | 76 | 80 | **95.0%** | ~26 min |
 | 🟢 | nvidia/nemotron-3-super-120b-a12b (NoThink) | Ollama Cloud (`think: false`) | 75 | 80 | **93.8%** | ~13 min |
+| 🟢 | Qwen3.5-122B-A10B (MoE) | Ollama Cloud | 75 | 80 | **93.8%** | ~84 min |
 | 🟢 | nvidia/nemotron-3-nano-30b-a3b | OpenRouter | 75 | 80 | **93.8%** | ~25 min |
 | 🟢 | poolside/laguna-xs.2 | OpenRouter | 75 | 80 | **93.8%** | ~22 min |
 | 🟢 | Kimi K2.6 | OpenCode Go (Moonshot AI) | 74 | 80 | **92.5%** | 42 min |

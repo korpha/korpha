@@ -1,0 +1,45 @@
+  run 1/3…
+  run 2/3…
+  run 3/3…
+Eval report — provider: rnj-1-8b/rnj-1:8b-cloud (avg of 3 runs)
+============================================================
+
+Per-role rollup:
+  CEO     15/16  ( 93.8%)  $0.0000
+  CMO      9/10  ( 90.0%)  $0.0000
+  COO     12/13  ( 92.3%)  $0.0000
+  COPYWRITER  11/11  (100.0%)  $0.0000
+  CTO     11/11  (100.0%)  $0.0000
+  DESIGNER   9/10  ( 90.0%)  $0.0000
+  SUPPORT   9/9   (100.0%)  $0.0000
+
+Overall: 76/80 (95.0%)  total cost $0.0000
+
+Per-task detail:
+  ✗ ceo.first_plan  5/6
+      ✗ Has 3-12 reasons / steps as a list: 1/3 runs passed; e.g. 30 bullet lines, max allowed 12
+  ✓ ceo.delegate_dont_diy  3/3
+  ✓ ceo.pushback_with_better_path  4/4
+  ✓ ceo.brevity_on_simple_yes_no  3/3
+  ✗ cmo.draft_3_cold_email_variants  3/4
+      ✗ Three subject lines (one per variant): 0/3 runs passed; e.g. 'Subject' appears 0 times, min required 3
+  ✓ cmo.specific_headline  3/3
+  ✓ cmo.no_open_questions  3/3
+  ✗ coo.support_triage  4/5
+      ✗ Leads with the punchline: 1/3 runs passed; e.g. first line too short: 'Action Plan'
+  ✓ coo.systemize_repetition  3/3
+  ✓ coo.numeric_weekly_summary  5/5
+  ✓ copywriter.cold_email_opener  5/5
+  ✓ copywriter.headline_subhead  3/3
+  ✓ copywriter.tweet_announcement  3/3
+  ✓ cto.scope_landing_in_2_days  4/4
+  ✓ cto.delegate_typo_fix  3/3
+  ✓ cto.options_when_blocked  4/4
+  ✓ designer.landing_page_layout  4/4
+  ✓ designer.button_color_choice  3/3
+  ✗ designer.error_state_spec  2/3
+      ✗ Names the next action (sign in / reset / different email): 0/3 runs passed; e.g. pattern '(sign in|log in|reset|already.+account|use a different)' not found
+  ✓ support.refund_request_no_policy  3/3
+  ✓ support.bug_report_repro  3/3
+  ✓ support.legal_threat_escalation  3/3
+
