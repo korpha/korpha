@@ -3,7 +3,8 @@
 Run before an operator commits to ``korpha migrate restore``. Catches
 the boring stuff:
 
-  - Python interpreter is 3.12 or newer
+  - Python interpreter meets the floor declared in pyproject.toml's
+    ``requires-python`` (currently 3.11+)
   - Enough free disk space at the data-dir target
   - The data dir isn't already populated (would refuse to clobber)
   - Optional bundle compatibility — if the operator points us at a
@@ -52,8 +53,11 @@ class Check:
     message: str
 
 
-_MIN_PYTHON = (3, 12)
-"""Hard floor — korpha itself requires 3.12+ from pyproject."""
+_MIN_PYTHON = (3, 11)
+"""Hard floor. Must track ``requires-python`` in ``pyproject.toml`` —
+that is the source of truth for what interpreters can install korpha.
+A drift-guard test (``test_min_python_matches_pyproject``) asserts the
+two stay aligned."""
 
 
 _MIN_FREE_BYTES_DEFAULT = 200 * 1024 * 1024
