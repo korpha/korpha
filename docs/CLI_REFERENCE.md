@@ -81,14 +81,18 @@ List currently-configured provider accounts with their tier mappings.
 korpha providers
 ```
 
-### `korpha migrate`
+### `korpha db-migrate`
 
 Apply Alembic database migrations. Usually only needed after `korpha`
 upgrade.
 
 ```bash
-korpha migrate
+korpha db-migrate
 ```
+
+> The top-level `korpha migrate` namespace hosts the host-migration
+> subgroup (`bundle` / `restore` / `inspect` / `check`); the Alembic
+> schema command lives at `db-migrate` to avoid the collision.
 
 ---
 

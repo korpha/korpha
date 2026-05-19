@@ -2655,8 +2655,8 @@ def providers() -> None:
         typer.echo(f"  • {acc.label}  [{acc.provider_name}]  {tiers}")
 
 
-@app.command()
-def migrate(
+@app.command("db-migrate")
+def db_migrate(
     revision: Annotated[
         str, typer.Option(help="Target revision (default: head)")
     ] = "head",
@@ -2664,7 +2664,11 @@ def migrate(
     """Apply Alembic migrations to bring the DB schema to ``revision``.
 
     Reads the DB URL from ``KORPHA_DB_URL`` env var, falling back to
-    the local SQLite file at ``$KORPHA_DATA_DIR/korpha.db``."""
+    the local SQLite file at ``$KORPHA_DATA_DIR/korpha.db``.
+
+    Renamed from ``korpha migrate`` so the top-level ``korpha migrate``
+    namespace can host the bundle/restore/inspect/check host-migration
+    subgroup without colliding with this command."""
     _ensure_load_env()
     import subprocess
 
@@ -10447,7 +10451,7 @@ def update(
     """Update Korpha to the latest origin/main.
 
     Steps: pre-update backup → git pull (or ZIP fallback) → uv sync
-    → korpha migrate. Survives SSH-disconnect mid-update via SIGHUP
+    → korpha db-migrate. Survives SSH-disconnect mid-update via SIGHUP
     protection. Linux + macOS + Windows-native.
 
     Recovery: if anything fails, your data dir is untouched and the

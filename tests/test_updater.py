@@ -39,6 +39,7 @@ from korpha.updater import (
     project_root,
     run_update,
     step_backup,
+    step_db_migrate,
     step_uv_sync,
     step_zip_fallback,
 )
@@ -218,6 +219,49 @@ def test_step_backup_writes_tarball(tmp_path: Path) -> None:
 def test_step_uv_sync_fails_when_uv_missing(tmp_path: Path) -> None:
     with patch("shutil.which", return_value=None):
         ok, msg = step_uv_sync(tmp_path)
+    assert ok is False
+    assert "uv" in msg.lower()
+
+
+# ---------------------------------------------------------------------------
+# step_db_migrate
+# ---------------------------------------------------------------------------
+
+
+def test_step_db_migrate_invokes_db_migrate_not_migrate(
+    tmp_path: Path,
+) -> None:
+    """Drift-guard: ``step_db_migrate`` must invoke the renamed
+    ``korpha db-migrate`` command, not bare ``korpha migrate``. The
+    latter is now the host-migration subgroup (bundle/restore/...)
+    and exits non-zero on bare invocation. Regressing this name would
+    break ``korpha update`` for every customer."""
+    captured: dict[str, list[str]] = {}
+
+    class _FakeProc:
+        returncode = 0
+        stderr = ""
+        stdout = ""
+
+    def _fake_run(cmd, *args, **kwargs):  # type: ignore[no-untyped-def]
+        captured["cmd"] = list(cmd)
+        return _FakeProc()
+
+    with patch("shutil.which", return_value="/usr/bin/uv"), \
+         patch("subprocess.run", side_effect=_fake_run):
+        ok, msg = step_db_migrate(tmp_path)
+
+    assert ok is True
+    assert captured["cmd"][-1] == "db-migrate", (
+        f"step_db_migrate must invoke 'db-migrate' as the final arg; "
+        f"got {captured['cmd']!r}"
+    )
+    assert captured["cmd"][-2:] == ["korpha", "db-migrate"]
+
+
+def test_step_db_migrate_fails_when_uv_missing(tmp_path: Path) -> None:
+    with patch("shutil.which", return_value=None):
+        ok, msg = step_db_migrate(tmp_path)
     assert ok is False
     assert "uv" in msg.lower()
 
