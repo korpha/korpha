@@ -850,6 +850,63 @@ def build_app() -> FastAPI:
             return StreamingResponse(
                 _slash_events(), media_type="text/event-stream",
             )
+
+        # /background slash — same SSE-as-one-shot reply pattern.
+        # Spawn returns immediately with a confirmation; the actual
+        # work runs async and posts results back via route_outbound
+        # when done. List/status/cancel are pure local lookups.
+        from korpha.cofounder.background_slash import (
+            execute_background_slash_listing,
+            is_background_slash, parse_background_slash,
+        )
+        if is_background_slash(body.message):
+            intent = parse_background_slash(body.message)
+            if intent.action == "spawn":
+                from korpha.cofounder.background_tasks import (
+                    BackgroundTaskSpec, spawn_background_task,
+                )
+                job = spawn_background_task(BackgroundTaskSpec(
+                    task_text=intent.text,
+                    business=business, founder=founder,
+                    thread_id=decision.thread_id,
+                    ceo=ceo, router=router, platform="web",
+                ))
+                reply = (
+                    f"⊙ Background task queued ({job.id}): {intent.text}\n"
+                    f"Keep chatting; the result will post in this thread "
+                    f"when complete. Use `/background list` to see all "
+                    f"active + recent tasks."
+                )
+            else:
+                reply = execute_background_slash_listing(
+                    intent, business_id=business.id,
+                )
+            router.route_outbound(
+                business_id=business.id,
+                founder_id=founder.id,
+                platform=ThreadPlatform.WEB,
+                content=reply,
+                requesting_agent_role_id=decision.delivering_agent_role_id,
+            )
+
+            async def _bg_events() -> AsyncIterator[str]:
+                yield (
+                    "data: "
+                    + jsonlib.dumps({"type": "content", "text": reply})
+                    + "\n\n"
+                )
+                yield (
+                    "data: "
+                    + jsonlib.dumps({
+                        "type": "done", "content": reply, "skills_used": [],
+                    })
+                    + "\n\n"
+                )
+
+            return StreamingResponse(
+                _bg_events(), media_type="text/event-stream",
+            )
+
         memory = MemoryService(session=session)
         history = memory.load_recent(
             business_id=business.id,
