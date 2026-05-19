@@ -776,7 +776,8 @@ class KorphaTUI(App[None]):
                 "  [cyan]/cron[/]       — list/run/toggle/delete agentless cron jobs\n"
                 "  [cyan]/kanban[/]     — list/add/move/archive C-suite board cards\n"
                 "  [cyan]/team[/]       — list/hire/fire org chart members\n"
-                "  [cyan]/goal[/]       — set/status/pause/resume/clear standing goal\n\n"
+                "  [cyan]/goal[/]       — set/status/pause/resume/clear standing goal\n"
+                "  [cyan]/background[/] — list/status/cancel async background tasks\n\n"
                 "  [bold cyan]Diagnostics[/]\n"
                 "  [cyan]/skills[/]     — list installed skills\n"
                 "  [cyan]/me[/]         — show founder + business identity\n"
@@ -981,6 +982,8 @@ class KorphaTUI(App[None]):
                 )
         elif cmd == "goal":
             await self._dispatch_goal_slash(raw)
+        elif cmd == "background":
+            await self._dispatch_background_slash(raw)
         else:
             self._chat_log.write(
                 f"[red]Unknown slash command:[/] /{cmd}. "
@@ -1032,6 +1035,30 @@ class KorphaTUI(App[None]):
                 business_id=business.id, cost_tracker=None,
             )
             reply = execute_goal_slash(intent, mgr)
+        self._chat_log.write(f"[cyan]{reply}[/]\n")
+
+    async def _dispatch_background_slash(self, raw: str) -> None:
+        """Handle /background in chat. List/status/cancel are
+        list-only and run locally; a spawn invocation can't fully
+        run from the TUI without a CEO + router, so for now we
+        surface a clear "use dashboard chat to spawn" message and
+        let listing work everywhere."""
+        from korpha.cofounder.background_slash import (
+            execute_background_slash_listing, parse_background_slash,
+        )
+
+        intent = parse_background_slash(raw)
+        if intent.action == "spawn":
+            self._chat_log.write(
+                "[yellow]Spawning background tasks from the TUI "
+                "isn't wired yet — use the dashboard chat textarea "
+                "and type `/background <your task>` there. The "
+                "result will land in the same thread when done. "
+                "Listing + status + cancel work from anywhere "
+                "(this TUI included): `/background list`.[/]\n"
+            )
+            return
+        reply = execute_background_slash_listing(intent)
         self._chat_log.write(f"[cyan]{reply}[/]\n")
 
     async def _interrupt_active_stream(self) -> None:
