@@ -158,6 +158,7 @@ Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
 | 🟢 | Gemma-4-31B (Q4_K_M, TurboQuant) | 23 GB | 74 | 80 | **92.5%** | 25 min |
 | 🟢 | Qwen3.6-27B (Q4_K_M, TurboQuant turbo3) | ~22 GB | 74 | 80 | **92.5%** | ~68 min |
 | 🟢 | IBM Granite-4.1-30B (Q4_K_M, TurboQuant turbo4) | ~16 GB | 73 | 80 | **91.2%** | ~125 min |
+| 🟢 | Ministral-3-8B-Reasoning (Q4_K_M, q8_0 kv) | ~6 GB | 73 | 80 | **91.2%** | ~4 min |
 | 🟡 | Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
 | 🟡 | Ministral-3-3B-Instruct (Q4_K_M, q8_0 kv) | ~3 GB | 71 | 80 | **88.8%** | ~12 min |
 | 🟡 | IBM Granite-4.1-3B (Q4_K_M, q8_0 kv) | ~4 GB | 69 | 80 | **86.2%** | ~90 min |
@@ -505,6 +506,51 @@ card, and **scores 100% on CTO + DESIGNER**. Even with the overall
 Pair Ministral as Workhorse + DeepSeek V4 Pro as Pro via the
 split-tier provider chain and you get cloud-quality planning with
 local-quality bulk execution at near-zero marginal cost per call.
+
+---
+
+## Ministral-3-8B-Reasoning local (3-run averaged, 7 roles)
+
+Mid-size Ministral reasoning variant — between the 3B and 14B. Q4_K_M,
+q8_0 KV cache, ~6 GB VRAM, 32k context, upstream llama.cpp (unsloth
+GGUF: `Ministral-3-8B-Reasoning-2512-Q4_K_M.gguf`). Wall time ~4 min
+on a 3090 for 3 runs of 27 tasks (≈ 200+ tok/s).
+
+| Role        | Pass | Total | %          |
+| ----------- | ---- | ----- | ---------- |
+| CMO         | 10   | 10    | **100.0%** |
+| COO         | 13   | 13    | **100.0%** |
+| DESIGNER    | 10   | 10    | **100.0%** |
+| COPYWRITER  | 10   | 11    | 90.9%      |
+| CTO         | 10   | 11    | 90.9%      |
+| CEO         | 13   | 16    | 81.2%      |
+| SUPPORT     |  7   |  9    | 77.8%      |
+| **Overall** | **73** | **80** | **91.2%** |
+
+Cost: $0.0000 (local compute).
+Raw: [`ministral-3-8b-reasoning-local.txt`](ministral-3-8b-reasoning-local.txt)
+
+**Surprising result — smaller sibling beats it.** Ministral-3-3B-Reasoning
+scores 92.5% (74/80) at the same q8_0 KV / ~3 GB VRAM tier; the 8B
+adds parameters but loses 1.3pp. Same Reasoning-vs-Instruct lift
+pattern (instruct version 90.0% → reasoning 91.2%, +1.2pp) but
+nowhere near the 5pp lift the 14B family sees. The reasoning layer
+in 8B-Reasoning produces more verbose CoT that doesn't translate
+into better format discipline — it actually overthinks brevity-cap
+tasks. Failure pattern: CEO drops 42-bullet `first_plan` (vs cap 12),
+copywriter leaks 🚀 in tweet output, support writes 231-word legal
+reply (vs 200 cap), bug-repro mentions ETA — the same family of
+slips Opus + GPT-5.4 hit.
+
+**Where it sits in the hierarchy:**
+- Beaten on smaller VRAM by Ministral-3-3B-Reasoning (92.5% / ~3 GB)
+- Beaten on similar VRAM tier by Microsoft Phi-4 (93.8% / ~8 GB)
+- Beaten on similar VRAM tier by IBM Granite-4.1-8B (92.5% / ~8 GB)
+- Beaten on slightly more VRAM by Ministral-3-14B-Reasoning (93.8% / 11 GB)
+
+Practical conclusion: **no obvious sweet spot for the 8B-Reasoning**.
+If you have 3 GB pick 3B-Reasoning; if you have 6 GB+ pick Phi-4 or
+Granite-4.1-8B; if you have 11 GB+ pick Ministral-3-14B-Reasoning.
 
 ---
 
