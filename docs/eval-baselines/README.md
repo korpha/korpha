@@ -160,6 +160,7 @@ Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
 | 🟢 | Gemma-4-26B-A4B-it MoE (UD-Q4_K_M, turbo4 kv) | ~16 GB | 74 | 80 | **92.5%** | ~24 min |
 | 🟢 | IBM Granite-4.1-30B (Q4_K_M, TurboQuant turbo4) | ~16 GB | 73 | 80 | **91.2%** | ~125 min |
 | 🟢 | Ministral-3-8B-Reasoning (Q4_K_M, q8_0 kv) | ~6 GB | 73 | 80 | **91.2%** | ~4 min |
+| 🟢 | Qwen3.6-35B-A3B MoE (UD-Q4_K_M, turbo4 kv) | ~17 GB | 72 | 80 | **90.0%** | ~23 min |
 | 🟡 | Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
 | 🟡 | Ministral-3-3B-Instruct (Q4_K_M, q8_0 kv) | ~3 GB | 71 | 80 | **88.8%** | ~12 min |
 | 🟡 | IBM Granite-4.1-3B (Q4_K_M, q8_0 kv) | ~4 GB | 69 | 80 | **86.2%** | ~90 min |
@@ -507,6 +508,70 @@ card, and **scores 100% on CTO + DESIGNER**. Even with the overall
 Pair Ministral as Workhorse + DeepSeek V4 Pro as Pro via the
 split-tier provider chain and you get cloud-quality planning with
 local-quality bulk execution at near-zero marginal cost per call.
+
+---
+
+## Qwen3.6-35B-A3B local (3-run averaged, 7 roles)
+
+Qwen's mid-size MoE — 35B total parameters, ~3B active per token.
+UD-Q4_K_M weights, turbo4 KV cache, ~17 GB VRAM, 262k context,
+upstream llama.cpp turbo backend (unsloth GGUF:
+`Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`). Wall time ~23 min on a 3090 for
+3 runs of 27 tasks.
+
+| Role        | Pass | Total | %          |
+| ----------- | ---- | ----- | ---------- |
+| CTO         | 11   | 11    | **100.0%** |
+| DESIGNER    | 10   | 10    | **100.0%** |
+| CEO         | 15   | 16    | 93.8%      |
+| COO         | 12   | 13    | 92.3%      |
+| CMO         |  9   | 10    | 90.0%      |
+| SUPPORT     |  7   |  9    | 77.8%      |
+| COPYWRITER  |  8   | 11    | 72.7%      |
+| **Overall** | **72** | **80** | **90.0%** |
+
+Cost: $0.0000 (local compute).
+Raw: [`qwen3.6-35b-a3b-local.txt`](qwen3.6-35b-a3b-local.txt)
+
+**Same shape as Gemma-4-26B-A4B-it** — different family, same turbo4
+backend, nearly identical failure pattern. Clean 100% on CTO +
+DESIGNER, near-100% on CEO + COO, then COPYWRITER tanks at 72.7%
+with the exact same brevity-cap blowups:
+- `copywriter.headline_subhead`: 203 words vs 80 cap (2.5x over)
+- `copywriter.cold_email_opener`: 143 words vs 120 cap
+- `copywriter.tweet_announcement`: 60-word cap blown
+- `support.legal_threat_escalation`: 200-word cap blown
+- `support.bug_report_repro`: leaks 'ETA' substring
+
+Plus one CEO miss the Gemma sibling didn't have:
+`ceo.brevity_on_simple_yes_no` — one run answered just `Wait.` and
+the assertion wants the first line to lead with substance, not a
+single word. That's an overcorrection in the other direction.
+
+**Why this is interesting**: two different model families (Google
+Gemma + Alibaba Qwen) running through the same turbo4 backend on
+the same hardware converge on **the same failure mode** — long-form
+copywriting brevity caps. Suggests the issue is partly backend/quant
+behavior (turbo4 KV may be losing some attention precision on
+length-counting tokens), partly that the role prompt's brevity
+discipline isn't strict enough for the MoE active-param size.
+The dense Phi-4 (~8 GB) hitting 93.8% on the same prompts
+reinforces that the MoE-with-turbo4 combo is the variable.
+
+**Where it sits in the hierarchy:**
+- Wins vs Ministral-3-8B-Reasoning (91.2% / ~6 GB) and Granite-4.1-30B
+  (91.2% / ~16 GB) by a slim margin on overall — but loses on per-
+  role discipline (those models are more even-handed)
+- Beaten by Gemma-4-26B-A4B-it (92.5% / ~16 GB) at slightly less
+  VRAM with the same MoE pattern
+- Beaten at smaller VRAM by Phi-4 (93.8% / ~8 GB)
+- Beaten at slightly larger VRAM by Qwen3.6-27B (92.5% / ~22 GB) and
+  Gemma-4-31B (92.5% / 23 GB)
+
+Practical conclusion: **dense models outperform MoE at this score
+band on the AIgenteur scaffolding** — until we tune a per-MoE
+overlay that tightens brevity caps. Until then, use Phi-4 or
+Gemma-4-26B-A4B-it instead of this.
 
 ---
 
