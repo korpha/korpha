@@ -157,6 +157,7 @@ Status column at a glance: 🟢 = ship-ready, 🟡 = works but rough,
 | 🟢 | Gemma-4-E4B-it (BF16) | ~9 GB | 74 | 80 | **92.5%** | 16 min |
 | 🟢 | Gemma-4-31B (Q4_K_M, TurboQuant) | 23 GB | 74 | 80 | **92.5%** | 25 min |
 | 🟢 | Qwen3.6-27B (Q4_K_M, TurboQuant turbo3) | ~22 GB | 74 | 80 | **92.5%** | ~68 min |
+| 🟢 | Gemma-4-26B-A4B-it MoE (UD-Q4_K_M, turbo4 kv) | ~16 GB | 74 | 80 | **92.5%** | ~24 min |
 | 🟢 | IBM Granite-4.1-30B (Q4_K_M, TurboQuant turbo4) | ~16 GB | 73 | 80 | **91.2%** | ~125 min |
 | 🟢 | Ministral-3-8B-Reasoning (Q4_K_M, q8_0 kv) | ~6 GB | 73 | 80 | **91.2%** | ~4 min |
 | 🟡 | Ministral-3-14B-Instruct (Q4_K_M) | 11 GB | 71 | 80 | **88.8%** | 6 min |
@@ -506,6 +507,63 @@ card, and **scores 100% on CTO + DESIGNER**. Even with the overall
 Pair Ministral as Workhorse + DeepSeek V4 Pro as Pro via the
 split-tier provider chain and you get cloud-quality planning with
 local-quality bulk execution at near-zero marginal cost per call.
+
+---
+
+## Gemma-4-26B-A4B-it local (3-run averaged, 7 roles)
+
+Google's mid-size Gemma-4 MoE variant — 26B total parameters, ~4B
+active per token. UD-Q4_K_M weights, turbo4 KV cache, ~16 GB VRAM,
+262k context window, upstream llama.cpp turbo backend (unsloth GGUF:
+`gemma-4-26B-A4B-it-UD-Q4_K_M.gguf`). Wall time ~24 min on a 3090
+for 3 runs of 27 tasks — moderate; MoE routing adds overhead vs
+dense models of similar active-param size.
+
+| Role        | Pass | Total | %          |
+| ----------- | ---- | ----- | ---------- |
+| CEO         | 16   | 16    | **100.0%** |
+| CTO         | 11   | 11    | **100.0%** |
+| DESIGNER    | 10   | 10    | **100.0%** |
+| COO         | 12   | 13    | 92.3%      |
+| CMO         |  9   | 10    | 90.0%      |
+| SUPPORT     |  8   |  9    | 88.9%      |
+| COPYWRITER  |  8   | 11    | 72.7%      |
+| **Overall** | **74** | **80** | **92.5%** |
+
+Cost: $0.0000 (local compute).
+Raw: [`gemma-4-26b-a4b-it-local.txt`](gemma-4-26b-a4b-it-local.txt)
+
+**Why this is interesting**: clean 100% sweep on the three heaviest
+roles (CEO, CTO, DESIGNER) — strategic planning, scoping, and design-
+spec output all shipped without a single miss. That's unusual; most
+of the 92.5% tier loses a point or two on CEO. Where it concentrates
+its mistakes is the **COPYWRITER role (72.7%)** — copywriting brevity
+caps blow up consistently:
+- `copywriter.headline_subhead`: 309 words vs 80 cap (massive overshoot)
+- `copywriter.cold_email_opener`: 149 words vs 120 cap
+- `copywriter.tweet_announcement`: 60-word cap blown
+- `cmo.draft_3_cold_email_variants`: misses the "Subject" labels on
+  variants (0/3 runs had 3+ Subject occurrences)
+
+The MoE routing apparently doesn't penalize copy-tightness enough —
+the model treats every brief as an opportunity to elaborate. Practical
+pattern: this model is **strong as a CEO/strategist + CTO/scoper but
+weak as a COPYWRITER**. In a split-tier setup pair it with a tighter
+model for copy-heavy work.
+
+**Where it sits in the hierarchy:**
+- Wins on VRAM/score tradeoff at the ~16 GB tier — beats
+  Granite-4.1-30B (91.2%) at the same ~16 GB
+- Beaten at smaller VRAM by Microsoft Phi-4 (93.8% / ~8 GB) and
+  Ministral-3-14B-Reasoning (93.8% / 11 GB)
+- Beaten at slightly more VRAM by Qwen3.5-9B-reasoning (93.8% / ~9 GB)
+- Ties Granite-4.1-8B, Gemma-4-31B, Qwen3.6-27B, Ministral-3-3B-Reasoning,
+  Gemma-4-E4B-it on overall — but those are spread across very different
+  VRAM tiers
+
+Practical conclusion: **use it when you specifically want strong
+strategic + technical outputs** and you can afford a 16 GB VRAM
+budget. Don't use it as a copywriter without a tight-cap overlay.
 
 ---
 
