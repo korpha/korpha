@@ -50,6 +50,12 @@ Sessions in this project coordinate via file-based inboxes at
 rotate manually when >1 MB:
 `mv inbox.md inbox.md.$(date +%F).log && touch inbox.md`.
 
+**Recovery after reboot / session loss:** the full step-by-step
+playbook (what survives a reset, infrastructure verification, per-
+session bootstrap snippets, troubleshooting) lives in
+`docs/MULTI_SESSION_RECOVERY.md`. Read it first if the orchestra
+needs to come back up from cold.
+
 **Driver sessions (`marketro`, `andrew`) do NOT edit code.** They drive
 the dashboard via Playwright, file bug reports to `bugs`, verify fixes,
 and report status to `main`. Code mutations go through `main` (design
