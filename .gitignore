@@ -60,3 +60,7 @@ website.zip
 # Top-level dev DB (only the one in $data_dir matters)
 /korpha.db
 /korpha.db
+
+# Internal dev/ops docs — kept private, not in the public product repo
+/CLAUDE.md
+/docs/MULTI_SESSION_RECOVERY.md
