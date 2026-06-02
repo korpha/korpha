@@ -174,7 +174,7 @@ the Korpha visual identity for as long as the project exists.
 
 ## Who runs it
 
-The Korpha core team (currently: explaindio + contributors)
+The Korpha core team (the maintainers + contributors)
 moderates the Discussions thread + merges the winning PRs. Community
 members do the voting + most of the discussion.
 

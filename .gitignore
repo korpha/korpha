@@ -64,3 +64,5 @@ website.zip
 # Internal dev/ops docs — kept private, not in the public product repo
 /CLAUDE.md
 /docs/MULTI_SESSION_RECOVERY.md
+/docs/ORG_MODEL.md
+/docs/PRODUCT_LIFECYCLE.md

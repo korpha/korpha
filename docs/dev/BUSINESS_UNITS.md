@@ -202,7 +202,7 @@ class Product(SQLModel, table=True):
     #      "size_options": ["S","M","L","XL","2XL"]}
     #
     #   CAMPAIGN (Affiliate):
-    #     {"vendor": "marketro", "platform": "jvzoo", "product_ids": {"funnel": "438771", "bundle": "438791"},
+    #     {"vendor": "acme", "platform": "jvzoo", "product_ids": {"funnel": "...", "bundle": "..."},
     #      "commission_pct": 50, "leaderboard_url": "...",
     #      "bonus_stack_id": "..."}
     #
