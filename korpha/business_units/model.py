@@ -361,8 +361,8 @@ class Product(SQLModel, table=True):
         "kindle_unlimited_pages": 312, "categories": [...]}``
       * DESIGN: ``{"design_sku": "CL-CAT-001", "platforms": [...],
         "file_paths": {"png_4500": "...", "svg": "..."}}``
-      * CAMPAIGN: ``{"vendor": "marketro", "platform": "jvzoo",
-        "product_ids": {"funnel": "438771"}, "commission_pct": 50}``
+      * CAMPAIGN: ``{"vendor": "acme", "platform": "jvzoo",
+        "product_ids": {"funnel": "..."}, "commission_pct": 50}``
       * SAAS_APP: ``{"deploy_url": "https://korpha.app",
         "stripe_product_id": "...", "mrr_current_usd": 14200}``
 
