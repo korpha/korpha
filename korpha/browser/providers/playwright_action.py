@@ -38,6 +38,7 @@ _DEFAULT_MAX_STEPS = 12
 _TEXT_LIMIT = 32_000
 _SNAPSHOT_LIMIT = 4000  # chars of element-tree text per step
 _STEP_TIMEOUT_S = 25.0
+_MAX_IDENTICAL_ACTIONS = 3  # loop-guard: abort after N identical actions in a row
 
 
 _SYSTEM_PROMPT = """\
@@ -174,6 +175,8 @@ class PlaywrightActionProvider(BrowserProvider):
 
             empty_snapshot_streak = 0
             visual_fallback_used = False
+            last_action_sig: tuple[Any, ...] | None = None
+            repeat_streak = 0
             for step in range(1, self.max_steps + 1):
                 snapshot = await _accessibility_snapshot(page)
                 use_visual = (
@@ -237,6 +240,38 @@ class PlaywrightActionProvider(BrowserProvider):
                         raw={
                             "steps": action_log,
                             "cost_usd": cumulative_cost,
+                            "visual_fallback_used": visual_fallback_used,
+                        },
+                    )
+
+                # Loop-guard (buyer-facing safety): if the model emits the same
+                # executable action N times running — e.g. re-typing a field
+                # forever because the post-type snapshot doesn't reflect the new
+                # value — abort gracefully instead of burning tokens to
+                # max_steps. The deeper fix (reflect the typed value in the next
+                # snapshot) is tracked post-launch (#411).
+                action_sig = (
+                    action.kind, action.ref, action.text, action.url,
+                    action.direction, action.x, action.y,
+                )
+                if action_sig == last_action_sig:
+                    repeat_streak += 1
+                else:
+                    repeat_streak = 1
+                    last_action_sig = action_sig
+                if repeat_streak >= _MAX_IDENTICAL_ACTIONS:
+                    return BrowserResult(
+                        success=False,
+                        final_url=page.url,
+                        error=(
+                            f"stuck loop: repeated the same {action.kind!r} "
+                            f"action {repeat_streak}x with no page progress — "
+                            "aborted to avoid an infinite loop."
+                        ),
+                        raw={
+                            "steps": action_log,
+                            "cost_usd": cumulative_cost,
+                            "stuck_loop": True,
                             "visual_fallback_used": visual_fallback_used,
                         },
                     )
